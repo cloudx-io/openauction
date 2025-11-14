@@ -161,8 +161,5 @@ func TestDecryptHybrid_UnsupportedHashAlgorithm(t *testing.T) {
 
 	_, err = DecryptHybrid(result.EncryptedAESKey, result.EncryptedPayload, result.Nonce, privateKey, "SHA512")
 	assert.NotNil(t, err)
-	// Verify error message mentions unsupported algorithm
-	if err != nil {
-		assert.Equal(t, "unsupported hash algorithm: SHA512", err.Error())
-	}
+	assert.Equal(t, "unsupported hash algorithm: SHA512", err.Error())
 }

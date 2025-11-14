@@ -24,22 +24,14 @@ func BidMeetsFloor(bidPrice, floorPrice float64) bool {
 	return bidPriceDecimal.GreaterThanOrEqual(floorDecimal)
 }
 
-// EnforceBidFloors filters bids based on per-bidder floor prices.
+// EnforceBidFloors filters bids based floor prices.
 // Returns eligible bids and rejected bids with rejection details.
 // If a bidder has no floor in the map, their bids pass without enforcement.
-func EnforceBidFloors(bids []CoreBid, floors map[string]float64) (eligible []CoreBid, rejected []RejectedBid) {
+func EnforceBidFloors(bids []CoreBid, floor float64) (eligible []CoreBid, rejected []RejectedBid) {
 	eligibleBids := make([]CoreBid, 0, len(bids))
 	rejectedBids := make([]RejectedBid, 0)
 
 	for _, bid := range bids {
-		floor, hasFloor := floors[bid.Bidder]
-
-		// If no floor for this bidder, bid passes
-		if !hasFloor {
-			eligibleBids = append(eligibleBids, bid)
-			continue
-		}
-
 		// Check if bid meets bidder-specific floor
 		if BidMeetsFloor(bid.Price, floor) {
 			eligibleBids = append(eligibleBids, bid)

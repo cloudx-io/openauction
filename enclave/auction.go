@@ -45,17 +45,12 @@ func ProcessAuction(attester EnclaveAttester, req enclaveapi.EnclaveAuctionReque
 
 	excludedBids := append(decryptionExcluded, tokenExcluded...)
 
-	adjustedBids := unencryptedBids
-	if len(req.AdjustmentFactors) > 0 {
-		adjustedBids = core.ApplyBidAdjustmentFactors(unencryptedBids, req.AdjustmentFactors, 1.0)
-	}
-
-	// Enforce per-bidder floors AFTER adjustments
-	eligibleBids, floorRejectedBids := core.EnforceBidFloors(adjustedBids, req.BidFloors)
+	// Run unified auction logic: adjustment → floor enforcement → ranking
+	auctionResult := core.RunAuction(unencryptedBids, req.AdjustmentFactors, req.BidFloors)
 
 	// Convert core.RejectedBid to enclaveapi.ExcludedBid for loss notifications
-	excludedFloorBids := make([]enclaveapi.ExcludedBid, 0, len(floorRejectedBids))
-	for _, rejected := range floorRejectedBids {
+	excludedFloorBids := make([]enclaveapi.ExcludedBid, 0, len(auctionResult.RejectedBids))
+	for _, rejected := range auctionResult.RejectedBids {
 		excludedFloorBids = append(excludedFloorBids, enclaveapi.ExcludedBid{
 			BidID:  rejected.Bid.ID,
 			Bidder: rejected.Bid.Bidder,
@@ -63,16 +58,9 @@ func ProcessAuction(attester EnclaveAttester, req enclaveapi.EnclaveAuctionReque
 		})
 	}
 
-	// Rank only the bids that passed floor enforcement
-	ranking := core.RankCoreBids(eligibleBids)
-
-	var winner, runnerUp *core.CoreBid
-	if len(ranking.SortedBidders) > 0 {
-		winner = ranking.HighestBids[ranking.SortedBidders[0]]
-	}
-	if len(ranking.SortedBidders) > 1 {
-		runnerUp = ranking.HighestBids[ranking.SortedBidders[1]]
-	}
+	// Extract winner and runner-up from auction result
+	winner := auctionResult.Winner
+	runnerUp := auctionResult.RunnerUp
 
 	teeData, err := GenerateTEEProofs(attester, req, unencryptedBids, winner, runnerUp)
 	processingTime := time.Since(startTime).Milliseconds()

@@ -32,13 +32,14 @@ func GenerateRSAKeyPair() (*rsa.PrivateKey, error) {
 	return privateKey, nil
 }
 
-// getHashFunc returns the appropriate hash function based on the algorithm
-func getHashFunc(hashAlg HashAlgorithm) (func() hash.Hash, error) {
+// newHash creates the appropriate implementation of hash.Hash,
+// or returns an error if the algorithm is unsupported.
+func newHash(hashAlg HashAlgorithm) (hash.Hash, error) {
 	switch hashAlg {
 	case HashAlgorithmSHA256:
-		return sha256.New, nil
+		return sha256.New(), nil
 	case HashAlgorithmSHA1:
-		return sha1.New, nil
+		return sha1.New(), nil
 	default:
 		return nil, fmt.Errorf("unsupported hash algorithm: %s", hashAlg)
 	}
@@ -73,14 +74,14 @@ func DecryptHybrid(encryptedAESKey, encryptedPayload, nonceB64 string, privateKe
 		return nil, fmt.Errorf("failed to decode nonce: %w", err)
 	}
 
-	// Step 1: Get the selected hash function
-	hashFunc, err := getHashFunc(hashAlg)
+	// Step 1: Create the hash implementation for the selected algorithm
+	hash, err := newHash(hashAlg)
 	if err != nil {
 		return nil, err
 	}
 
-	// Step 2: Decrypt AES key using RSA-OAEP with the selected hash function
-	aesKey, err := rsa.DecryptOAEP(hashFunc(), rand.Reader, privateKey, encryptedAESKeyBytes, nil)
+	// Step 2: Decrypt AES key using RSA-OAEP with the selected hash algorithm
+	aesKey, err := rsa.DecryptOAEP(hash, rand.Reader, privateKey, encryptedAESKeyBytes, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt AES key: %w", err)
 	}

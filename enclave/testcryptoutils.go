@@ -22,7 +22,7 @@ type HybridEncryptionResult struct {
 // Returns HybridEncryptionResult with base64-encoded values
 func EncryptHybridWithHash(plaintext []byte, publicKey *rsa.PublicKey, hashAlg HashAlgorithm) (*HybridEncryptionResult, error) {
 	// Create the hash implementation for the selected algorithm
-	hash, err := newHash(hashAlg)
+	hasher, err := newHash(hashAlg)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +54,7 @@ func EncryptHybridWithHash(plaintext []byte, publicKey *rsa.PublicKey, hashAlg H
 	ciphertext := aesgcm.Seal(nil, nonceBytes, plaintext, nil)
 
 	// Encrypt AES key with RSA-OAEP using the selected hash algorithm
-	encryptedAESKeyBytes, err := rsa.EncryptOAEP(hash, rand.Reader, publicKey, aesKey, nil)
+	encryptedAESKeyBytes, err := rsa.EncryptOAEP(hasher, rand.Reader, publicKey, aesKey, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt AES key: %w", err)
 	}

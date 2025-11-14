@@ -75,13 +75,13 @@ func DecryptHybrid(encryptedAESKey, encryptedPayload, nonceB64 string, privateKe
 	}
 
 	// Step 1: Create the hash implementation for the selected algorithm
-	hash, err := newHash(hashAlg)
+	hasher, err := newHash(hashAlg)
 	if err != nil {
 		return nil, err
 	}
 
 	// Step 2: Decrypt AES key using RSA-OAEP with the selected hash algorithm
-	aesKey, err := rsa.DecryptOAEP(hash, rand.Reader, privateKey, encryptedAESKeyBytes, nil)
+	aesKey, err := rsa.DecryptOAEP(hasher, rand.Reader, privateKey, encryptedAESKeyBytes, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt AES key: %w", err)
 	}

@@ -25,12 +25,9 @@ func TestHybridEncryptionDecryption(t *testing.T) {
 	privateKey, err := GenerateRSAKeyPair()
 	assert.NoError(t, err)
 
-	hashAlgorithms := []struct {
-		name    string
-		hashAlg HashAlgorithm
-	}{
-		{name: "SHA-256", hashAlg: HashAlgorithmSHA256},
-		{name: "SHA-1", hashAlg: HashAlgorithmSHA1},
+	hashAlgorithms := []HashAlgorithm{
+		HashAlgorithmSHA256,
+		HashAlgorithmSHA1,
 	}
 
 	testCases := []struct {
@@ -43,17 +40,17 @@ func TestHybridEncryptionDecryption(t *testing.T) {
 		{name: "large data", plaintext: make([]byte, 10000)},
 	}
 
-	for _, hash := range hashAlgorithms {
-		t.Run(hash.name, func(t *testing.T) {
+	for _, hashAlg := range hashAlgorithms {
+		t.Run(string(hashAlg), func(t *testing.T) {
 			for _, tt := range testCases {
 				t.Run(tt.name, func(t *testing.T) {
-					result, err := EncryptHybridWithHash(tt.plaintext, &privateKey.PublicKey, hash.hashAlg)
+					result, err := EncryptHybridWithHash(tt.plaintext, &privateKey.PublicKey, hashAlg)
 					assert.NoError(t, err)
 					assert.NotEqual(t, result.EncryptedAESKey, "")
 					assert.NotEqual(t, result.EncryptedPayload, "")
 					assert.NotEqual(t, result.Nonce, "")
 
-					decrypted, err := DecryptHybrid(result.EncryptedAESKey, result.EncryptedPayload, result.Nonce, privateKey, hash.hashAlg)
+					decrypted, err := DecryptHybrid(result.EncryptedAESKey, result.EncryptedPayload, result.Nonce, privateKey, hashAlg)
 					assert.NoError(t, err)
 					assert.Equal(t, string(tt.plaintext), string(decrypted))
 				})

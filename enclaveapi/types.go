@@ -9,6 +9,16 @@ import (
 	"github.com/cloudx-io/openauction/core"
 )
 
+// EncryptedBidPrice represents encrypted price data using RSA-OAEP/AES-256-GCM.
+// Bidders may encrypt their bid prices using a public key provided in the initial bid request,
+// ensuring that prices are only ever decrypted inside the TEE where the auction runs.
+type EncryptedBidPrice struct {
+	AESKeyEncrypted  string `json:"aes_key_encrypted"`        // base64-encoded RSA-OAEP encrypted AES key
+	EncryptedPayload string `json:"encrypted_payload"`        // base64-encoded AES-GCM encrypted {"price": X}
+	Nonce            string `json:"nonce"`                    // base64-encoded GCM nonce (12 bytes)
+	HashAlgorithm    string `json:"hash_algorithm,omitempty"` // Optional: "SHA-256" (default) or "SHA-1" for RSA-OAEP
+}
+
 // PCRs represents the Platform Configuration Registers from AWS Nitro Enclaves
 type PCRs struct {
 	// PCR0: Hash of the Enclave Image File (EIF)
@@ -113,8 +123,8 @@ func (a *AuctionAttestationDoc) URLEncode() string {
 // EncryptedCoreBid wraps a CoreBid with optional encrypted price data
 // Used as input to enclave when bids may be encrypted
 type EncryptedCoreBid struct {
-	core.CoreBid                           // Embedded - all standard auction fields
-	EncryptedPrice *core.EncryptedBidPrice `json:"encrypted_price,omitempty"` // If present, Price field is encrypted
+	core.CoreBid
+	EncryptedPrice *EncryptedBidPrice `json:"encrypted_price,omitempty"` // If present, Price field is encrypted
 }
 
 // EnclaveAuctionRequest represents the format expected by TEE enclaves for auction processing

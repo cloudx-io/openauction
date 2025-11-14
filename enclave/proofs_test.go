@@ -200,7 +200,7 @@ func TestGenerateAttestationWithEncryptedBids(t *testing.T) {
 			// Encrypted bid with EncryptedPrice populated
 			{
 				CoreBid: core.CoreBid{ID: "bid2", Bidder: "bidder_b", Price: 0.0, Currency: "USD"}, // Price will be encrypted
-				EncryptedPrice: &core.EncryptedBidPrice{
+				EncryptedPrice: &enclaveapi.EncryptedBidPrice{
 					AESKeyEncrypted:  "dGVzdF9lbmNyeXB0ZWRfYWVzX2tleV9kYXRh",     // Mock base64 RSA-encrypted AES key
 					EncryptedPayload: "dGVzdF9lbmNyeXB0ZWRfcHJpY2VfcGF5bG9hZA==", // Mock base64 AES-GCM encrypted {"price": 3.75}
 					Nonce:            "dGVzdF9ub25jZV8xMmJ5dGVz",                 // Mock base64 12-byte GCM nonce
@@ -209,7 +209,7 @@ func TestGenerateAttestationWithEncryptedBids(t *testing.T) {
 			// Another encrypted bid
 			{
 				CoreBid: core.CoreBid{ID: "bid3", Bidder: "bidder_c", Price: 0.0, Currency: "USD"},
-				EncryptedPrice: &core.EncryptedBidPrice{
+				EncryptedPrice: &enclaveapi.EncryptedBidPrice{
 					AESKeyEncrypted:  "YW5vdGhlcl90ZXN0X2VuY3J5cHRlZF9rZXk=",
 					EncryptedPayload: "YW5vdGhlcl9lbmNyeXB0ZWRfcGF5bG9hZA==",
 					Nonce:            "YW5vdGhlcl9ub25jZV8xMmI=",
@@ -449,7 +449,7 @@ func TestGenerateAttestationWithMixedBidTypes(t *testing.T) {
 			// Encrypted bid 1 - Winner after decryption
 			{
 				CoreBid: core.CoreBid{ID: "encrypted_bid_1", Bidder: "encrypted_bidder_b", Price: 0.0, Currency: "USD"},
-				EncryptedPrice: &core.EncryptedBidPrice{
+				EncryptedPrice: &enclaveapi.EncryptedBidPrice{
 					AESKeyEncrypted:  "ZW5jcnlwdGVkX3dpbm5lcl9hZXNfa2V5", // Mock RSA-encrypted AES key
 					EncryptedPayload: "ZW5jcnlwdGVkX3dpbm5lcl9wcmljZQ==", // Mock {"price": 4.50}
 					Nonce:            "d2lubmVyX25vbmNlXzEyYg==",         // Mock 12-byte nonce
@@ -462,7 +462,7 @@ func TestGenerateAttestationWithMixedBidTypes(t *testing.T) {
 			// Encrypted bid 2 - Runner-up after decryption
 			{
 				CoreBid: core.CoreBid{ID: "encrypted_bid_2", Bidder: "encrypted_bidder_d", Price: 0.0, Currency: "USD"},
-				EncryptedPrice: &core.EncryptedBidPrice{
+				EncryptedPrice: &enclaveapi.EncryptedBidPrice{
 					AESKeyEncrypted:  "cnVubmVyX3VwX2VuY3J5cHRlZF9rZXk=",
 					EncryptedPayload: "cnVubmVyX3VwX2VuY3J5cHRlZF9wcmljZQ==", // Mock {"price": 4.00}
 					Nonce:            "cnVubmVyX3VwX25vbmNlXzEyYg==",

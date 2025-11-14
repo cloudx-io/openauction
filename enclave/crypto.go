@@ -5,9 +5,21 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"hash"
+)
+
+// HashAlgorithm specifies which hash function to use in RSA-OAEP decryption
+type HashAlgorithm string
+
+const (
+	// HashSHA256 uses SHA-256 (recommended, default)
+	HashSHA256 HashAlgorithm = "SHA-256"
+	// HashSHA1 uses SHA-1 (legacy support for client compatibility)
+	HashSHA1 HashAlgorithm = "SHA-1"
 )
 
 // GenerateRSAKeyPair generates a new RSA-2048 key pair using crypto/rand
@@ -20,15 +32,31 @@ func GenerateRSAKeyPair() (*rsa.PrivateKey, error) {
 	return privateKey, nil
 }
 
+// getHashFunc returns the appropriate hash function based on the algorithm
+func getHashFunc(hashAlg HashAlgorithm) (func() hash.Hash, error) {
+	switch hashAlg {
+	case HashSHA256:
+		return sha256.New, nil
+	case HashSHA1:
+		return sha1.New, nil
+	default:
+		return nil, fmt.Errorf("unsupported hash algorithm: %s", hashAlg)
+	}
+}
+
 // DecryptHybrid decrypts data encrypted with hybrid RSA-OAEP + AES-256-GCM encryption
 // Parameters:
 //   - encryptedAESKey: RSA-encrypted AES key (base64-encoded)
 //   - encryptedPayload: AES-GCM encrypted data (base64-encoded)
 //   - nonce: GCM nonce (base64-encoded)
 //   - privateKey: RSA private key for decrypting the AES key
+//   - hashAlg: Hash algorithm for RSA-OAEP (HashSHA256 or HashSHA1)
 //
-// Returns the decrypted plaintext bytes
-func DecryptHybrid(encryptedAESKey, encryptedPayload, nonceB64 string, privateKey *rsa.PrivateKey) ([]byte, error) {
+// # Returns the decrypted plaintext bytes
+//
+// Note: SHA-1 support (HashSHA1) is provided for legacy client compatibility.
+// SHA-256 (HashSHA256) is strongly recommended for new implementations.
+func DecryptHybrid(encryptedAESKey, encryptedPayload, nonceB64 string, privateKey *rsa.PrivateKey, hashAlg HashAlgorithm) ([]byte, error) {
 	// Decode base64 inputs
 	encryptedAESKeyBytes, err := base64.StdEncoding.DecodeString(encryptedAESKey)
 	if err != nil {
@@ -45,8 +73,14 @@ func DecryptHybrid(encryptedAESKey, encryptedPayload, nonceB64 string, privateKe
 		return nil, fmt.Errorf("failed to decode nonce: %w", err)
 	}
 
-	// Step 1: Decrypt AES key using RSA-OAEP with SHA-256
-	aesKey, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, privateKey, encryptedAESKeyBytes, nil)
+	// Step 1: Get the selected hash function
+	hashFunc, err := getHashFunc(hashAlg)
+	if err != nil {
+		return nil, err
+	}
+
+	// Step 2: Decrypt AES key using RSA-OAEP with the selected hash function
+	aesKey, err := rsa.DecryptOAEP(hashFunc(), rand.Reader, privateKey, encryptedAESKeyBytes, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt AES key: %w", err)
 	}
@@ -56,7 +90,7 @@ func DecryptHybrid(encryptedAESKey, encryptedPayload, nonceB64 string, privateKe
 		return nil, fmt.Errorf("invalid AES key length: expected 32 bytes, got %d", len(aesKey))
 	}
 
-	// Step 2: Decrypt payload using AES-256-GCM
+	// Step 3: Decrypt payload using AES-256-GCM
 	block, err := aes.NewCipher(aesKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create AES cipher: %w", err)

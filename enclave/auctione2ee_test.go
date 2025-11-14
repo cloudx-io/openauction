@@ -207,7 +207,7 @@ func TestDecryptBids_HashAlgorithms(t *testing.T) {
 	tests := []struct {
 		name            string
 		encryptHashAlg  HashAlgorithm
-		declaredHashAlg string // What's sent in the EncryptedBidPrice.HashAlgorithm field
+		declaredHashAlg string
 		expectedPrice   float64
 	}{
 		{
@@ -225,7 +225,7 @@ func TestDecryptBids_HashAlgorithms(t *testing.T) {
 		{
 			name:            "default to SHA-256",
 			encryptHashAlg:  HashAlgorithmSHA256,
-			declaredHashAlg: "", // Empty - should default
+			declaredHashAlg: "",
 			expectedPrice:   4.00,
 		},
 	}

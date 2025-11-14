@@ -16,10 +16,10 @@ import (
 type HashAlgorithm string
 
 const (
-	// HashSHA256 uses SHA-256 (recommended, default)
-	HashSHA256 HashAlgorithm = "SHA-256"
-	// HashSHA1 uses SHA-1 (legacy support for client compatibility)
-	HashSHA1 HashAlgorithm = "SHA-1"
+	// HashAlgorithmSHA256 uses SHA-256 (recommended, default)
+	HashAlgorithmSHA256 HashAlgorithm = "SHA-256"
+	// HashAlgorithmSHA1 uses SHA-1 (legacy support for client compatibility)
+	HashAlgorithmSHA1 HashAlgorithm = "SHA-1"
 )
 
 // GenerateRSAKeyPair generates a new RSA-2048 key pair using crypto/rand
@@ -35,9 +35,9 @@ func GenerateRSAKeyPair() (*rsa.PrivateKey, error) {
 // getHashFunc returns the appropriate hash function based on the algorithm
 func getHashFunc(hashAlg HashAlgorithm) (func() hash.Hash, error) {
 	switch hashAlg {
-	case HashSHA256:
+	case HashAlgorithmSHA256:
 		return sha256.New, nil
-	case HashSHA1:
+	case HashAlgorithmSHA1:
 		return sha1.New, nil
 	default:
 		return nil, fmt.Errorf("unsupported hash algorithm: %s", hashAlg)
@@ -50,12 +50,12 @@ func getHashFunc(hashAlg HashAlgorithm) (func() hash.Hash, error) {
 //   - encryptedPayload: AES-GCM encrypted data (base64-encoded)
 //   - nonce: GCM nonce (base64-encoded)
 //   - privateKey: RSA private key for decrypting the AES key
-//   - hashAlg: Hash algorithm for RSA-OAEP (HashSHA256 or HashSHA1)
+//   - hashAlg: Hash algorithm for RSA-OAEP (HashAlgorithmSHA256 or HashAlgorithmSHA1)
 //
 // # Returns the decrypted plaintext bytes
 //
-// Note: SHA-1 support (HashSHA1) is provided for legacy client compatibility.
-// SHA-256 (HashSHA256) is strongly recommended for new implementations.
+// Note: SHA-1 support (HashAlgorithmSHA1) is provided for legacy client compatibility.
+// SHA-256 (HashAlgorithmSHA256) is strongly recommended for new implementations.
 func DecryptHybrid(encryptedAESKey, encryptedPayload, nonceB64 string, privateKey *rsa.PrivateKey, hashAlg HashAlgorithm) ([]byte, error) {
 	// Decode base64 inputs
 	encryptedAESKeyBytes, err := base64.StdEncoding.DecodeString(encryptedAESKey)

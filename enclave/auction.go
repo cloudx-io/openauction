@@ -171,7 +171,7 @@ func decryptAllBids(encryptedBids []enclaveapi.EncryptedCoreBid, keyManager *Key
 		// Get hash algorithm from bid, default to SHA-256 if not specified
 		hashAlg := HashAlgorithm(encBid.EncryptedPrice.HashAlgorithm)
 		if hashAlg == "" {
-			hashAlg = HashSHA256
+			hashAlg = HashAlgorithmSHA256
 		}
 
 		plaintextBytes, err := DecryptHybrid(

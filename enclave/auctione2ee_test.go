@@ -33,7 +33,7 @@ func TestDecryptBids_MixedEncryptedUnencrypted(t *testing.T) {
 		"price": 4.25,
 	}
 	plaintextBytes, _ := json.Marshal(payload)
-	result, _ := EncryptHybridWithHash(plaintextBytes, km.PublicKey, HashSHA256)
+	result, _ := EncryptHybridWithHash(plaintextBytes, km.PublicKey, HashAlgorithmSHA256)
 
 	encBids := []enclaveapi.EncryptedCoreBid{
 		{CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder1", Price: 2.50}},
@@ -92,7 +92,7 @@ func TestDecryptBids_InvalidPrice(t *testing.T) {
 		"price": -1.50,
 	}
 	plaintextBytes, _ := json.Marshal(payload)
-	result, _ := EncryptHybridWithHash(plaintextBytes, km.PublicKey, HashSHA256)
+	result, _ := EncryptHybridWithHash(plaintextBytes, km.PublicKey, HashAlgorithmSHA256)
 
 	encBids := []enclaveapi.EncryptedCoreBid{
 		{
@@ -136,7 +136,7 @@ func TestDecryptBids_WrongKey(t *testing.T) {
 		"price": 2.50,
 	}
 	plaintextBytes, _ := json.Marshal(payload)
-	result, _ := EncryptHybridWithHash(plaintextBytes, km1.PublicKey, HashSHA256)
+	result, _ := EncryptHybridWithHash(plaintextBytes, km1.PublicKey, HashAlgorithmSHA256)
 
 	encBids := []enclaveapi.EncryptedCoreBid{
 		{
@@ -170,7 +170,7 @@ func TestDecryptBids_BothEncryptedAndUnencryptedPrice(t *testing.T) {
 		"price": 7.25, // This should take precedence
 	}
 	plaintextBytes, _ := json.Marshal(payload)
-	result, _ := EncryptHybridWithHash(plaintextBytes, km.PublicKey, HashSHA256)
+	result, _ := EncryptHybridWithHash(plaintextBytes, km.PublicKey, HashAlgorithmSHA256)
 
 	encBids := []enclaveapi.EncryptedCoreBid{
 		{
@@ -212,19 +212,19 @@ func TestDecryptBids_HashAlgorithms(t *testing.T) {
 	}{
 		{
 			name:            "SHA-256 explicit",
-			encryptHashAlg:  HashSHA256,
+			encryptHashAlg:  HashAlgorithmSHA256,
 			declaredHashAlg: "SHA-256",
 			expectedPrice:   6.50,
 		},
 		{
 			name:            "SHA-1 legacy",
-			encryptHashAlg:  HashSHA1,
+			encryptHashAlg:  HashAlgorithmSHA1,
 			declaredHashAlg: "SHA-1",
 			expectedPrice:   8.75,
 		},
 		{
 			name:            "default to SHA-256",
-			encryptHashAlg:  HashSHA256,
+			encryptHashAlg:  HashAlgorithmSHA256,
 			declaredHashAlg: "", // Empty - should default
 			expectedPrice:   4.00,
 		},
@@ -274,12 +274,12 @@ func TestDecryptBids_HashAlgorithmMismatch(t *testing.T) {
 	}{
 		{
 			name:            "encrypted with SHA-1, declared SHA-256",
-			encryptHashAlg:  HashSHA1,
+			encryptHashAlg:  HashAlgorithmSHA1,
 			declaredHashAlg: "SHA-256",
 		},
 		{
 			name:            "encrypted with SHA-256, declared SHA-1",
-			encryptHashAlg:  HashSHA256,
+			encryptHashAlg:  HashAlgorithmSHA256,
 			declaredHashAlg: "SHA-1",
 		},
 	}
@@ -320,15 +320,15 @@ func TestDecryptBids_MixedHashAlgorithms(t *testing.T) {
 
 	payload1 := map[string]any{"price": 3.50}
 	plaintext1, _ := json.Marshal(payload1)
-	result1, _ := EncryptHybridWithHash(plaintext1, km.PublicKey, HashSHA256)
+	result1, _ := EncryptHybridWithHash(plaintext1, km.PublicKey, HashAlgorithmSHA256)
 
 	payload2 := map[string]any{"price": 5.25}
 	plaintext2, _ := json.Marshal(payload2)
-	result2, _ := EncryptHybridWithHash(plaintext2, km.PublicKey, HashSHA1)
+	result2, _ := EncryptHybridWithHash(plaintext2, km.PublicKey, HashAlgorithmSHA1)
 
 	payload3 := map[string]any{"price": 4.75}
 	plaintext3, _ := json.Marshal(payload3)
-	result3, _ := EncryptHybridWithHash(plaintext3, km.PublicKey, HashSHA256)
+	result3, _ := EncryptHybridWithHash(plaintext3, km.PublicKey, HashAlgorithmSHA256)
 
 	encBids := []enclaveapi.EncryptedCoreBid{
 		{

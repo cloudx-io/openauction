@@ -333,7 +333,7 @@ func TestAuctionTokenValidation_WithValidToken(t *testing.T) {
 
 	// Create encrypted bid with valid token
 	payload := fmt.Sprintf(`{"price": 5.50, "auction_token": "%s"}`, token)
-	result, err := EncryptHybridWithHash([]byte(payload), keyManager.PublicKey, HashSHA256)
+	result, err := EncryptHybridWithHash([]byte(payload), keyManager.PublicKey, HashAlgorithmSHA256)
 	check.NoError(t, err)
 
 	req := enclaveapi.EnclaveAuctionRequest{
@@ -374,7 +374,7 @@ func TestAuctionTokenValidation_WithInvalidToken(t *testing.T) {
 
 	// Create encrypted bid with invalid token
 	payload := fmt.Sprintf(`{"price": 5.50, "auction_token": "%s"}`, fakeToken)
-	result, err := EncryptHybridWithHash([]byte(payload), keyManager.PublicKey, HashSHA256)
+	result, err := EncryptHybridWithHash([]byte(payload), keyManager.PublicKey, HashAlgorithmSHA256)
 	check.NoError(t, err)
 
 	req := enclaveapi.EnclaveAuctionRequest{
@@ -415,7 +415,7 @@ func TestAuctionTokenValidation_WithConsumedToken(t *testing.T) {
 
 	// Try to use the consumed token
 	payload := fmt.Sprintf(`{"price": 5.50, "auction_token": "%s"}`, token)
-	result, err := EncryptHybridWithHash([]byte(payload), keyManager.PublicKey, HashSHA256)
+	result, err := EncryptHybridWithHash([]byte(payload), keyManager.PublicKey, HashAlgorithmSHA256)
 	check.NoError(t, err)
 
 	req := enclaveapi.EnclaveAuctionRequest{
@@ -451,7 +451,7 @@ func TestAuctionTokenValidation_WithoutToken(t *testing.T) {
 
 	// Create encrypted bid WITHOUT token (backward compatible)
 	payload := `{"price": 5.50}`
-	result, err := EncryptHybridWithHash([]byte(payload), keyManager.PublicKey, HashSHA256)
+	result, err := EncryptHybridWithHash([]byte(payload), keyManager.PublicKey, HashAlgorithmSHA256)
 	check.NoError(t, err)
 
 	req := enclaveapi.EnclaveAuctionRequest{
@@ -490,13 +490,13 @@ func TestAuctionTokenValidation_MultipleBidsWithTokens(t *testing.T) {
 
 	// Create three bids with different tokens
 	payload1 := fmt.Sprintf(`{"price": 3.00, "auction_token": "%s"}`, token1)
-	result1, _ := EncryptHybridWithHash([]byte(payload1), keyManager.PublicKey, HashSHA256)
+	result1, _ := EncryptHybridWithHash([]byte(payload1), keyManager.PublicKey, HashAlgorithmSHA256)
 
 	payload2 := fmt.Sprintf(`{"price": 4.50, "auction_token": "%s"}`, token2)
-	result2, _ := EncryptHybridWithHash([]byte(payload2), keyManager.PublicKey, HashSHA256)
+	result2, _ := EncryptHybridWithHash([]byte(payload2), keyManager.PublicKey, HashAlgorithmSHA256)
 
 	payload3 := fmt.Sprintf(`{"price": 2.75, "auction_token": "%s"}`, token3)
-	result3, _ := EncryptHybridWithHash([]byte(payload3), keyManager.PublicKey, HashSHA256)
+	result3, _ := EncryptHybridWithHash([]byte(payload3), keyManager.PublicKey, HashAlgorithmSHA256)
 
 	req := enclaveapi.EnclaveAuctionRequest{
 		Type:      "auction_request",
@@ -559,11 +559,11 @@ func TestAuctionTokenValidation_MixedValidInvalidTokens(t *testing.T) {
 
 	// Bid 1: valid token
 	payload1 := fmt.Sprintf(`{"price": 3.00, "auction_token": "%s"}`, validToken)
-	result1, _ := EncryptHybridWithHash([]byte(payload1), keyManager.PublicKey, HashSHA256)
+	result1, _ := EncryptHybridWithHash([]byte(payload1), keyManager.PublicKey, HashAlgorithmSHA256)
 
 	// Bid 2: invalid token (should be excluded)
 	payload2 := fmt.Sprintf(`{"price": 4.50, "auction_token": "%s"}`, invalidToken)
-	result2, _ := EncryptHybridWithHash([]byte(payload2), keyManager.PublicKey, HashSHA256)
+	result2, _ := EncryptHybridWithHash([]byte(payload2), keyManager.PublicKey, HashAlgorithmSHA256)
 
 	req := enclaveapi.EnclaveAuctionRequest{
 		Type:      "auction_request",
@@ -627,7 +627,7 @@ func TestEndToEndTokenFlow(t *testing.T) {
 
 	// Create encrypted bid with token
 	payload := fmt.Sprintf(`{"price": 6.75, "auction_token": "%s"}`, token)
-	result, err := EncryptHybridWithHash([]byte(payload), keyManager.PublicKey, HashSHA256)
+	result, err := EncryptHybridWithHash([]byte(payload), keyManager.PublicKey, HashAlgorithmSHA256)
 	check.NoError(t, err)
 
 	// Run auction
@@ -694,13 +694,13 @@ func TestAuctionTokenValidation_MultipleBidsSameToken(t *testing.T) {
 
 	// Create THREE bids all using the SAME token (realistic scenario)
 	payload1 := fmt.Sprintf(`{"price": 3.00, "auction_token": "%s"}`, sharedToken)
-	result1, _ := EncryptHybridWithHash([]byte(payload1), keyManager.PublicKey, HashSHA256)
+	result1, _ := EncryptHybridWithHash([]byte(payload1), keyManager.PublicKey, HashAlgorithmSHA256)
 
 	payload2 := fmt.Sprintf(`{"price": 4.50, "auction_token": "%s"}`, sharedToken)
-	result2, _ := EncryptHybridWithHash([]byte(payload2), keyManager.PublicKey, HashSHA256)
+	result2, _ := EncryptHybridWithHash([]byte(payload2), keyManager.PublicKey, HashAlgorithmSHA256)
 
 	payload3 := fmt.Sprintf(`{"price": 2.75, "auction_token": "%s"}`, sharedToken)
-	result3, _ := EncryptHybridWithHash([]byte(payload3), keyManager.PublicKey, HashSHA256)
+	result3, _ := EncryptHybridWithHash([]byte(payload3), keyManager.PublicKey, HashAlgorithmSHA256)
 
 	req := enclaveapi.EnclaveAuctionRequest{
 		Type:      "auction_request",

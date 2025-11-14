@@ -29,8 +29,8 @@ func TestHybridEncryptionDecryption(t *testing.T) {
 		name    string
 		hashAlg HashAlgorithm
 	}{
-		{name: "SHA-256", hashAlg: HashSHA256},
-		{name: "SHA-1", hashAlg: HashSHA1},
+		{name: "SHA-256", hashAlg: HashAlgorithmSHA256},
+		{name: "SHA-1", hashAlg: HashAlgorithmSHA1},
 	}
 
 	testCases := []struct {
@@ -89,7 +89,7 @@ func TestDecryptHybrid_InvalidInputs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := DecryptHybrid(tt.encryptedAESKey, tt.encryptedPayload, "dGVzdA==", privateKey, HashSHA256)
+			_, err := DecryptHybrid(tt.encryptedAESKey, tt.encryptedPayload, "dGVzdA==", privateKey, HashAlgorithmSHA256)
 			assert.NotNil(t, err) // Should have error
 		})
 	}
@@ -101,11 +101,11 @@ func TestDecryptHybrid_WrongPrivateKey(t *testing.T) {
 
 	plaintext := []byte("secret message")
 
-	result, err := EncryptHybridWithHash(plaintext, &privateKey1.PublicKey, HashSHA256)
+	result, err := EncryptHybridWithHash(plaintext, &privateKey1.PublicKey, HashAlgorithmSHA256)
 	assert.NoError(t, err)
 
 	// Try to decrypt with wrong key
-	_, err = DecryptHybrid(result.EncryptedAESKey, result.EncryptedPayload, result.Nonce, privateKey2, HashSHA256)
+	_, err = DecryptHybrid(result.EncryptedAESKey, result.EncryptedPayload, result.Nonce, privateKey2, HashAlgorithmSHA256)
 	assert.NotNil(t, err) // Should fail
 }
 
@@ -118,10 +118,10 @@ func TestHybridEncryption_BidPayload(t *testing.T) {
 
 	plaintext, _ := json.Marshal(bidPayload)
 
-	result, err := EncryptHybridWithHash(plaintext, &privateKey.PublicKey, HashSHA256)
+	result, err := EncryptHybridWithHash(plaintext, &privateKey.PublicKey, HashAlgorithmSHA256)
 	assert.NoError(t, err)
 
-	decrypted, err := DecryptHybrid(result.EncryptedAESKey, result.EncryptedPayload, result.Nonce, privateKey, HashSHA256)
+	decrypted, err := DecryptHybrid(result.EncryptedAESKey, result.EncryptedPayload, result.Nonce, privateKey, HashAlgorithmSHA256)
 	assert.NoError(t, err)
 
 	var decryptedPayload map[string]any
@@ -138,19 +138,19 @@ func TestDecryptHybrid_HashMismatch(t *testing.T) {
 	plaintext := []byte("test message")
 
 	// Encrypt with SHA-256
-	resultSHA256, err := EncryptHybridWithHash(plaintext, &privateKey.PublicKey, HashSHA256)
+	resultSHA256, err := EncryptHybridWithHash(plaintext, &privateKey.PublicKey, HashAlgorithmSHA256)
 	assert.NoError(t, err)
 
 	// Try to decrypt with SHA-1 (should fail)
-	_, err = DecryptHybrid(resultSHA256.EncryptedAESKey, resultSHA256.EncryptedPayload, resultSHA256.Nonce, privateKey, HashSHA1)
+	_, err = DecryptHybrid(resultSHA256.EncryptedAESKey, resultSHA256.EncryptedPayload, resultSHA256.Nonce, privateKey, HashAlgorithmSHA1)
 	assert.NotNil(t, err)
 
 	// Encrypt with SHA-1
-	resultSHA1, err := EncryptHybridWithHash(plaintext, &privateKey.PublicKey, HashSHA1)
+	resultSHA1, err := EncryptHybridWithHash(plaintext, &privateKey.PublicKey, HashAlgorithmSHA1)
 	assert.NoError(t, err)
 
 	// Try to decrypt with SHA-256 (should fail)
-	_, err = DecryptHybrid(resultSHA1.EncryptedAESKey, resultSHA1.EncryptedPayload, resultSHA1.Nonce, privateKey, HashSHA256)
+	_, err = DecryptHybrid(resultSHA1.EncryptedAESKey, resultSHA1.EncryptedPayload, resultSHA1.Nonce, privateKey, HashAlgorithmSHA256)
 	assert.NotNil(t, err)
 }
 
@@ -159,7 +159,7 @@ func TestDecryptHybrid_UnsupportedHashAlgorithm(t *testing.T) {
 	assert.NoError(t, err)
 
 	plaintext := []byte("test message")
-	result, err := EncryptHybridWithHash(plaintext, &privateKey.PublicKey, HashSHA256)
+	result, err := EncryptHybridWithHash(plaintext, &privateKey.PublicKey, HashAlgorithmSHA256)
 	assert.NoError(t, err)
 
 	_, err = DecryptHybrid(result.EncryptedAESKey, result.EncryptedPayload, result.Nonce, privateKey, "SHA512")

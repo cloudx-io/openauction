@@ -75,13 +75,13 @@ func TestEnforceBidFloors(t *testing.T) {
 				{ID: "bid1", Bidder: "bidder_1", Price: 1.0},
 				{ID: "bid2", Bidder: "bidder_2", Price: 1.5},
 			},
-			floor: 2.5,
+			floor:    2.5,
 			expected: []CoreBid{},
 		},
 		{
 			name:     "empty bids array",
 			bids:     []CoreBid{},
-			floor:   2.5,
+			floor:    2.5,
 			expected: []CoreBid{},
 		},
 	}

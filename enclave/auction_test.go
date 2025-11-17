@@ -242,8 +242,8 @@ func TestProcessAuction_BidFloorEnforcement(t *testing.T) {
 			{CoreBid: core.CoreBid{ID: "bid3", Bidder: "bidder_c", Price: 2.00, Currency: "USD"}}, // Below floor
 		},
 		AdjustmentFactors: map[string]float64{},
-		BidFloor: 2.50,
-		Timestamp: time.Now(),
+		BidFloor:          2.50,
+		Timestamp:         time.Now(),
 	}
 
 	tokenManager := NewTokenManager()
@@ -286,8 +286,8 @@ func TestProcessAuction_BidFloorAllRejected(t *testing.T) {
 			{CoreBid: core.CoreBid{ID: "bid2", Bidder: "bidder_b", Price: 1.50, Currency: "USD"}},
 		},
 		AdjustmentFactors: map[string]float64{},
-		BidFloor: 2.50,
-		Timestamp: time.Now(),
+		BidFloor:          2.50,
+		Timestamp:         time.Now(),
 	}
 
 	tokenManager := NewTokenManager()
@@ -786,7 +786,7 @@ func TestProcessAuction_BidFloorWithAdjustments(t *testing.T) {
 		AdjustmentFactors: map[string]float64{
 			"bidder_b": 2.0, // This makes bid2 = $4.00 after adjustment
 		},
-		BidFloor: 2.50,
+		BidFloor:  2.50,
 		Timestamp: time.Now(),
 	}
 
@@ -827,8 +827,8 @@ func TestProcessAuction_NegativeFloorRejected(t *testing.T) {
 			{CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder_a", Price: 3.00, Currency: "USD"}},
 		},
 		AdjustmentFactors: map[string]float64{},
-		BidFloor:  -2.50, // Negative floor - invalid!
-		Timestamp: time.Now(),
+		BidFloor:          -2.50, // Negative floor - invalid!
+		Timestamp:         time.Now(),
 	}
 
 	tokenManager := NewTokenManager()

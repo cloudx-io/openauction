@@ -5,7 +5,6 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 )
@@ -17,10 +16,17 @@ type HybridEncryptionResult struct {
 	Nonce            string
 }
 
-// EncryptHybrid encrypts data using hybrid RSA-OAEP + AES-256-GCM encryption
+// EncryptHybridWithHash encrypts data using hybrid RSA-OAEP + AES-256-GCM encryption
+// with a specified hash algorithm for RSA-OAEP
 // This is for testing purposes only - it simulates what bidders will do in production
 // Returns HybridEncryptionResult with base64-encoded values
-func EncryptHybrid(plaintext []byte, publicKey *rsa.PublicKey) (*HybridEncryptionResult, error) {
+func EncryptHybridWithHash(plaintext []byte, publicKey *rsa.PublicKey, hashAlg HashAlgorithm) (*HybridEncryptionResult, error) {
+	// Create the hash implementation for the selected algorithm
+	hasher, err := newHash(hashAlg)
+	if err != nil {
+		return nil, err
+	}
+
 	// Generate random AES-256 key
 	aesKey := make([]byte, 32)
 	if _, err := rand.Read(aesKey); err != nil {
@@ -47,8 +53,8 @@ func EncryptHybrid(plaintext []byte, publicKey *rsa.PublicKey) (*HybridEncryptio
 	// Encrypt and authenticate
 	ciphertext := aesgcm.Seal(nil, nonceBytes, plaintext, nil)
 
-	// Encrypt AES key with RSA-OAEP
-	encryptedAESKeyBytes, err := rsa.EncryptOAEP(sha256.New(), rand.Reader, publicKey, aesKey, nil)
+	// Encrypt AES key with RSA-OAEP using the selected hash algorithm
+	encryptedAESKeyBytes, err := rsa.EncryptOAEP(hasher, rand.Reader, publicKey, aesKey, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt AES key: %w", err)
 	}

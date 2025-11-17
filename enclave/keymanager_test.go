@@ -61,11 +61,11 @@ func TestKeyManager_EncryptDecryptRoundTrip(t *testing.T) {
 	plaintext := []byte("test message for encryption")
 
 	// Encrypt with public key
-	result, err := EncryptHybrid(plaintext, km.PublicKey)
+	result, err := EncryptHybridWithHash(plaintext, km.PublicKey, HashAlgorithmSHA256)
 	assert.NoError(t, err)
 
 	// Decrypt with private key
-	decrypted, err := DecryptHybrid(result.EncryptedAESKey, result.EncryptedPayload, result.Nonce, km.privateKey)
+	decrypted, err := DecryptHybrid(result.EncryptedAESKey, result.EncryptedPayload, result.Nonce, km.privateKey, HashAlgorithmSHA256)
 	assert.NoError(t, err)
 	assert.Equal(t, string(plaintext), string(decrypted))
 }

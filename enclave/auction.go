@@ -10,6 +10,12 @@ import (
 	"github.com/cloudx-io/openauction/enclaveapi"
 )
 
+// decryptedBidPayload represents the decrypted bid payload structure.
+type decryptedBidPayload struct {
+	Price        float64 `json:"price"`                   // Bid price in USD
+	AuctionToken string  `json:"auction_token,omitempty"` // Optional single-use token for replay protection
+}
+
 func ProcessAuction(attester EnclaveAttester, req enclaveapi.EnclaveAuctionRequest, keyManager *KeyManager, tokenManager *TokenManager) enclaveapi.EnclaveAuctionResponse {
 	startTime := time.Now()
 	log.Printf("INFO: Processing auction %s with %d bids", req.AuctionID, len(req.Bids))
@@ -129,7 +135,7 @@ func getTokenList(tokens map[string]bool) []string {
 // decryptedBidData holds a bid with its decrypted payload
 type decryptedBidData struct {
 	encBid  enclaveapi.EncryptedCoreBid
-	payload *core.DecryptedBidPayload
+	payload *decryptedBidPayload
 }
 
 // decryptAllBids decrypts all encrypted bids once
@@ -162,11 +168,18 @@ func decryptAllBids(encryptedBids []enclaveapi.EncryptedCoreBid, keyManager *Key
 
 		log.Printf("INFO: Decrypting bid %d (ID: %s, Bidder: %s)", i, encBid.ID, encBid.Bidder)
 
+		// Get hash algorithm from bid, default to SHA-256 if not specified
+		hashAlg := HashAlgorithm(encBid.EncryptedPrice.HashAlgorithm)
+		if hashAlg == "" {
+			hashAlg = HashAlgorithmSHA256
+		}
+
 		plaintextBytes, err := DecryptHybrid(
 			encBid.EncryptedPrice.AESKeyEncrypted,
 			encBid.EncryptedPrice.EncryptedPayload,
 			encBid.EncryptedPrice.Nonce,
 			keyManager.privateKey,
+			hashAlg,
 		)
 		if err != nil {
 			log.Printf("INFO: Failed to decrypt bid %s: %v", encBid.ID, err)
@@ -179,7 +192,7 @@ func decryptAllBids(encryptedBids []enclaveapi.EncryptedCoreBid, keyManager *Key
 			continue
 		}
 
-		var payload core.DecryptedBidPayload
+		var payload decryptedBidPayload
 		if err := json.Unmarshal(plaintextBytes, &payload); err != nil {
 			log.Printf("INFO: Failed to parse decrypted payload for bid %s: %v", encBid.ID, err)
 			excludedBids = append(excludedBids, enclaveapi.ExcludedBid{

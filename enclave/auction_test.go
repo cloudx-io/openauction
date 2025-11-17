@@ -333,7 +333,7 @@ func TestAuctionTokenValidation_WithValidToken(t *testing.T) {
 
 	// Create encrypted bid with valid token
 	payload := fmt.Sprintf(`{"price": 5.50, "auction_token": "%s"}`, token)
-	result, err := EncryptHybrid([]byte(payload), keyManager.PublicKey)
+	result, err := EncryptHybridWithHash([]byte(payload), keyManager.PublicKey, HashAlgorithmSHA256)
 	check.NoError(t, err)
 
 	req := enclaveapi.EnclaveAuctionRequest{
@@ -343,7 +343,7 @@ func TestAuctionTokenValidation_WithValidToken(t *testing.T) {
 		Bids: []enclaveapi.EncryptedCoreBid{
 			{
 				CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder1", Price: 0.0, Currency: "USD"},
-				EncryptedPrice: &core.EncryptedBidPrice{
+				EncryptedPrice: &enclaveapi.EncryptedBidPrice{
 					AESKeyEncrypted:  result.EncryptedAESKey,
 					EncryptedPayload: result.EncryptedPayload,
 					Nonce:            result.Nonce,
@@ -374,7 +374,7 @@ func TestAuctionTokenValidation_WithInvalidToken(t *testing.T) {
 
 	// Create encrypted bid with invalid token
 	payload := fmt.Sprintf(`{"price": 5.50, "auction_token": "%s"}`, fakeToken)
-	result, err := EncryptHybrid([]byte(payload), keyManager.PublicKey)
+	result, err := EncryptHybridWithHash([]byte(payload), keyManager.PublicKey, HashAlgorithmSHA256)
 	check.NoError(t, err)
 
 	req := enclaveapi.EnclaveAuctionRequest{
@@ -384,7 +384,7 @@ func TestAuctionTokenValidation_WithInvalidToken(t *testing.T) {
 		Bids: []enclaveapi.EncryptedCoreBid{
 			{
 				CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder1", Price: 0.0, Currency: "USD"},
-				EncryptedPrice: &core.EncryptedBidPrice{
+				EncryptedPrice: &enclaveapi.EncryptedBidPrice{
 					AESKeyEncrypted:  result.EncryptedAESKey,
 					EncryptedPayload: result.EncryptedPayload,
 					Nonce:            result.Nonce,
@@ -415,7 +415,7 @@ func TestAuctionTokenValidation_WithConsumedToken(t *testing.T) {
 
 	// Try to use the consumed token
 	payload := fmt.Sprintf(`{"price": 5.50, "auction_token": "%s"}`, token)
-	result, err := EncryptHybrid([]byte(payload), keyManager.PublicKey)
+	result, err := EncryptHybridWithHash([]byte(payload), keyManager.PublicKey, HashAlgorithmSHA256)
 	check.NoError(t, err)
 
 	req := enclaveapi.EnclaveAuctionRequest{
@@ -425,7 +425,7 @@ func TestAuctionTokenValidation_WithConsumedToken(t *testing.T) {
 		Bids: []enclaveapi.EncryptedCoreBid{
 			{
 				CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder1", Price: 0.0, Currency: "USD"},
-				EncryptedPrice: &core.EncryptedBidPrice{
+				EncryptedPrice: &enclaveapi.EncryptedBidPrice{
 					AESKeyEncrypted:  result.EncryptedAESKey,
 					EncryptedPayload: result.EncryptedPayload,
 					Nonce:            result.Nonce,
@@ -451,7 +451,7 @@ func TestAuctionTokenValidation_WithoutToken(t *testing.T) {
 
 	// Create encrypted bid WITHOUT token (backward compatible)
 	payload := `{"price": 5.50}`
-	result, err := EncryptHybrid([]byte(payload), keyManager.PublicKey)
+	result, err := EncryptHybridWithHash([]byte(payload), keyManager.PublicKey, HashAlgorithmSHA256)
 	check.NoError(t, err)
 
 	req := enclaveapi.EnclaveAuctionRequest{
@@ -461,7 +461,7 @@ func TestAuctionTokenValidation_WithoutToken(t *testing.T) {
 		Bids: []enclaveapi.EncryptedCoreBid{
 			{
 				CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder1", Price: 0.0, Currency: "USD"},
-				EncryptedPrice: &core.EncryptedBidPrice{
+				EncryptedPrice: &enclaveapi.EncryptedBidPrice{
 					AESKeyEncrypted:  result.EncryptedAESKey,
 					EncryptedPayload: result.EncryptedPayload,
 					Nonce:            result.Nonce,
@@ -490,13 +490,13 @@ func TestAuctionTokenValidation_MultipleBidsWithTokens(t *testing.T) {
 
 	// Create three bids with different tokens
 	payload1 := fmt.Sprintf(`{"price": 3.00, "auction_token": "%s"}`, token1)
-	result1, _ := EncryptHybrid([]byte(payload1), keyManager.PublicKey)
+	result1, _ := EncryptHybridWithHash([]byte(payload1), keyManager.PublicKey, HashAlgorithmSHA256)
 
 	payload2 := fmt.Sprintf(`{"price": 4.50, "auction_token": "%s"}`, token2)
-	result2, _ := EncryptHybrid([]byte(payload2), keyManager.PublicKey)
+	result2, _ := EncryptHybridWithHash([]byte(payload2), keyManager.PublicKey, HashAlgorithmSHA256)
 
 	payload3 := fmt.Sprintf(`{"price": 2.75, "auction_token": "%s"}`, token3)
-	result3, _ := EncryptHybrid([]byte(payload3), keyManager.PublicKey)
+	result3, _ := EncryptHybridWithHash([]byte(payload3), keyManager.PublicKey, HashAlgorithmSHA256)
 
 	req := enclaveapi.EnclaveAuctionRequest{
 		Type:      "auction_request",
@@ -505,7 +505,7 @@ func TestAuctionTokenValidation_MultipleBidsWithTokens(t *testing.T) {
 		Bids: []enclaveapi.EncryptedCoreBid{
 			{
 				CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder1", Price: 0.0, Currency: "USD"},
-				EncryptedPrice: &core.EncryptedBidPrice{
+				EncryptedPrice: &enclaveapi.EncryptedBidPrice{
 					AESKeyEncrypted:  result1.EncryptedAESKey,
 					EncryptedPayload: result1.EncryptedPayload,
 					Nonce:            result1.Nonce,
@@ -513,7 +513,7 @@ func TestAuctionTokenValidation_MultipleBidsWithTokens(t *testing.T) {
 			},
 			{
 				CoreBid: core.CoreBid{ID: "bid2", Bidder: "bidder2", Price: 0.0, Currency: "USD"},
-				EncryptedPrice: &core.EncryptedBidPrice{
+				EncryptedPrice: &enclaveapi.EncryptedBidPrice{
 					AESKeyEncrypted:  result2.EncryptedAESKey,
 					EncryptedPayload: result2.EncryptedPayload,
 					Nonce:            result2.Nonce,
@@ -521,7 +521,7 @@ func TestAuctionTokenValidation_MultipleBidsWithTokens(t *testing.T) {
 			},
 			{
 				CoreBid: core.CoreBid{ID: "bid3", Bidder: "bidder3", Price: 0.0, Currency: "USD"},
-				EncryptedPrice: &core.EncryptedBidPrice{
+				EncryptedPrice: &enclaveapi.EncryptedBidPrice{
 					AESKeyEncrypted:  result3.EncryptedAESKey,
 					EncryptedPayload: result3.EncryptedPayload,
 					Nonce:            result3.Nonce,
@@ -559,11 +559,11 @@ func TestAuctionTokenValidation_MixedValidInvalidTokens(t *testing.T) {
 
 	// Bid 1: valid token
 	payload1 := fmt.Sprintf(`{"price": 3.00, "auction_token": "%s"}`, validToken)
-	result1, _ := EncryptHybrid([]byte(payload1), keyManager.PublicKey)
+	result1, _ := EncryptHybridWithHash([]byte(payload1), keyManager.PublicKey, HashAlgorithmSHA256)
 
 	// Bid 2: invalid token (should be excluded)
 	payload2 := fmt.Sprintf(`{"price": 4.50, "auction_token": "%s"}`, invalidToken)
-	result2, _ := EncryptHybrid([]byte(payload2), keyManager.PublicKey)
+	result2, _ := EncryptHybridWithHash([]byte(payload2), keyManager.PublicKey, HashAlgorithmSHA256)
 
 	req := enclaveapi.EnclaveAuctionRequest{
 		Type:      "auction_request",
@@ -572,7 +572,7 @@ func TestAuctionTokenValidation_MixedValidInvalidTokens(t *testing.T) {
 		Bids: []enclaveapi.EncryptedCoreBid{
 			{
 				CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder1", Price: 0.0, Currency: "USD"},
-				EncryptedPrice: &core.EncryptedBidPrice{
+				EncryptedPrice: &enclaveapi.EncryptedBidPrice{
 					AESKeyEncrypted:  result1.EncryptedAESKey,
 					EncryptedPayload: result1.EncryptedPayload,
 					Nonce:            result1.Nonce,
@@ -580,7 +580,7 @@ func TestAuctionTokenValidation_MixedValidInvalidTokens(t *testing.T) {
 			},
 			{
 				CoreBid: core.CoreBid{ID: "bid2", Bidder: "bidder2", Price: 0.0, Currency: "USD"},
-				EncryptedPrice: &core.EncryptedBidPrice{
+				EncryptedPrice: &enclaveapi.EncryptedBidPrice{
 					AESKeyEncrypted:  result2.EncryptedAESKey,
 					EncryptedPayload: result2.EncryptedPayload,
 					Nonce:            result2.Nonce,
@@ -627,7 +627,7 @@ func TestEndToEndTokenFlow(t *testing.T) {
 
 	// Create encrypted bid with token
 	payload := fmt.Sprintf(`{"price": 6.75, "auction_token": "%s"}`, token)
-	result, err := EncryptHybrid([]byte(payload), keyManager.PublicKey)
+	result, err := EncryptHybridWithHash([]byte(payload), keyManager.PublicKey, HashAlgorithmSHA256)
 	check.NoError(t, err)
 
 	// Run auction
@@ -638,7 +638,7 @@ func TestEndToEndTokenFlow(t *testing.T) {
 		Bids: []enclaveapi.EncryptedCoreBid{
 			{
 				CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder1", Price: 0.0, Currency: "USD"},
-				EncryptedPrice: &core.EncryptedBidPrice{
+				EncryptedPrice: &enclaveapi.EncryptedBidPrice{
 					AESKeyEncrypted:  result.EncryptedAESKey,
 					EncryptedPayload: result.EncryptedPayload,
 					Nonce:            result.Nonce,
@@ -665,7 +665,7 @@ func TestEndToEndTokenFlow(t *testing.T) {
 		Bids: []enclaveapi.EncryptedCoreBid{
 			{
 				CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder1", Price: 0.0, Currency: "USD"},
-				EncryptedPrice: &core.EncryptedBidPrice{
+				EncryptedPrice: &enclaveapi.EncryptedBidPrice{
 					AESKeyEncrypted:  result.EncryptedAESKey,
 					EncryptedPayload: result.EncryptedPayload,
 					Nonce:            result.Nonce,
@@ -694,13 +694,13 @@ func TestAuctionTokenValidation_MultipleBidsSameToken(t *testing.T) {
 
 	// Create THREE bids all using the SAME token (realistic scenario)
 	payload1 := fmt.Sprintf(`{"price": 3.00, "auction_token": "%s"}`, sharedToken)
-	result1, _ := EncryptHybrid([]byte(payload1), keyManager.PublicKey)
+	result1, _ := EncryptHybridWithHash([]byte(payload1), keyManager.PublicKey, HashAlgorithmSHA256)
 
 	payload2 := fmt.Sprintf(`{"price": 4.50, "auction_token": "%s"}`, sharedToken)
-	result2, _ := EncryptHybrid([]byte(payload2), keyManager.PublicKey)
+	result2, _ := EncryptHybridWithHash([]byte(payload2), keyManager.PublicKey, HashAlgorithmSHA256)
 
 	payload3 := fmt.Sprintf(`{"price": 2.75, "auction_token": "%s"}`, sharedToken)
-	result3, _ := EncryptHybrid([]byte(payload3), keyManager.PublicKey)
+	result3, _ := EncryptHybridWithHash([]byte(payload3), keyManager.PublicKey, HashAlgorithmSHA256)
 
 	req := enclaveapi.EnclaveAuctionRequest{
 		Type:      "auction_request",
@@ -709,7 +709,7 @@ func TestAuctionTokenValidation_MultipleBidsSameToken(t *testing.T) {
 		Bids: []enclaveapi.EncryptedCoreBid{
 			{
 				CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder1", Price: 0.0, Currency: "USD"},
-				EncryptedPrice: &core.EncryptedBidPrice{
+				EncryptedPrice: &enclaveapi.EncryptedBidPrice{
 					AESKeyEncrypted:  result1.EncryptedAESKey,
 					EncryptedPayload: result1.EncryptedPayload,
 					Nonce:            result1.Nonce,
@@ -717,7 +717,7 @@ func TestAuctionTokenValidation_MultipleBidsSameToken(t *testing.T) {
 			},
 			{
 				CoreBid: core.CoreBid{ID: "bid2", Bidder: "bidder2", Price: 0.0, Currency: "USD"},
-				EncryptedPrice: &core.EncryptedBidPrice{
+				EncryptedPrice: &enclaveapi.EncryptedBidPrice{
 					AESKeyEncrypted:  result2.EncryptedAESKey,
 					EncryptedPayload: result2.EncryptedPayload,
 					Nonce:            result2.Nonce,
@@ -725,7 +725,7 @@ func TestAuctionTokenValidation_MultipleBidsSameToken(t *testing.T) {
 			},
 			{
 				CoreBid: core.CoreBid{ID: "bid3", Bidder: "bidder3", Price: 0.0, Currency: "USD"},
-				EncryptedPrice: &core.EncryptedBidPrice{
+				EncryptedPrice: &enclaveapi.EncryptedBidPrice{
 					AESKeyEncrypted:  result3.EncryptedAESKey,
 					EncryptedPayload: result3.EncryptedPayload,
 					Nonce:            result3.Nonce,

@@ -255,7 +255,6 @@ func TestProcessAuction_BidFloorEnforcement(t *testing.T) {
 	assert.NotNil(t, response.AttestationDoc.UserData)
 
 	// Verify per-bidder floors are included in attestation
-	assert.NotNil(t, response.AttestationDoc.UserData.BidFloor)
 	check.Equal(t, 2.50, response.AttestationDoc.UserData.BidFloor)
 
 	// Verify ALL bids are in attestation (including floor-rejected bid3)
@@ -298,7 +297,6 @@ func TestProcessAuction_BidFloorAllRejected(t *testing.T) {
 	assert.NotNil(t, response.AttestationDoc)
 
 	// Verify floors are included in attestation
-	assert.NotNil(t, response.AttestationDoc.UserData.BidFloor)
 	check.Equal(t, 2.50, response.AttestationDoc.UserData.BidFloor)
 
 	// Verify ALL bids are still in attestation (even though rejected by floor)
@@ -798,7 +796,6 @@ func TestProcessAuction_BidFloorWithAdjustments(t *testing.T) {
 	assert.NotNil(t, response.AttestationDoc)
 
 	// Verify floors are included in attestation
-	assert.NotNil(t, response.AttestationDoc.UserData.BidFloor)
 	check.Equal(t, 2.50, response.AttestationDoc.UserData.BidFloor)
 
 	// Verify both bids are in attestation

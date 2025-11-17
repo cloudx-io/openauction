@@ -242,12 +242,8 @@ func TestProcessAuction_BidFloorEnforcement(t *testing.T) {
 			{CoreBid: core.CoreBid{ID: "bid3", Bidder: "bidder_c", Price: 2.00, Currency: "USD"}}, // Below floor
 		},
 		AdjustmentFactors: map[string]float64{},
-		BidFloors: map[string]float64{
-			"bidder_a": 2.50,
-			"bidder_b": 2.50,
-			"bidder_c": 2.50,
-		},
-		Timestamp: time.Now(),
+		BidFloor:          2.50,
+		Timestamp:         time.Now(),
 	}
 
 	tokenManager := NewTokenManager()
@@ -259,10 +255,7 @@ func TestProcessAuction_BidFloorEnforcement(t *testing.T) {
 	assert.NotNil(t, response.AttestationDoc.UserData)
 
 	// Verify per-bidder floors are included in attestation
-	assert.NotNil(t, response.AttestationDoc.UserData.BidFloors)
-	check.Equal(t, 2.50, response.AttestationDoc.UserData.BidFloors["bidder_a"])
-	check.Equal(t, 2.50, response.AttestationDoc.UserData.BidFloors["bidder_b"])
-	check.Equal(t, 2.50, response.AttestationDoc.UserData.BidFloors["bidder_c"])
+	check.Equal(t, 2.50, response.AttestationDoc.UserData.BidFloor)
 
 	// Verify ALL bids are in attestation (including floor-rejected bid3)
 	// This allows bidders rejected by floor to verify the auction and see the floor
@@ -292,11 +285,8 @@ func TestProcessAuction_BidFloorAllRejected(t *testing.T) {
 			{CoreBid: core.CoreBid{ID: "bid2", Bidder: "bidder_b", Price: 1.50, Currency: "USD"}},
 		},
 		AdjustmentFactors: map[string]float64{},
-		BidFloors: map[string]float64{
-			"bidder_a": 2.50,
-			"bidder_b": 2.50,
-		},
-		Timestamp: time.Now(),
+		BidFloor:          2.50,
+		Timestamp:         time.Now(),
 	}
 
 	tokenManager := NewTokenManager()
@@ -307,9 +297,7 @@ func TestProcessAuction_BidFloorAllRejected(t *testing.T) {
 	assert.NotNil(t, response.AttestationDoc)
 
 	// Verify floors are included in attestation
-	assert.NotNil(t, response.AttestationDoc.UserData.BidFloors)
-	check.Equal(t, 2.50, response.AttestationDoc.UserData.BidFloors["bidder_a"])
-	check.Equal(t, 2.50, response.AttestationDoc.UserData.BidFloors["bidder_b"])
+	check.Equal(t, 2.50, response.AttestationDoc.UserData.BidFloor)
 
 	// Verify ALL bids are still in attestation (even though rejected by floor)
 	// This allows bidders to verify the auction and see the floor that rejected them
@@ -762,8 +750,8 @@ func TestProcessAuction_BidFloorZero(t *testing.T) {
 			{CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder_a", Price: 3.00, Currency: "USD"}},
 			{CoreBid: core.CoreBid{ID: "bid2", Bidder: "bidder_b", Price: 0.50, Currency: "USD"}},
 		},
-		AdjustmentFactors: map[string]float64{},
-		BidFloors:         map[string]float64{}, // No floors
+		AdjustmentFactors: map[string]float64{}, // No floors
+		BidFloor:          0.00,
 		Timestamp:         time.Now(),
 	}
 
@@ -774,8 +762,8 @@ func TestProcessAuction_BidFloorZero(t *testing.T) {
 	assert.True(t, response.Success)
 	assert.NotNil(t, response.AttestationDoc)
 
-	// Verify empty floors map in attestation
-	check.Equal(t, map[string]float64{}, response.AttestationDoc.UserData.BidFloors)
+	// Verify empty floor in attestation
+	check.Equal(t, 0.00, response.AttestationDoc.UserData.BidFloor)
 
 	// Verify all bids pass (no floor enforcement)
 	check.Equal(t, 2, len(response.AttestationDoc.UserData.BidHashes))
@@ -796,10 +784,7 @@ func TestProcessAuction_BidFloorWithAdjustments(t *testing.T) {
 		AdjustmentFactors: map[string]float64{
 			"bidder_b": 2.0, // This makes bid2 = $4.00 after adjustment
 		},
-		BidFloors: map[string]float64{
-			"bidder_a": 2.50,
-			"bidder_b": 2.50,
-		},
+		BidFloor:  2.50,
 		Timestamp: time.Now(),
 	}
 
@@ -811,9 +796,7 @@ func TestProcessAuction_BidFloorWithAdjustments(t *testing.T) {
 	assert.NotNil(t, response.AttestationDoc)
 
 	// Verify floors are included in attestation
-	assert.NotNil(t, response.AttestationDoc.UserData.BidFloors)
-	check.Equal(t, 2.50, response.AttestationDoc.UserData.BidFloors["bidder_a"])
-	check.Equal(t, 2.50, response.AttestationDoc.UserData.BidFloors["bidder_b"])
+	check.Equal(t, 2.50, response.AttestationDoc.UserData.BidFloor)
 
 	// Verify both bids are in attestation
 	check.Equal(t, 2, len(response.AttestationDoc.UserData.BidHashes))
@@ -829,56 +812,6 @@ func TestProcessAuction_BidFloorWithAdjustments(t *testing.T) {
 	check.Equal(t, 3.00, response.AttestationDoc.UserData.RunnerUp.Price)
 }
 
-// TestProcessAuction_PerBidderFloors tests that different bidders can have different floors
-func TestProcessAuction_PerBidderFloors(t *testing.T) {
-	mockAttester := CreateMockEnclave(t)
-
-	req := enclaveapi.EnclaveAuctionRequest{
-		Type:      "auction_request",
-		AuctionID: "test_auction_per_bidder_floors",
-		RoundID:   1,
-		Bids: []enclaveapi.EncryptedCoreBid{
-			{CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder_a", Price: 2.75, Currency: "USD"}}, // Above bidder_a floor (2.50)
-			{CoreBid: core.CoreBid{ID: "bid2", Bidder: "bidder_b", Price: 2.75, Currency: "USD"}}, // Below bidder_b floor (3.00)
-			{CoreBid: core.CoreBid{ID: "bid3", Bidder: "bidder_c", Price: 1.50, Currency: "USD"}}, // Above bidder_c floor (1.00)
-		},
-		AdjustmentFactors: map[string]float64{},
-		BidFloors: map[string]float64{
-			"bidder_a": 2.50, // Lowest floor
-			"bidder_b": 3.00, // Highest floor
-			"bidder_c": 1.00, // Medium floor
-		},
-		Timestamp: time.Now(),
-	}
-
-	tokenManager := NewTokenManager()
-	response := ProcessAuction(mockAttester, req, nil, tokenManager)
-
-	// Validate successful response
-	assert.True(t, response.Success)
-	assert.NotNil(t, response.AttestationDoc)
-
-	// Verify per-bidder floors are in attestation
-	assert.NotNil(t, response.AttestationDoc.UserData.BidFloors)
-	check.Equal(t, 2.50, response.AttestationDoc.UserData.BidFloors["bidder_a"])
-	check.Equal(t, 3.00, response.AttestationDoc.UserData.BidFloors["bidder_b"])
-	check.Equal(t, 1.00, response.AttestationDoc.UserData.BidFloors["bidder_c"])
-
-	// Verify all bids are in attestation
-	check.Equal(t, 3, len(response.AttestationDoc.UserData.BidHashes))
-
-	// Only bidder_a and bidder_c should pass (bidder_b rejected: $2.75 < $3.00)
-	// bidder_a wins with $2.75 (highest among eligible)
-	check.NotNil(t, response.AttestationDoc.UserData.Winner)
-	check.Equal(t, "bid1", response.AttestationDoc.UserData.Winner.ID)
-	check.Equal(t, 2.75, response.AttestationDoc.UserData.Winner.Price)
-
-	// bidder_c is runner-up with $1.50
-	check.NotNil(t, response.AttestationDoc.UserData.RunnerUp)
-	check.Equal(t, "bid3", response.AttestationDoc.UserData.RunnerUp.ID)
-	check.Equal(t, 1.50, response.AttestationDoc.UserData.RunnerUp.Price)
-}
-
 // TestProcessAuction_NegativeFloorRejected tests that TEE rejects negative floor prices
 func TestProcessAuction_NegativeFloorRejected(t *testing.T) {
 	mockAttester := CreateMockEnclave(t)
@@ -891,10 +824,8 @@ func TestProcessAuction_NegativeFloorRejected(t *testing.T) {
 			{CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder_a", Price: 3.00, Currency: "USD"}},
 		},
 		AdjustmentFactors: map[string]float64{},
-		BidFloors: map[string]float64{
-			"bidder_a": -2.50, // Negative floor - invalid!
-		},
-		Timestamp: time.Now(),
+		BidFloor:          -2.50, // Negative floor - invalid!
+		Timestamp:         time.Now(),
 	}
 
 	tokenManager := NewTokenManager()
@@ -902,6 +833,6 @@ func TestProcessAuction_NegativeFloorRejected(t *testing.T) {
 
 	// Verify TEE rejected the request
 	check.False(t, response.Success)
-	check.Equal(t, "Invalid negative floor price -2.5000 for bidder bidder_a", response.Message)
+	check.Equal(t, "Invalid negative floor price -2.5000", response.Message)
 	check.Nil(t, response.AttestationDoc)
 }

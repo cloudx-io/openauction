@@ -112,6 +112,11 @@ func TestRunAuction_NoAdjustmentFactors(t *testing.T) {
 	// Without adjustments, original ranking is preserved
 	check.Equal(t, "bidder_a", result.Winner.Bidder)
 	check.Equal(t, 2.0, result.Winner.Price)
+
+	// Verify runner-up
+	check.NotNil(t, result.RunnerUp)
+	check.Equal(t, "bidder_b", result.RunnerUp.Bidder)
+	check.Equal(t, 1.5, result.RunnerUp.Price)
 }
 
 func TestRunAuction_NoFloors(t *testing.T) {

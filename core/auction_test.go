@@ -42,7 +42,7 @@ func TestRunAuction_BasicFlow(t *testing.T) {
 
 	// Verify runner-up
 	check.Equal(t, "bidder_b", result.RunnerUp.Bidder)
-	check.True(t, result.RunnerUp.Price > 1.79 && result.RunnerUp.Price < 1.81)
+	check.Equal(t, 1.8, result.RunnerUp.Price)
 
 	// Verify eligible bids (only bidder_a and bidder_b passed floor)
 	check.Equal(t, 2, len(result.EligibleBids))

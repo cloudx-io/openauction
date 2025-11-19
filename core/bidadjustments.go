@@ -6,31 +6,6 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-const (
-	AdjustmentTypeCPM        = "cpm"
-	AdjustmentTypeMultiplier = "multiplier"
-	AdjustmentTypeStatic     = "static"
-	WildCard                 = "*"
-	Delimiter                = "|"
-)
-
-type CoreAdjustment struct {
-	Type     string  `json:"type"`
-	Value    float64 `json:"value"`
-	Currency string  `json:"currency"`
-}
-
-type CoreCurrencyConverter interface {
-	ConvertCurrency(amount float64, fromCurrency, toCurrency string) (float64, error)
-}
-
-type BidAdjustmentConfig struct {
-	AdjustmentFactors map[string]float64
-	ConversionRate    float64
-	ComplexRules      map[string][]CoreAdjustment
-	CurrencyConverter CoreCurrencyConverter
-}
-
 func ApplyBidAdjustmentFactors(bids []CoreBid, adjustmentFactors map[string]float64, conversionRate float64) []CoreBid {
 	if conversionRate <= 0 {
 		return bids

@@ -48,8 +48,8 @@ func TestRunAuction_BasicFlow(t *testing.T) {
 	check.Equal(t, 2, len(result.EligibleBids))
 
 	// Verify rejected bids (bidder_c failed floor)
-	check.Equal(t, 1, len(result.RejectedBids))
-	check.Equal(t, "bidder_c", result.RejectedBids[0].Bid.Bidder)
+	check.Equal(t, 1, len(result.FloorRejectedBidIDs))
+	check.Equal(t, "bid3", result.FloorRejectedBidIDs[0])
 }
 
 func TestRunAuction_NoBids(t *testing.T) {
@@ -59,7 +59,7 @@ func TestRunAuction_NoBids(t *testing.T) {
 	check.Nil(t, result.Winner)
 	check.Nil(t, result.RunnerUp)
 	check.Equal(t, 0, len(result.EligibleBids))
-	check.Equal(t, 0, len(result.RejectedBids))
+	check.Equal(t, 0, len(result.FloorRejectedBidIDs))
 }
 
 func TestRunAuction_SingleBid(t *testing.T) {
@@ -94,7 +94,7 @@ func TestRunAuction_AllBidsRejectedByFloor(t *testing.T) {
 	check.Nil(t, result.Winner)
 	check.Nil(t, result.RunnerUp)
 	check.Equal(t, 0, len(result.EligibleBids))
-	check.Equal(t, 2, len(result.RejectedBids))
+	check.Equal(t, 2, len(result.FloorRejectedBidIDs))
 }
 
 func TestRunAuction_NoAdjustmentFactors(t *testing.T) {
@@ -132,7 +132,7 @@ func TestRunAuction_NoFloors(t *testing.T) {
 
 	// Without floors, all bids are eligible
 	check.Equal(t, 2, len(result.EligibleBids))
-	check.Equal(t, 0, len(result.RejectedBids))
+	check.Equal(t, 0, len(result.FloorRejectedBidIDs))
 }
 
 func TestRunAuction_AdjustmentChangesWinner(t *testing.T) {

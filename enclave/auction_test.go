@@ -357,7 +357,7 @@ func TestAuctionTokenValidation_WithValidToken(t *testing.T) {
 
 	// Should succeed
 	check.True(t, response.Success)
-	check.Equal(t, []enclaveapi.ExcludedBid{}, response.ExcludedBids)
+	check.Equal(t, []core.ExcludedBid{}, response.ExcludedBids)
 
 	// Token should be consumed
 	check.False(t, tokenManager.ValidateToken(token))
@@ -475,7 +475,7 @@ func TestAuctionTokenValidation_WithoutToken(t *testing.T) {
 
 	// Should succeed (backward compatible)
 	check.True(t, response.Success)
-	check.Equal(t, []enclaveapi.ExcludedBid{}, response.ExcludedBids)
+	check.Equal(t, []core.ExcludedBid{}, response.ExcludedBids)
 }
 
 func TestAuctionTokenValidation_MultipleBidsWithTokens(t *testing.T) {
@@ -535,7 +535,7 @@ func TestAuctionTokenValidation_MultipleBidsWithTokens(t *testing.T) {
 
 	// Should succeed
 	check.True(t, response.Success)
-	check.Equal(t, []enclaveapi.ExcludedBid{}, response.ExcludedBids)
+	check.Equal(t, []core.ExcludedBid{}, response.ExcludedBids)
 
 	// All tokens should be consumed
 	check.False(t, tokenManager.ValidateToken(token1))
@@ -652,7 +652,7 @@ func TestEndToEndTokenFlow(t *testing.T) {
 
 	// Auction should succeed
 	check.True(t, response.Success)
-	check.Equal(t, []enclaveapi.ExcludedBid{}, response.ExcludedBids)
+	check.Equal(t, []core.ExcludedBid{}, response.ExcludedBids)
 
 	// Token should be consumed
 	check.False(t, tokenManager.ValidateToken(token))
@@ -739,7 +739,7 @@ func TestAuctionTokenValidation_MultipleBidsSameToken(t *testing.T) {
 
 	// Should succeed - all three bids with same token are valid
 	check.True(t, response.Success)
-	check.Equal(t, []enclaveapi.ExcludedBid{}, response.ExcludedBids)
+	check.Equal(t, []core.ExcludedBid{}, response.ExcludedBids)
 
 	// Shared token should be consumed (only once)
 	check.False(t, tokenManager.ValidateToken(sharedToken))

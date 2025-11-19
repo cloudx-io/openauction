@@ -138,22 +138,15 @@ type EnclaveAuctionRequest struct {
 	Timestamp         time.Time          `json:"timestamp"`
 }
 
-// ExcludedBid represents a bid that was excluded from the auction (e.g., decryption failure)
-type ExcludedBid struct {
-	BidID  string `json:"bid_id"`
-	Bidder string `json:"bidder"`
-	Reason string `json:"reason"`
-}
-
 // EnclaveAuctionResponse represents the response from TEE enclaves after auction processing
 type EnclaveAuctionResponse struct {
-	Type              string                 `json:"type"`
-	Success           bool                   `json:"success"`
-	Message           string                 `json:"message"`
-	AttestationDoc    *AuctionAttestationDoc `json:"attestation_document,omitempty"`
-	ExcludedBids      []ExcludedBid          `json:"excluded_bids,omitempty"`       // Decryption failures, validation errors
-	FloorRejectedBids []ExcludedBid          `json:"floor_rejected_bids,omitempty"` // Bids below floor
-	ProcessingTime    int64                  `json:"processing_time_ms"`
+	Type                string                 `json:"type"`
+	Success             bool                   `json:"success"`
+	Message             string                 `json:"message"`
+	AttestationDoc      *AuctionAttestationDoc `json:"attestation_document,omitempty"`
+	ExcludedBids        []core.ExcludedBid     `json:"excluded_bids,omitempty"`          // Decryption failures, validation errors
+	FloorRejectedBidIDs []string               `json:"floor_rejected_bid_ids,omitempty"` // Bid IDs that were below floor
+	ProcessingTime      int64                  `json:"processing_time_ms"`
 }
 
 // KeyResponse represents the response from a key request to the TEE enclave

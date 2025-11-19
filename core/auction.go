@@ -1,21 +1,5 @@
 package core
 
-// AuctionResult contains the complete results of running an auction.
-// This unified result format is used by both TEE and local processing paths.
-type AuctionResult struct {
-	// Winner is the highest-ranked bid (nil if no valid bids)
-	Winner *CoreBid
-
-	// RunnerUp is the second-highest-ranked bid (nil if less than 2 valid bids)
-	RunnerUp *CoreBid
-
-	// EligibleBids contains all bids that passed floor enforcement and were included in ranking
-	EligibleBids []CoreBid
-
-	// RejectedBids contains all bids that failed floor enforcement
-	RejectedBids []RejectedBid
-}
-
 // RunAuction executes the core auction logic: adjustment → floor enforcement → ranking.
 // This function provides a unified auction implementation used by both TEE and local processing.
 //
@@ -60,9 +44,9 @@ func RunAuction(
 	}
 
 	return &AuctionResult{
-		Winner:       winner,
-		RunnerUp:     runnerUp,
-		EligibleBids: eligibleBids,
-		RejectedBids: rejectedBids,
+		Winner:              winner,
+		RunnerUp:            runnerUp,
+		EligibleBids:        eligibleBids,
+		FloorRejectedBidIDs: rejectedBids,
 	}
 }

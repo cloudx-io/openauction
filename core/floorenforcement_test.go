@@ -191,13 +191,9 @@ func TestEnforceBidFloors_PreservesOtherFields(t *testing.T) {
 	check.Equal(t, "deal123", result[0].DealID)
 	check.Equal(t, "banner", result[0].BidType)
 
-	// Verify rejected bid includes rejection details
-	rejectedBid := rejected[0]
-	check.Equal(t, "bid2", rejectedBid.Bid.ID)
-	check.Equal(t, "bidder_2", rejectedBid.Bid.Bidder)
-	check.Equal(t, 2.0, rejectedBid.Bid.Price)
-	check.Equal(t, 2.5, rejectedBid.FloorPrice)
-	check.Equal(t, "Below floor: 2.0000 < 2.5000", rejectedBid.Reason)
+	// Verify rejected bid ID is returned
+	check.Equal(t, 1, len(rejected))
+	check.Equal(t, "bid2", rejected[0])
 }
 
 func TestEnforceBidFloors_MonetaryPrecisionConsistency(t *testing.T) {
@@ -213,5 +209,5 @@ func TestEnforceBidFloors_MonetaryPrecisionConsistency(t *testing.T) {
 	eligible, rejected := EnforceBidFloors(bids, floors)
 
 	check.Equal(t, bids, eligible)
-	check.Equal(t, []RejectedBid{}, rejected)
+	check.Equal(t, []string{}, rejected)
 }

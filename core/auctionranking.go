@@ -4,21 +4,6 @@ import (
 	"sort"
 )
 
-type CoreBid struct {
-	ID       string  `json:"id"`
-	Bidder   string  `json:"bidder"`
-	Price    float64 `json:"price"`
-	Currency string  `json:"currency"`
-	DealID   string  `json:"deal_id,omitempty"`
-	BidType  string  `json:"bid_type,omitempty"`
-}
-
-type CoreRankingResult struct {
-	Ranks         map[string]int      `json:"ranks"`
-	HighestBids   map[string]*CoreBid `json:"highest_bids"`
-	SortedBidders []string            `json:"sorted_bidders"`
-}
-
 func RankCoreBids(bids []CoreBid) *CoreRankingResult {
 	if len(bids) == 0 {
 		return &CoreRankingResult{

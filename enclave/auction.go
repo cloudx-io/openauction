@@ -54,15 +54,7 @@ func ProcessAuction(attester EnclaveAttester, req enclaveapi.EnclaveAuctionReque
 	// Run unified auction logic: adjustment → floor enforcement → ranking
 	auctionResult := core.RunAuction(unencryptedBids, req.AdjustmentFactors, req.BidFloors)
 
-	// Convert core.RejectedBid to enclaveapi.ExcludedBid for loss notifications
-	excludedFloorBids := make([]enclaveapi.ExcludedBid, 0, len(auctionResult.RejectedBids))
-	for _, rejected := range auctionResult.RejectedBids {
-		excludedFloorBids = append(excludedFloorBids, enclaveapi.ExcludedBid{
-			BidID:  rejected.Bid.ID,
-			Bidder: rejected.Bid.Bidder,
-			Reason: rejected.Reason,
-		})
-	}
+	floorRejectedBidIDs := auctionResult.FloorRejectedBidIDs
 
 	// Extract winner and runner-up from auction result
 	winner := auctionResult.Winner
@@ -88,13 +80,13 @@ func ProcessAuction(attester EnclaveAttester, req enclaveapi.EnclaveAuctionReque
 	}
 
 	return enclaveapi.EnclaveAuctionResponse{
-		Type:              "auction_response",
-		Success:           true,
-		Message:           fmt.Sprintf("Processed %d bids in enclave", len(req.Bids)),
-		AttestationDoc:    teeData,
-		ExcludedBids:      excludedBids,
-		FloorRejectedBids: excludedFloorBids,
-		ProcessingTime:    processingTime,
+		Type:                "auction_response",
+		Success:             true,
+		Message:             fmt.Sprintf("Processed %d bids in enclave", len(req.Bids)),
+		AttestationDoc:      teeData,
+		ExcludedBids:        excludedBids,
+		FloorRejectedBidIDs: floorRejectedBidIDs,
+		ProcessingTime:      processingTime,
 	}
 }
 
@@ -128,9 +120,9 @@ type decryptedBidData struct {
 
 // decryptAllBids decrypts all encrypted bids once
 // Returns decrypted bid data (only successfully decrypted), excluded bids, and errors
-func decryptAllBids(encryptedBids []enclaveapi.EncryptedCoreBid, keyManager *KeyManager) ([]decryptedBidData, []enclaveapi.ExcludedBid, []error) {
+func decryptAllBids(encryptedBids []enclaveapi.EncryptedCoreBid, keyManager *KeyManager) ([]decryptedBidData, []core.ExcludedBid, []error) {
 	decryptedBids := make([]decryptedBidData, 0, len(encryptedBids))
-	excludedBids := make([]enclaveapi.ExcludedBid, 0)
+	excludedBids := make([]core.ExcludedBid, 0)
 	errors := make([]error, 0)
 
 	for i, encBid := range encryptedBids {
@@ -145,9 +137,8 @@ func decryptAllBids(encryptedBids []enclaveapi.EncryptedCoreBid, keyManager *Key
 
 		if keyManager == nil {
 			err := fmt.Errorf("no key manager available")
-			excludedBids = append(excludedBids, enclaveapi.ExcludedBid{
+			excludedBids = append(excludedBids, core.ExcludedBid{
 				BidID:  encBid.ID,
-				Bidder: encBid.Bidder,
 				Reason: "decryption_failed",
 			})
 			errors = append(errors, fmt.Errorf("decryption failed for bid %s: %w", encBid.ID, err))
@@ -171,9 +162,8 @@ func decryptAllBids(encryptedBids []enclaveapi.EncryptedCoreBid, keyManager *Key
 		)
 		if err != nil {
 			log.Printf("INFO: Failed to decrypt bid %s: %v", encBid.ID, err)
-			excludedBids = append(excludedBids, enclaveapi.ExcludedBid{
+			excludedBids = append(excludedBids, core.ExcludedBid{
 				BidID:  encBid.ID,
-				Bidder: encBid.Bidder,
 				Reason: "decryption_failed",
 			})
 			errors = append(errors, fmt.Errorf("decryption failed for bid %s: %w", encBid.ID, err))
@@ -183,9 +173,8 @@ func decryptAllBids(encryptedBids []enclaveapi.EncryptedCoreBid, keyManager *Key
 		var payload decryptedBidPayload
 		if err := json.Unmarshal(plaintextBytes, &payload); err != nil {
 			log.Printf("INFO: Failed to parse decrypted payload for bid %s: %v", encBid.ID, err)
-			excludedBids = append(excludedBids, enclaveapi.ExcludedBid{
+			excludedBids = append(excludedBids, core.ExcludedBid{
 				BidID:  encBid.ID,
-				Bidder: encBid.Bidder,
 				Reason: "invalid_payload_format",
 			})
 			errors = append(errors, fmt.Errorf("invalid payload format for bid %s: %w", encBid.ID, err))
@@ -230,9 +219,9 @@ func extractAndConsumeUniqueTokens(decryptedBids []decryptedBidData, tokenManage
 // filterBidsByConsumedTokens validates and filters decrypted bids based on consumed tokens
 // Returns unencrypted CoreBids and excluded bids
 // consumedTokens is a set of tokens that were successfully consumed upfront
-func filterBidsByConsumedTokens(decryptedBids []decryptedBidData, consumedTokens map[string]bool) ([]core.CoreBid, []enclaveapi.ExcludedBid) {
+func filterBidsByConsumedTokens(decryptedBids []decryptedBidData, consumedTokens map[string]bool) ([]core.CoreBid, []core.ExcludedBid) {
 	unencryptedBids := make([]core.CoreBid, 0, len(decryptedBids))
-	excludedBids := make([]enclaveapi.ExcludedBid, 0)
+	excludedBids := make([]core.ExcludedBid, 0)
 
 	for _, decBid := range decryptedBids {
 		// If bid doesn't have encrypted price, use as-is
@@ -246,9 +235,8 @@ func filterBidsByConsumedTokens(decryptedBids []decryptedBidData, consumedTokens
 			if !consumedTokens[decBid.payload.AuctionToken] {
 				// Token was not successfully consumed (invalid or already used in another auction)
 				log.Printf("WARNING: Bid %s excluded due to invalid/consumed token: %s", decBid.encBid.ID, decBid.payload.AuctionToken)
-				excludedBids = append(excludedBids, enclaveapi.ExcludedBid{
+				excludedBids = append(excludedBids, core.ExcludedBid{
 					BidID:  decBid.encBid.ID,
-					Bidder: decBid.encBid.Bidder,
 					Reason: "invalid_or_consumed_auction_token",
 				})
 				continue // Skip this bid, don't include in auction
@@ -261,10 +249,9 @@ func filterBidsByConsumedTokens(decryptedBids []decryptedBidData, consumedTokens
 		// Validate decrypted price
 		if decBid.payload.Price <= 0 {
 			log.Printf("INFO: Invalid price in decrypted bid %s: %.2f", decBid.encBid.ID, decBid.payload.Price)
-			excludedBids = append(excludedBids, enclaveapi.ExcludedBid{
+			excludedBids = append(excludedBids, core.ExcludedBid{
 				BidID:  decBid.encBid.ID,
-				Bidder: decBid.encBid.Bidder,
-				Reason: fmt.Sprintf("invalid_price_%.2f", decBid.payload.Price),
+				Reason: "invalid_price",
 			})
 			continue // Exclude this bid from auction
 		}

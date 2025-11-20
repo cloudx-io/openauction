@@ -10,6 +10,7 @@ package core
 //
 // Returns:
 //   - AuctionResult containing winner, runner-up, eligible bids, rejected bids, and full ranking
+//   - error if ranking fails
 //
 // Processing flow:
 //  1. Apply bid adjustment factors (multipliers per bidder)
@@ -20,7 +21,7 @@ func RunAuction(
 	bids []CoreBid,
 	adjustmentFactors map[string]float64,
 	bidFloors map[string]float64,
-) *AuctionResult {
+) (*AuctionResult, error) {
 	// Step 1: Apply bid adjustment factors
 	// Use conversion rate of 1.0 (no currency conversion in unified logic)
 	adjustedBids := bids
@@ -31,8 +32,11 @@ func RunAuction(
 	// Step 2: Enforce per-bidder floor prices
 	eligibleBids, rejectedBids := EnforceBidFloors(adjustedBids, bidFloors)
 
-	// Step 3: Rank eligible bids
-	ranking := RankCoreBids(eligibleBids)
+	// Step 3: Rank eligible bids with random tie-breaking
+	ranking, err := RankCoreBids(eligibleBids, defaultRandSource)
+	if err != nil {
+		return nil, err
+	}
 
 	// Step 4: Extract winner and runner-up from ranking
 	var winner, runnerUp *CoreBid
@@ -48,5 +52,5 @@ func RunAuction(
 		RunnerUp:            runnerUp,
 		EligibleBids:        eligibleBids,
 		FloorRejectedBidIDs: rejectedBids,
-	}
+	}, nil
 }

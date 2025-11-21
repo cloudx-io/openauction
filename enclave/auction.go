@@ -52,7 +52,16 @@ func ProcessAuction(attester EnclaveAttester, req enclaveapi.EnclaveAuctionReque
 	excludedBids := append(decryptionExcluded, tokenExcluded...)
 
 	// Run unified auction logic: adjustment → floor enforcement → ranking
-	auctionResult := core.RunAuction(unencryptedBids, req.AdjustmentFactors, req.BidFloors)
+	auctionResult, err := core.RunAuction(unencryptedBids, req.AdjustmentFactors, req.BidFloors)
+	if err != nil {
+		log.Printf("ERROR: Auction ranking failed: %v", err)
+		return enclaveapi.EnclaveAuctionResponse{
+			Type:           "auction_response",
+			Success:        false,
+			Message:        fmt.Sprintf("Auction ranking failed: %v", err),
+			ProcessingTime: time.Since(startTime).Milliseconds(),
+		}
+	}
 
 	floorRejectedBidIDs := auctionResult.FloorRejectedBidIDs
 

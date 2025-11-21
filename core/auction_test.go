@@ -26,7 +26,8 @@ func TestRunAuction_BasicFlow(t *testing.T) {
 		"bidder_c": 1.5, // bidder_c bid should fail floor
 	}
 
-	result := RunAuction(bids, adjustmentFactors, bidFloors)
+	result, err := RunAuction(bids, adjustmentFactors, bidFloors)
+	check.NoError(t, err)
 
 	// After adjustment: bidder_a=2.0, bidder_b=1.8, bidder_c=1.0
 	// After floor enforcement: bidder_a=2.0, bidder_b=1.8 (bidder_c rejected)
@@ -53,7 +54,8 @@ func TestRunAuction_BasicFlow(t *testing.T) {
 }
 
 func TestRunAuction_NoBids(t *testing.T) {
-	result := RunAuction([]CoreBid{}, nil, nil)
+	result, err := RunAuction([]CoreBid{}, nil, nil)
+	check.NoError(t, err)
 
 	check.NotNil(t, result)
 	check.Nil(t, result.Winner)
@@ -67,7 +69,8 @@ func TestRunAuction_SingleBid(t *testing.T) {
 		{ID: "bid1", Bidder: "bidder_a", Price: 2.0},
 	}
 
-	result := RunAuction(bids, nil, nil)
+	result, err := RunAuction(bids, nil, nil)
+	check.NoError(t, err)
 
 	check.NotNil(t, result)
 	check.NotNil(t, result.Winner)
@@ -88,7 +91,8 @@ func TestRunAuction_AllBidsRejectedByFloor(t *testing.T) {
 		"bidder_b": 2.0,
 	}
 
-	result := RunAuction(bids, nil, bidFloors)
+	result, err := RunAuction(bids, nil, bidFloors)
+	check.NoError(t, err)
 
 	check.NotNil(t, result)
 	check.Nil(t, result.Winner)
@@ -104,7 +108,8 @@ func TestRunAuction_NoAdjustmentFactors(t *testing.T) {
 		{ID: "bid2", Bidder: "bidder_b", Price: 1.5},
 	}
 
-	result := RunAuction(bids, nil, nil)
+	result, err := RunAuction(bids, nil, nil)
+	check.NoError(t, err)
 
 	check.NotNil(t, result)
 	check.NotNil(t, result.Winner)
@@ -126,7 +131,8 @@ func TestRunAuction_NoFloors(t *testing.T) {
 		{ID: "bid2", Bidder: "bidder_b", Price: 0.01}, // Very low bid
 	}
 
-	result := RunAuction(bids, nil, nil)
+	result, err := RunAuction(bids, nil, nil)
+	check.NoError(t, err)
 
 	check.NotNil(t, result)
 
@@ -147,7 +153,8 @@ func TestRunAuction_AdjustmentChangesWinner(t *testing.T) {
 		"bidder_b": 1.5, // Boost bidder_b to 2.25
 	}
 
-	result := RunAuction(bids, adjustmentFactors, nil)
+	result, err := RunAuction(bids, adjustmentFactors, nil)
+	check.NoError(t, err)
 
 	check.NotNil(t, result)
 	check.NotNil(t, result.Winner)
@@ -170,7 +177,8 @@ func TestRunAuction_PreservesOriginalBids(t *testing.T) {
 		"bidder_a": 2.0,
 	}
 
-	result := RunAuction(originalBids, adjustmentFactors, nil)
+	result, err := RunAuction(originalBids, adjustmentFactors, nil)
+	check.NoError(t, err)
 
 	check.NotNil(t, result)
 

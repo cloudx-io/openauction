@@ -88,7 +88,7 @@ func TestEnforceBidFloors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			eligible, rejected := EnforceBidFloors(tt.bids, tt.floor)
+			eligible, rejected := EnforceBidFloor(tt.bids, tt.floor)
 			check.Equal(t, tt.expected, eligible)
 
 			// Verify rejected count
@@ -120,7 +120,7 @@ func TestEnforceBidFloors_PreservesOtherFields(t *testing.T) {
 
 	floor := 2.5
 
-	eligible, rejected := EnforceBidFloors(bids, floor)
+	eligible, rejected := EnforceBidFloor(bids, floor)
 
 	check.Equal(t, 1, len(eligible))
 	check.Equal(t, 1, len(rejected))
@@ -147,7 +147,7 @@ func TestEnforceBidFloors_MonetaryPrecisionConsistency(t *testing.T) {
 
 	floor := 2.1234
 
-	eligible, rejected := EnforceBidFloors(bids, floor)
+	eligible, rejected := EnforceBidFloor(bids, floor)
 
 	check.Equal(t, bids, eligible)
 	check.Equal(t, []string{}, rejected)

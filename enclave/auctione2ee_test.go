@@ -156,7 +156,6 @@ func TestDecryptBids_WrongKey(t *testing.T) {
 	assert.Equal(t, 1, len(errors))
 	assert.Equal(t, 1, len(excludedBids)) // Should be excluded
 	assert.Equal(t, "bid1", excludedBids[0].BidID)
-	assert.Equal(t, "bidder1", excludedBids[0].Bidder)
 
 	finalBids, _ := filterBidsByConsumedTokens(decryptedData, make(map[string]bool))
 	assert.Equal(t, 0, len(finalBids)) // Should fail

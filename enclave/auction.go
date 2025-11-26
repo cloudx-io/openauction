@@ -30,18 +30,6 @@ func ProcessAuction(attester EnclaveAttester, req enclaveapi.EnclaveAuctionReque
 			ProcessingTime: time.Since(startTime).Milliseconds(),
 		}
 	}
-	// Validate bid floors are non-negative
-	for bidder, floor := range req.BidFloors {
-		if floor < 0.0 {
-			return enclaveapi.EnclaveAuctionResponse{
-				Type:           "auction_response",
-				Success:        false,
-				Message:        fmt.Sprintf("Invalid negative floor price %.4f for bidder %s", floor, bidder),
-				AttestationDoc: nil,
-				ProcessingTime: time.Since(startTime).Milliseconds(),
-			}
-		}
-	}
 
 	// Decrypt encrypted prices if present (returns unencrypted bids)
 	decryptedBids, decryptionExcluded, decryptErrors := decryptAllBids(req.Bids, keyManager)
@@ -61,12 +49,7 @@ func ProcessAuction(attester EnclaveAttester, req enclaveapi.EnclaveAuctionReque
 
 	excludedBids := append(decryptionExcluded, tokenExcluded...)
 	// Run unified auction logic: adjustment → floor enforcement → ranking
-	var auctionResult *core.AuctionResult
-	if req.BidFloor > 0.0 {
-		auctionResult = core.RunAuctionSingleBidFloor(unencryptedBids, req.AdjustmentFactors, req.BidFloor)
-	} else { // TODO(kestutisg): remove else case once switch to single bid floor is complete
-		auctionResult = core.RunAuction(unencryptedBids, req.AdjustmentFactors, req.BidFloors)
-	}
+	auctionResult := core.RunAuctionSingleBidFloor(unencryptedBids, req.AdjustmentFactors, req.BidFloor)
 
 	floorRejectedBidIDs := auctionResult.FloorRejectedBidIDs
 

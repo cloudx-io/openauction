@@ -99,8 +99,7 @@ type AttestationUserData struct {
 	BidHashes              []string              `json:"bid_hashes"`
 	RequestHash            string                `json:"request_hash"`
 	AdjustmentFactorsHash  string                `json:"adjustment_factors_hash"`
-	BidFloor               float64               `json:"bid_floor,omitempty"`
-	BidFloors              map[string]float64    `json:"bid_floors,omitempty"` // TODO(kestutisg): remove to fully transition to single bid floor
+	BidFloor               float64               `json:"bid_floor"`
 	BidHashNonce           string                `json:"bid_hash_nonce"`
 	Winner                 *CoreBidWithoutBidder `json:"winner,omitempty"`
 	RunnerUp               *CoreBidWithoutBidder `json:"runner_up,omitempty"`
@@ -135,8 +134,7 @@ type EnclaveAuctionRequest struct {
 	RoundID           int                `json:"round_id"`
 	Bids              []EncryptedCoreBid `json:"bids"`
 	AdjustmentFactors map[string]float64 `json:"adjustment_factors"`
-	BidFloor          float64            `json:"bid_floor,omitempty"`
-	BidFloors         map[string]float64 `json:"bid_floors,omitempty"` // TODO(kestutisg): remove to fully transition to single bid floor
+	BidFloor          float64            `json:"bid_floor"`
 	Timestamp         time.Time          `json:"timestamp"`
 }
 

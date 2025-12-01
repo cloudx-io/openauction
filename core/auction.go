@@ -50,3 +50,13 @@ func RunAuctionSingleBidFloor(
 		FloorRejectedBidIDs: rejectedBids,
 	}
 }
+
+// TODO(kestutisg): remove this function and rename RunAuctionSingleBidFloor to RunAuction
+// once auction-server switches to calling RunAuction
+func RunAuction(
+	bids []CoreBid,
+	adjustmentFactors map[string]float64,
+	bidFloor float64,
+) *AuctionResult {
+	return RunAuctionSingleBidFloor(bids, adjustmentFactors, bidFloor)
+}

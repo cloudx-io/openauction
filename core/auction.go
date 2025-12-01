@@ -16,7 +16,7 @@ package core
 //  2. Enforce floor price
 //  3. Rank eligible bids by price
 //  4. Extract winner and runner-up from ranking
-func RunAuctionSingleBidFloor(
+func RunAuction(
 	bids []CoreBid,
 	adjustmentFactors map[string]float64,
 	bidFloor float64,
@@ -49,14 +49,4 @@ func RunAuctionSingleBidFloor(
 		EligibleBids:        eligibleBids,
 		FloorRejectedBidIDs: rejectedBids,
 	}
-}
-
-// TODO(kestutisg): remove this function and rename RunAuctionSingleBidFloor to RunAuction
-// once auction-server switches to calling RunAuction
-func RunAuction(
-	bids []CoreBid,
-	adjustmentFactors map[string]float64,
-	bidFloor float64,
-) *AuctionResult {
-	return RunAuctionSingleBidFloor(bids, adjustmentFactors, bidFloor)
 }

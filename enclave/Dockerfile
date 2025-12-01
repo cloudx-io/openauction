@@ -1,35 +1,18 @@
-FROM golang:1.25-alpine AS builder
-
-RUN apk add --no-cache git ca-certificates
-
-WORKDIR /app
-
-COPY go.mod go.sum ./
-
-RUN go mod download
-
-COPY core/ ./core/
-COPY enclaveapi/ ./enclaveapi/
-
-COPY enclave/*.go ./enclave/
-
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -a -ldflags '-extldflags "-static"' \
-    -tags netgo \
-    -o tee-auction-enclave \
-    ./enclave
-
 FROM amazonlinux:2023
 
 ARG ENCLAVE_MAX_WORKERS=50
 ENV ENCLAVE_MAX_WORKERS=${ENCLAVE_MAX_WORKERS}
 
 RUN dnf update -y && \
-    dnf install -y ca-certificates && \
+    dnf install -y ca-certificates nmap-ncat && \
     dnf clean all && \
     rm -rf /var/cache/dnf
 
-COPY --from=builder /app/tee-auction-enclave /usr/local/bin/tee-auction-enclave
+# This Dockerfile assumes that you have already built a binary on the host
+# machine using the GitHub Actions workflow, and we just copy it into the
+# container. This makes builds faster and more cacheable than a multi-stage
+# build-in-Docker approach.
+COPY ./bin/tee-auction-enclave /usr/local/bin/tee-auction-enclave
 
 RUN chmod +x /usr/local/bin/tee-auction-enclave
 

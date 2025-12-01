@@ -39,17 +39,17 @@ func TestEnforceBidFloors(t *testing.T) {
 	tests := []struct {
 		name     string
 		bids     []CoreBid
-		floors   map[string]float64
+		floor    float64
 		expected []CoreBid
 	}{
 		{
-			name: "no floors - all bids pass",
+			name: "no floor (zero) - all bids pass",
 			bids: []CoreBid{
 				{ID: "bid1", Bidder: "bidder_1", Price: 1.0},
 				{ID: "bid2", Bidder: "bidder_2", Price: 2.0},
 				{ID: "bid3", Bidder: "bidder_3", Price: 0.5},
 			},
-			floors: map[string]float64{},
+			floor: 0.00,
 			expected: []CoreBid{
 				{ID: "bid1", Bidder: "bidder_1", Price: 1.0},
 				{ID: "bid2", Bidder: "bidder_2", Price: 2.0},
@@ -57,67 +57,16 @@ func TestEnforceBidFloors(t *testing.T) {
 			},
 		},
 		{
-			name: "same floor for all bidders - some rejected",
+			name: "regular floor for bidders - some rejected",
 			bids: []CoreBid{
 				{ID: "bid1", Bidder: "bidder_1", Price: 3.0},
 				{ID: "bid2", Bidder: "bidder_2", Price: 2.5},
 				{ID: "bid3", Bidder: "bidder_3", Price: 2.0},
 			},
-			floors: map[string]float64{
-				"bidder_1": 2.5,
-				"bidder_2": 2.5,
-				"bidder_3": 2.5,
-			},
+			floor: 2.5,
 			expected: []CoreBid{
 				{ID: "bid1", Bidder: "bidder_1", Price: 3.0},
 				{ID: "bid2", Bidder: "bidder_2", Price: 2.5},
-			},
-		},
-		{
-			name: "per-bidder floors - different floors per bidder",
-			bids: []CoreBid{
-				{ID: "bid1", Bidder: "bidder_1", Price: 2.75},
-				{ID: "bid2", Bidder: "bidder_2", Price: 2.75},
-				{ID: "bid3", Bidder: "bidder_3", Price: 1.50},
-			},
-			floors: map[string]float64{
-				"bidder_1": 2.50, // bidder_1 passes (2.75 >= 2.50)
-				"bidder_2": 3.00, // bidder_2 fails (2.75 < 3.00)
-				"bidder_3": 1.00, // bidder_3 passes (1.50 >= 1.00)
-			},
-			expected: []CoreBid{
-				{ID: "bid1", Bidder: "bidder_1", Price: 2.75},
-				{ID: "bid3", Bidder: "bidder_3", Price: 1.50},
-			},
-		},
-		{
-			name: "bidder with no floor - passes",
-			bids: []CoreBid{
-				{ID: "bid1", Bidder: "bidder_1", Price: 3.0},
-				{ID: "bid2", Bidder: "bidder_2", Price: 1.0}, // No floor for bidder_2
-			},
-			floors: map[string]float64{
-				"bidder_1": 2.5,
-				// bidder_2 not in map - should pass
-			},
-			expected: []CoreBid{
-				{ID: "bid1", Bidder: "bidder_1", Price: 3.0},
-				{ID: "bid2", Bidder: "bidder_2", Price: 1.0},
-			},
-		},
-		{
-			name: "bidder with zero floor - passes",
-			bids: []CoreBid{
-				{ID: "bid1", Bidder: "bidder_1", Price: 3.0},
-				{ID: "bid2", Bidder: "bidder_2", Price: 1.0},
-			},
-			floors: map[string]float64{
-				"bidder_1": 2.5,
-				"bidder_2": 0.0, // Zero floor - should pass
-			},
-			expected: []CoreBid{
-				{ID: "bid1", Bidder: "bidder_1", Price: 3.0},
-				{ID: "bid2", Bidder: "bidder_2", Price: 1.0},
 			},
 		},
 		{
@@ -126,23 +75,20 @@ func TestEnforceBidFloors(t *testing.T) {
 				{ID: "bid1", Bidder: "bidder_1", Price: 1.0},
 				{ID: "bid2", Bidder: "bidder_2", Price: 1.5},
 			},
-			floors: map[string]float64{
-				"bidder_1": 2.5,
-				"bidder_2": 2.5,
-			},
+			floor:    2.5,
 			expected: []CoreBid{},
 		},
 		{
 			name:     "empty bids array",
 			bids:     []CoreBid{},
-			floors:   map[string]float64{"bidder_1": 2.5},
+			floor:    2.5,
 			expected: []CoreBid{},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			eligible, rejected := EnforceBidFloors(tt.bids, tt.floors)
+			eligible, rejected := EnforceBidFloor(tt.bids, tt.floor)
 			check.Equal(t, tt.expected, eligible)
 
 			// Verify rejected count
@@ -172,12 +118,9 @@ func TestEnforceBidFloors_PreservesOtherFields(t *testing.T) {
 		},
 	}
 
-	floors := map[string]float64{
-		"bidder_1": 2.5,
-		"bidder_2": 2.5,
-	}
+	floor := 2.5
 
-	eligible, rejected := EnforceBidFloors(bids, floors)
+	eligible, rejected := EnforceBidFloor(bids, floor)
 
 	check.Equal(t, 1, len(eligible))
 	check.Equal(t, 1, len(rejected))
@@ -202,11 +145,9 @@ func TestEnforceBidFloors_MonetaryPrecisionConsistency(t *testing.T) {
 		{ID: "bid1", Bidder: "bidder_1", Price: 2.123456},
 	}
 
-	floors := map[string]float64{
-		"bidder_1": 2.1234,
-	}
+	floor := 2.1234
 
-	eligible, rejected := EnforceBidFloors(bids, floors)
+	eligible, rejected := EnforceBidFloor(bids, floor)
 
 	check.Equal(t, bids, eligible)
 	check.Equal(t, []string{}, rejected)

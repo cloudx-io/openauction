@@ -6,7 +6,7 @@ import (
 	"github.com/peterldowns/testy/check"
 )
 
-func TestRunAuction_BasicFlow(t *testing.T) {
+func TestRunAuctionSingleBidFloor_BasicFlow(t *testing.T) {
 	// Test the complete auction flow with adjustment, floor enforcement, and ranking
 	bids := []CoreBid{
 		{ID: "bid1", Bidder: "bidder_a", Price: 2.0},
@@ -20,13 +20,9 @@ func TestRunAuction_BasicFlow(t *testing.T) {
 		"bidder_c": 1.0,
 	}
 
-	bidFloors := map[string]float64{
-		"bidder_a": 1.0,
-		"bidder_b": 1.0,
-		"bidder_c": 1.5, // bidder_c bid should fail floor
-	}
+	bidFloor := 1.5 // bidder_c bid should fail floor
 
-	result, err := RunAuction(bids, adjustmentFactors, bidFloors)
+	result, err := RunAuctionSingleBidFloor(bids, adjustmentFactors, bidFloor)
 	check.NoError(t, err)
 
 	// After adjustment: bidder_a=2.0, bidder_b=1.8, bidder_c=1.0
@@ -54,7 +50,7 @@ func TestRunAuction_BasicFlow(t *testing.T) {
 }
 
 func TestRunAuction_NoBids(t *testing.T) {
-	result, err := RunAuction([]CoreBid{}, nil, nil)
+	result, err := RunAuctionSingleBidFloor([]CoreBid{}, nil, 0.0)
 	check.NoError(t, err)
 
 	check.NotNil(t, result)
@@ -69,7 +65,7 @@ func TestRunAuction_SingleBid(t *testing.T) {
 		{ID: "bid1", Bidder: "bidder_a", Price: 2.0},
 	}
 
-	result, err := RunAuction(bids, nil, nil)
+	result, err := RunAuctionSingleBidFloor(bids, nil, 0.0)
 	check.NoError(t, err)
 
 	check.NotNil(t, result)
@@ -80,18 +76,15 @@ func TestRunAuction_SingleBid(t *testing.T) {
 	check.Equal(t, 2.0, result.Winner.Price)
 }
 
-func TestRunAuction_AllBidsRejectedByFloor(t *testing.T) {
+func TestRunAuctionSingleBidFloor_AllBidsRejectedByFloor(t *testing.T) {
 	bids := []CoreBid{
 		{ID: "bid1", Bidder: "bidder_a", Price: 1.0},
 		{ID: "bid2", Bidder: "bidder_b", Price: 0.5},
 	}
 
-	bidFloors := map[string]float64{
-		"bidder_a": 2.0, // Both bids below floor
-		"bidder_b": 2.0,
-	}
+	bidFloor := 2.0 // Both bids below floor
 
-	result, err := RunAuction(bids, nil, bidFloors)
+	result, err := RunAuctionSingleBidFloor(bids, nil, bidFloor)
 	check.NoError(t, err)
 
 	check.NotNil(t, result)
@@ -101,14 +94,14 @@ func TestRunAuction_AllBidsRejectedByFloor(t *testing.T) {
 	check.Equal(t, 2, len(result.FloorRejectedBidIDs))
 }
 
-func TestRunAuction_NoAdjustmentFactors(t *testing.T) {
+func TestRunAuctionSingleBidFloor_NoAdjustmentFactors(t *testing.T) {
 	// Test that auction works without adjustment factors
 	bids := []CoreBid{
 		{ID: "bid1", Bidder: "bidder_a", Price: 2.0},
 		{ID: "bid2", Bidder: "bidder_b", Price: 1.5},
 	}
 
-	result, err := RunAuction(bids, nil, nil)
+	result, err := RunAuctionSingleBidFloor(bids, nil, 0.0)
 	check.NoError(t, err)
 
 	check.NotNil(t, result)
@@ -124,14 +117,14 @@ func TestRunAuction_NoAdjustmentFactors(t *testing.T) {
 	check.Equal(t, 1.5, result.RunnerUp.Price)
 }
 
-func TestRunAuction_NoFloors(t *testing.T) {
+func TestRunAuctionSingleBidFloor_NoFloors(t *testing.T) {
 	// Test that auction works without floor enforcement
 	bids := []CoreBid{
 		{ID: "bid1", Bidder: "bidder_a", Price: 2.0},
 		{ID: "bid2", Bidder: "bidder_b", Price: 0.01}, // Very low bid
 	}
 
-	result, err := RunAuction(bids, nil, nil)
+	result, err := RunAuctionSingleBidFloor(bids, nil, 0.0)
 	check.NoError(t, err)
 
 	check.NotNil(t, result)
@@ -141,7 +134,7 @@ func TestRunAuction_NoFloors(t *testing.T) {
 	check.Equal(t, 0, len(result.FloorRejectedBidIDs))
 }
 
-func TestRunAuction_AdjustmentChangesWinner(t *testing.T) {
+func TestRunAuctionSingleBidFloor_AdjustmentChangesWinner(t *testing.T) {
 	// Test that adjustment factors can change the auction winner
 	bids := []CoreBid{
 		{ID: "bid1", Bidder: "bidder_a", Price: 2.0},
@@ -153,7 +146,7 @@ func TestRunAuction_AdjustmentChangesWinner(t *testing.T) {
 		"bidder_b": 1.5, // Boost bidder_b to 2.25
 	}
 
-	result, err := RunAuction(bids, adjustmentFactors, nil)
+	result, err := RunAuctionSingleBidFloor(bids, adjustmentFactors, 0.0)
 	check.NoError(t, err)
 
 	check.NotNil(t, result)
@@ -167,7 +160,7 @@ func TestRunAuction_AdjustmentChangesWinner(t *testing.T) {
 	check.Equal(t, 2.0, result.RunnerUp.Price)
 }
 
-func TestRunAuction_PreservesOriginalBids(t *testing.T) {
+func TestRunAuctionSingleBidFloor_PreservesOriginalBids(t *testing.T) {
 	// Test that original bid slice is not modified
 	originalBids := []CoreBid{
 		{ID: "bid1", Bidder: "bidder_a", Price: 2.0},
@@ -177,7 +170,7 @@ func TestRunAuction_PreservesOriginalBids(t *testing.T) {
 		"bidder_a": 2.0,
 	}
 
-	result, err := RunAuction(originalBids, adjustmentFactors, nil)
+	result, err := RunAuctionSingleBidFloor(originalBids, adjustmentFactors, 0.0)
 	check.NoError(t, err)
 
 	check.NotNil(t, result)

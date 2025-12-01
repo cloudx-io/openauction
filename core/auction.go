@@ -14,13 +14,13 @@ package core
 //
 // Processing flow:
 //  1. Apply bid adjustment factors (multipliers per bidder)
-//  2. Enforce per-bidder floor prices
+//  2. Enforce floor price
 //  3. Rank eligible bids by price
 //  4. Extract winner and runner-up from ranking
-func RunAuction(
+func RunAuctionSingleBidFloor(
 	bids []CoreBid,
 	adjustmentFactors map[string]float64,
-	bidFloors map[string]float64,
+	bidFloor float64,
 ) (*AuctionResult, error) {
 	// Step 1: Apply bid adjustment factors
 	// Use conversion rate of 1.0 (no currency conversion in unified logic)
@@ -30,7 +30,7 @@ func RunAuction(
 	}
 
 	// Step 2: Enforce per-bidder floor prices
-	eligibleBids, rejectedBids := EnforceBidFloors(adjustedBids, bidFloors)
+	eligibleBids, rejectedBids := EnforceBidFloor(adjustedBids, bidFloor)
 
 	// Step 3: Rank eligible bids with random tie-breaking
 	ranking, err := RankCoreBids(eligibleBids, defaultRandSource)
@@ -53,4 +53,14 @@ func RunAuction(
 		EligibleBids:        eligibleBids,
 		FloorRejectedBidIDs: rejectedBids,
 	}, nil
+}
+
+// TODO(kestutisg): remove this function and rename RunAuctionSingleBidFloor to RunAuction
+// once auction-server switches to calling RunAuction
+func RunAuction(
+	bids []CoreBid,
+	adjustmentFactors map[string]float64,
+	bidFloor float64,
+) (*AuctionResult, error) {
+	return RunAuctionSingleBidFloor(bids, adjustmentFactors, bidFloor)
 }

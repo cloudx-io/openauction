@@ -10,24 +10,23 @@ import (
 // RandSource provides random number generation for tie-breaking.
 // This interface enables dependency injection for deterministic testing.
 type RandSource interface {
-	Intn(n int) (int, error)
+	// Intn returns a random integer in [0, n). Panics if n <= 0.
+	Intn(n int) int
 }
 
 // cryptoRandSource wraps crypto/rand for production use
 type cryptoRandSource struct{}
 
 // Intn returns a cryptographically secure random integer in [0, n).
-// Returns an error if n <= 0 or if reading from crypto/rand fails.
-// The returned int is undefined when error is non-nil.
-func (cryptoRandSource) Intn(n int) (int, error) {
+// Panics if n <= 0 (programmer error).
+func (cryptoRandSource) Intn(n int) int {
 	if n <= 0 {
-		return 0, fmt.Errorf("cryptoRandSource.Intn: n must be positive, got %d", n)
+		panic(fmt.Sprintf("cryptoRandSource.Intn: n must be positive, got %d", n))
 	}
-	nBig, err := rand.Int(rand.Reader, big.NewInt(int64(n)))
-	if err != nil {
-		return 0, fmt.Errorf("cryptoRandSource.Intn: failed to read from crypto/rand: %w", err)
-	}
-	return int(nBig.Int64()), nil
+	// rand.Int does not error when using rand.Reader
+	// https://pkg.go.dev/crypto/rand#Int
+	nBig, _ := rand.Int(rand.Reader, big.NewInt(int64(n)))
+	return int(nBig.Int64())
 }
 
 // defaultRandSource provides a cryptographically secure random source for production
@@ -101,11 +100,7 @@ func RankCoreBids(bids []CoreBid, randSource RandSource) (*CoreRankingResult, er
 		if j-i > 1 {
 			for k := j - 1; k > i; k-- {
 				// Pick a random index from i to k (inclusive)
-				r, err := randSource.Intn(k - i + 1)
-				if err != nil {
-					return nil, fmt.Errorf("failed to generate random number for tie-breaking: %w", err)
-				}
-				randIdx := i + r
+				randIdx := i + randSource.Intn(k-i+1)
 				entries[k], entries[randIdx] = entries[randIdx], entries[k]
 			}
 		}

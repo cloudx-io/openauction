@@ -12,13 +12,13 @@ type mockRandSource struct {
 	index    int
 }
 
-func (m *mockRandSource) Intn(n int) (int, error) {
+func (m *mockRandSource) Intn(n int) int {
 	if m.index >= len(m.sequence) {
-		return 0, nil
+		return 0
 	}
 	val := m.sequence[m.index] % n
 	m.index++
-	return val, nil
+	return val
 }
 
 func TestRankCoreBids_Integration(t *testing.T) {

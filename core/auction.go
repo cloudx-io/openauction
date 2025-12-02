@@ -10,7 +10,6 @@ package core
 //
 // Returns:
 //   - AuctionResult containing winner, runner-up, eligible bids, rejected bids, and full ranking
-//   - error if ranking fails
 //
 // Processing flow:
 //  1. Apply bid adjustment factors (multipliers per bidder)

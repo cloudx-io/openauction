@@ -30,9 +30,13 @@ bids := []core.CoreBid{
     {ID: "2", Bidder: "bidder-b", Price: 3.0, Currency: "USD"},
 }
 
-result := core.RankCoreBids(bids)
+// RankCoreBids accepts a RandSource for tie-breaking
+// Pass nil to use crypto/rand (default, production behavior)
+result := core.RankCoreBids(bids, nil)
 fmt.Printf("Winner ID: %s, Price: %.2f\n", result.HighestBids[result.SortedBidders[0]].ID, result.HighestBids[result.SortedBidders[0]].Price)
 ```
+
+**Tie-Breaking**: When multiple bids have the same price, they are randomly shuffled using cryptographically secure randomness (`crypto/rand`). This ensures fairness in tie scenarios. For testing purposes, you can inject a custom `RandSource` implementation into `RankCoreBids` to make tie-breaking deterministic.
 
 ## Development
 

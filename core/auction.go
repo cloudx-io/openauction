@@ -31,8 +31,8 @@ func RunAuction(
 	// Step 2: Enforce per-bidder floor prices
 	eligibleBids, rejectedBids := EnforceBidFloor(adjustedBids, bidFloor)
 
-	// Step 3: Rank eligible bids
-	ranking := RankCoreBids(eligibleBids)
+	// Step 3: Rank eligible bids with random tie-breaking
+	ranking := RankCoreBids(eligibleBids, defaultRandSource)
 
 	// Step 4: Extract winner and runner-up from ranking
 	var winner, runnerUp *CoreBid

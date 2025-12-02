@@ -95,6 +95,9 @@ func (s *EnclaveServer) Start() error {
 
 func (s *EnclaveServer) handleConnection(conn net.Conn) {
 	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("ERROR: Panic recovered in handleConnection: %v", r)
+		}
 		if err := conn.Close(); err != nil {
 			log.Printf("ERROR: Failed to close connection: %v", err)
 		}

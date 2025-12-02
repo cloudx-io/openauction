@@ -49,7 +49,7 @@ func ProcessAuction(attester EnclaveAttester, req enclaveapi.EnclaveAuctionReque
 
 	excludedBids := append(decryptionExcluded, tokenExcluded...)
 	// Run unified auction logic: adjustment → floor enforcement → ranking
-	auctionResult := core.RunAuctionSingleBidFloor(unencryptedBids, req.AdjustmentFactors, req.BidFloor)
+	auctionResult := core.RunAuction(unencryptedBids, req.AdjustmentFactors, req.BidFloor)
 
 	floorRejectedBidIDs := auctionResult.FloorRejectedBidIDs
 

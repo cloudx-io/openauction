@@ -28,8 +28,7 @@ func TestRankCoreBids_Integration(t *testing.T) {
 		{ID: "bid_c_001", Bidder: "bidder_c", Price: 2.75},
 	}
 
-	rankingResult, err := RankCoreBids(bids, nil)
-	check.NoError(t, err)
+	rankingResult := RankCoreBids(bids, nil)
 
 	check.Equal(t, 3, len(rankingResult.SortedBidders))
 	check.Equal(t, "bidder_c", rankingResult.SortedBidders[0]) // Highest (2.75)
@@ -46,8 +45,7 @@ func TestRankCoreBids_SingleBid(t *testing.T) {
 		{ID: "bid1", Bidder: "bidder_a", Price: 2.00},
 	}
 
-	result, err := RankCoreBids(bids, nil)
-	check.NoError(t, err)
+	result := RankCoreBids(bids, nil)
 
 	check.Equal(t, 1, len(result.SortedBidders))
 	check.Equal(t, "bidder_a", result.SortedBidders[0])
@@ -55,8 +53,7 @@ func TestRankCoreBids_SingleBid(t *testing.T) {
 }
 
 func TestRankCoreBids_EmptyBids(t *testing.T) {
-	result, err := RankCoreBids([]CoreBid{}, nil)
-	check.NoError(t, err)
+	result := RankCoreBids([]CoreBid{}, nil)
 
 	check.NotNil(t, result)
 	check.Equal(t, 0, len(result.SortedBidders))
@@ -72,8 +69,7 @@ func TestRankCoreBids_TwoWayTie_Winner(t *testing.T) {
 	}
 
 	mock1 := &mockRandSource{sequence: []int{0}}
-	result1, err := RankCoreBids(bids, mock1)
-	check.NoError(t, err)
+	result1 := RankCoreBids(bids, mock1)
 
 	check.Equal(t, 3, len(result1.SortedBidders))
 	check.Equal(t, "bidder_b", result1.SortedBidders[0]) // Swapped to first
@@ -84,8 +80,7 @@ func TestRankCoreBids_TwoWayTie_Winner(t *testing.T) {
 	check.Equal(t, 1.00, result1.HighestBids["bidder_c"].Price)
 
 	mock2 := &mockRandSource{sequence: []int{1}}
-	result2, err := RankCoreBids(bids, mock2)
-	check.NoError(t, err)
+	result2 := RankCoreBids(bids, mock2)
 
 	check.Equal(t, 3, len(result2.SortedBidders))
 	check.Equal(t, "bidder_a", result2.SortedBidders[0]) // Stayed first
@@ -103,8 +98,7 @@ func TestRankCoreBids_ThreeWayTie_AllPositions(t *testing.T) {
 	}
 
 	mock1 := &mockRandSource{sequence: []int{0, 1}}
-	result1, err := RankCoreBids(bids, mock1)
-	check.NoError(t, err)
+	result1 := RankCoreBids(bids, mock1)
 
 	check.Equal(t, 3, len(result1.SortedBidders))
 	check.Equal(t, "bidder_c", result1.SortedBidders[0])
@@ -115,8 +109,7 @@ func TestRankCoreBids_ThreeWayTie_AllPositions(t *testing.T) {
 	check.Equal(t, 2.00, result1.HighestBids["bidder_c"].Price)
 
 	mock2 := &mockRandSource{sequence: []int{2, 0}}
-	result2, err := RankCoreBids(bids, mock2)
-	check.NoError(t, err)
+	result2 := RankCoreBids(bids, mock2)
 
 	check.Equal(t, 3, len(result2.SortedBidders))
 	check.Equal(t, "bidder_b", result2.SortedBidders[0])
@@ -137,8 +130,7 @@ func TestRankCoreBids_MultipleTieLevels(t *testing.T) {
 	}
 
 	mock1 := &mockRandSource{sequence: []int{0, 1}}
-	result1, err := RankCoreBids(bids, mock1)
-	check.NoError(t, err)
+	result1 := RankCoreBids(bids, mock1)
 
 	check.Equal(t, 5, len(result1.SortedBidders))
 	check.Equal(t, "bidder_b", result1.SortedBidders[0])
@@ -148,8 +140,7 @@ func TestRankCoreBids_MultipleTieLevels(t *testing.T) {
 	check.Equal(t, "bidder_e", result1.SortedBidders[4])
 
 	mock2 := &mockRandSource{sequence: []int{1, 0}}
-	result2, err := RankCoreBids(bids, mock2)
-	check.NoError(t, err)
+	result2 := RankCoreBids(bids, mock2)
 
 	check.Equal(t, 5, len(result2.SortedBidders))
 	check.Equal(t, "bidder_a", result2.SortedBidders[0])
@@ -168,8 +159,7 @@ func TestRankCoreBids_FourWayTie_WinnerRunnerUp(t *testing.T) {
 	}
 
 	mock1 := &mockRandSource{sequence: []int{2, 1, 0}}
-	result1, err := RankCoreBids(bids, mock1)
-	check.NoError(t, err)
+	result1 := RankCoreBids(bids, mock1)
 
 	check.Equal(t, 4, len(result1.SortedBidders))
 	check.Equal(t, "bidder_d", result1.SortedBidders[0])
@@ -182,8 +172,7 @@ func TestRankCoreBids_FourWayTie_WinnerRunnerUp(t *testing.T) {
 	check.Equal(t, 5.00, result1.HighestBids["bidder_d"].Price)
 
 	mock2 := &mockRandSource{sequence: []int{0, 2, 1}}
-	result2, err := RankCoreBids(bids, mock2)
-	check.NoError(t, err)
+	result2 := RankCoreBids(bids, mock2)
 
 	check.Equal(t, 4, len(result2.SortedBidders))
 	check.Equal(t, "bidder_d", result2.SortedBidders[0])

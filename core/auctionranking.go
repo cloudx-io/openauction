@@ -32,13 +32,13 @@ func (cryptoRandSource) Intn(n int) int {
 // defaultRandSource provides a cryptographically secure random source for production
 var defaultRandSource RandSource = cryptoRandSource{}
 
-func RankCoreBids(bids []CoreBid, randSource RandSource) (*CoreRankingResult, error) {
+func RankCoreBids(bids []CoreBid, randSource RandSource) *CoreRankingResult {
 	if len(bids) == 0 {
 		return &CoreRankingResult{
 			Ranks:         make(map[string]int),
 			HighestBids:   make(map[string]*CoreBid),
 			SortedBidders: make([]string, 0),
-		}, nil
+		}
 	}
 
 	type BidEntry struct {
@@ -121,5 +121,5 @@ func RankCoreBids(bids []CoreBid, randSource RandSource) (*CoreRankingResult, er
 		result.SortedBidders[rank] = entry.bidder
 	}
 
-	return result, nil
+	return result
 }

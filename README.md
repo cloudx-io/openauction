@@ -32,10 +32,7 @@ bids := []core.CoreBid{
 
 // RankCoreBids accepts a RandSource for tie-breaking
 // Pass nil to use crypto/rand (default, production behavior)
-result, err := core.RankCoreBids(bids, nil)
-if err != nil {
-    log.Fatal(err)
-}
+result := core.RankCoreBids(bids, nil)
 fmt.Printf("Winner ID: %s, Price: %.2f\n", result.HighestBids[result.SortedBidders[0]].ID, result.HighestBids[result.SortedBidders[0]].Price)
 ```
 

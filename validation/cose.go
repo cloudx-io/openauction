@@ -31,7 +31,7 @@ func VerifyCOSESignature(coseB64 string, certB64 string) error {
 
 	// AWS Nitro returns untagged COSE_Sign1 (4-element array)
 	// Parse it manually: [protected, unprotected, payload, signature]
-	var coseArray []interface{}
+	var coseArray []any
 	err = cbor.Unmarshal(coseBytes, &coseArray)
 	if err != nil {
 		return fmt.Errorf("parse COSE array: %w", err)
@@ -66,7 +66,7 @@ func VerifyCOSESignature(coseB64 string, certB64 string) error {
 
 	// Create Sig_structure for COSE_Sign1: ["Signature1", protected, external_aad, payload]
 	// For attestation documents, external_aad is empty
-	sigStructure := []interface{}{
+	sigStructure := []any{
 		"Signature1",
 		protectedBytes,
 		[]byte{}, // empty external_aad

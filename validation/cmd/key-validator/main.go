@@ -153,7 +153,7 @@ func outputText(result *validation.KeyValidationResult) {
 }
 
 func outputJSON(result *validation.KeyValidationResult) {
-	output := map[string]interface{}{
+	output := map[string]any{
 		"valid":             result.IsValid(),
 		"pcrs_valid":        result.PCRsValid,
 		"certificate_valid": result.CertificateValid,

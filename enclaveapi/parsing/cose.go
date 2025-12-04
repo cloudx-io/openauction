@@ -10,7 +10,7 @@ import (
 // COSE_Sign1 structure: [protected, unprotected, payload, signature]
 // Returns the payload bytes (element 2)
 func ExtractCOSEPayload(coseBytes []byte) ([]byte, error) {
-	var coseArray []interface{}
+	var coseArray []any
 	err := cbor.Unmarshal(coseBytes, &coseArray)
 	if err != nil {
 		return nil, fmt.Errorf("parse COSE array: %w", err)

@@ -284,7 +284,7 @@ func TestGenerateKeyAttestation(t *testing.T) {
 	check.NoError(t, err)
 
 	testToken := "550e8400-e29b-41d4-a716-446655440000"
-	keyAttestation, err := GenerateKeyAttestation(nil, &privateKey.PublicKey, testToken)
+	keyAttestation, _, err := GenerateKeyAttestation(nil, &privateKey.PublicKey, testToken)
 
 	// Should fail with nil enclave handle
 	check.Error(t, err)
@@ -304,7 +304,7 @@ func TestGenerateKeyAttestationWithMock(t *testing.T) {
 	testToken := "550e8400-e29b-41d4-a716-446655440000"
 
 	// Test successful key attestation generation with mock
-	keyAttestation, err := GenerateKeyAttestation(mockEnclave, &privateKey.PublicKey, testToken)
+	keyAttestation, _, err := GenerateKeyAttestation(mockEnclave, &privateKey.PublicKey, testToken)
 
 	// Should succeed with mock enclave
 	check.NoError(t, err)

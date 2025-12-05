@@ -151,10 +151,11 @@ type EnclaveAuctionResponse struct {
 
 // KeyResponse represents the response from a key request to the TEE enclave
 type KeyResponse struct {
-	Type           string             `json:"type"`
-	PublicKey      string             `json:"public_key"`                // PEM format
-	TEEInstanceIP  string             `json:"tee_instance_ip,omitempty"` // Injected by HTTP bridge
-	KeyAttestation *KeyAttestationDoc `json:"key_attestation"`
+	Type                  string             `json:"type"`
+	PublicKey             string             `json:"public_key"`                        // PEM format
+	TEEInstanceIP         string             `json:"tee_instance_ip,omitempty"`         // Injected by HTTP bridge
+	KeyAttestation        *KeyAttestationDoc `json:"key_attestation"`                   // Deprecated: Use attestation_cose_base64 instead
+	AttestationCOSEBase64 string             `json:"attestation_cose_base64,omitempty"` // Base64-encoded COSE_Sign1 attestation
 }
 
 // KeyAttestationUserData represents the key-specific data embedded in key attestation

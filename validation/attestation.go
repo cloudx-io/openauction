@@ -20,7 +20,7 @@ func validateCommonAttestation(attestationCOSEBase64 string) (*BaseValidationRes
 		return nil, fmt.Errorf("decode COSE bytes: %w", err)
 	}
 
-	payload, err := parsing.ExtractCOSEPayload(coseBytes)
+	payload, err := ExtractCOSEPayload(coseBytes)
 	if err != nil {
 		return nil, fmt.Errorf("extract COSE payload: %w", err)
 	}

@@ -72,7 +72,7 @@ func parseKeyAttestationFromCOSE(attestationCOSEB64 string) (*enclaveapi.KeyAtte
 	}
 
 	// Extract payload from COSE_Sign1 array
-	payload, err := parsing.ExtractCOSEPayload(coseBytes)
+	payload, err := ExtractCOSEPayload(coseBytes)
 	if err != nil {
 		return nil, fmt.Errorf("extract COSE payload: %w", err)
 	}

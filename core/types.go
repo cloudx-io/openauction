@@ -29,6 +29,9 @@ type AuctionResult struct {
 	// EligibleBids contains all bids that passed floor enforcement and were included in ranking
 	EligibleBids []CoreBid
 
+	// PriceRejectedBidIDs contains IDs of bids rejected due to invalid prices
+	PriceRejectedBidIDs []string
+
 	// FloorRejectedBidIDs contains IDs of bids that failed floor enforcement
 	FloorRejectedBidIDs []string
 }

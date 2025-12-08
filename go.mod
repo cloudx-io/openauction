@@ -4,11 +4,12 @@ go 1.25
 
 require (
 	github.com/edgebitio/nitro-enclaves-sdk-go v1.0.1-0.20221110205443-8a5476ff3cc2
-	github.com/fxamacker/cbor/v2 v2.4.0
+	github.com/fxamacker/cbor/v2 v2.5.0
 	github.com/google/uuid v1.6.0
 	github.com/mdlayher/vsock v1.2.1
 	github.com/peterldowns/testy v0.0.7
 	github.com/shopspring/decimal v1.4.0
+	github.com/veraison/go-cose v1.3.0
 )
 
 require (

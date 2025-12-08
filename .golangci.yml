@@ -154,6 +154,15 @@ linters:
       # Allow shadowing of `err` because it's so common
       - path: (.+)\.go$
         text: declaration of "err" shadows declaration at
+      # Allow fmt.Println in cmd/ directories (CLI tools need console output)
+      - path: (.+)/cmd/(.+)\.go$
+        linters:
+          - forbidigo
+      # Allow os.Exit in cmd/ directories (CLI tools need exit codes)
+      - path: (.+)/cmd/(.+)\.go$
+        text: "deep-exit"
+        linters:
+          - revive
 issues:
   max-issues-per-linter: 10000
   max-same-issues: 10000

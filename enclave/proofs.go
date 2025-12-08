@@ -19,6 +19,7 @@ import (
 
 	"github.com/cloudx-io/openauction/core"
 	"github.com/cloudx-io/openauction/enclaveapi"
+	"github.com/cloudx-io/openauction/enclaveapi/parsing"
 )
 
 // EnclaveAttester interface for dependency injection and testing
@@ -179,36 +180,24 @@ func GenerateAttestation(
 	return ParseCBORAttestation(attestationCBOR, userData, now)
 }
 
-// NitroAttestationDocument represents the raw CBOR structure from AWS Nitro Enclaves
-type NitroAttestationDocument struct {
-	ModuleID    string            `cbor:"module_id"`
-	Digest      string            `cbor:"digest"`
-	Timestamp   uint64            `cbor:"timestamp"`
-	PCRs        map[uint64][]byte `cbor:"pcrs"`
-	Certificate []byte            `cbor:"certificate"`
-	CABundle    [][]byte          `cbor:"cabundle"`
-	PublicKey   []byte            `cbor:"public_key"`
-	UserData    []byte            `cbor:"user_data"`
-	Nonce       []byte            `cbor:"nonce"`
-}
-
+// Deprecated: can delete this once we've migrated to the new attestation format
 // ParseCBORAttestation parses the CBOR attestation document from AWS Nitro Enclaves for auctions
 func ParseCBORAttestation(cborData []byte, userData *enclaveapi.AttestationUserData, timestamp time.Time) (*enclaveapi.AuctionAttestationDoc, error) {
 	// Extract nested attestation document from AWS Nitro 4-element array
-	attestationDoc, err := extractNestedAttestationDoc(cborData)
+	attestationDoc, err := extractAttestationDoc(cborData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract nested attestation document: %w", err)
 	}
 
 	// Parse the nested document directly into our struct
-	var doc NitroAttestationDocument
+	var doc parsing.NitroAttestationDocument
 	err = cbor.Unmarshal(attestationDoc, &doc)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse CBOR attestation document: %w", err)
 	}
 
 	// Extract PCRs with safe formatting
-	pcrs := extractPCRs(doc.PCRs)
+	pcrs := parsing.ExtractPCRs(doc.PCRs)
 
 	log.Printf("INFO: Successfully parsed attestation document with module ID: %s", doc.ModuleID)
 
@@ -219,7 +208,7 @@ func ParseCBORAttestation(cborData []byte, userData *enclaveapi.AttestationUserD
 			DigestAlgorithm: doc.Digest,
 			PCRs:            pcrs,
 			Certificate:     base64.StdEncoding.EncodeToString(doc.Certificate),
-			CABundle:        encodeCertificateBundle(doc.CABundle),
+			CABundle:        parsing.EncodeCertificateBundle(doc.CABundle),
 			PublicKey:       base64.StdEncoding.EncodeToString(doc.PublicKey),
 			Nonce:           string(doc.Nonce),
 		},
@@ -227,8 +216,8 @@ func ParseCBORAttestation(cborData []byte, userData *enclaveapi.AttestationUserD
 	}, nil
 }
 
-// extractNestedAttestationDoc extracts the nested attestation document from AWS Nitro's 4-element CBOR array
-func extractNestedAttestationDoc(cborData []byte) ([]byte, error) {
+// extractAttestationDoc extracts the attestation document from AWS Nitro's 4-element CBOR array
+func extractAttestationDoc(cborData []byte) ([]byte, error) {
 	var outerArray []any
 	err := cbor.Unmarshal(cborData, &outerArray)
 	if err != nil {
@@ -247,34 +236,6 @@ func extractNestedAttestationDoc(cborData []byte) ([]byte, error) {
 	return nestedBytes, nil
 }
 
-// extractPCRs extracts and formats PCR values from the raw CBOR PCR map
-func extractPCRs(rawPCRs map[uint64][]byte) enclaveapi.PCRs {
-	formatPCR := func(pcrData []byte) string {
-		if len(pcrData) == 0 {
-			return ""
-		}
-		return fmt.Sprintf("%x", pcrData)
-	}
-
-	return enclaveapi.PCRs{
-		ImageFileHash:   formatPCR(rawPCRs[0]),
-		KernelHash:      formatPCR(rawPCRs[1]),
-		ApplicationHash: formatPCR(rawPCRs[2]),
-		IAMRoleHash:     formatPCR(rawPCRs[3]),
-		InstanceIDHash:  formatPCR(rawPCRs[4]),
-		SigningCertHash: formatPCR(rawPCRs[8]),
-	}
-}
-
-// encodeCertificateBundle converts certificate bundle to base64 strings
-func encodeCertificateBundle(certs [][]byte) []string {
-	encoded := make([]string, len(certs))
-	for i, cert := range certs {
-		encoded[i] = base64.StdEncoding.EncodeToString(cert)
-	}
-	return encoded
-}
-
 // publicKeyToPEM converts an RSA public key to PEM format
 func publicKeyToPEM(publicKey *rsa.PublicKey) (string, error) {
 	derBytes, err := x509.MarshalPKIXPublicKey(publicKey)
@@ -291,15 +252,16 @@ func publicKeyToPEM(publicKey *rsa.PublicKey) (string, error) {
 }
 
 // GenerateKeyAttestation generates an attestation document for E2EE public keys
-func GenerateKeyAttestation(attester EnclaveAttester, publicKey *rsa.PublicKey, auctionToken string) (*enclaveapi.KeyAttestationDoc, error) {
+// Returns the parsed attestation and the raw COSE bytes
+func GenerateKeyAttestation(attester EnclaveAttester, publicKey *rsa.PublicKey, auctionToken string) (*enclaveapi.KeyAttestationDoc, []byte, error) {
 	if attester == nil {
-		return nil, fmt.Errorf("enclave attester is nil")
+		return nil, nil, fmt.Errorf("enclave attester is nil")
 	}
 
 	// Convert public key to PEM format for inclusion in attestation
 	publicKeyPEM, err := publicKeyToPEM(publicKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to convert public key to PEM: %w", err)
+		return nil, nil, fmt.Errorf("failed to convert public key to PEM: %w", err)
 	}
 
 	keyUserData := &enclaveapi.KeyAttestationUserData{
@@ -310,12 +272,12 @@ func GenerateKeyAttestation(attester EnclaveAttester, publicKey *rsa.PublicKey, 
 
 	userDataBytes, err := json.Marshal(keyUserData)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal key user data: %w", err)
+		return nil, nil, fmt.Errorf("failed to marshal key user data: %w", err)
 	}
 
 	randomNonce, err := generateNonce()
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate attestation nonce: %w", err)
+		return nil, nil, fmt.Errorf("failed to generate attestation nonce: %w", err)
 	}
 
 	attestationCBOR, err := attester.Attest(enclave.AttestationOptions{
@@ -324,31 +286,37 @@ func GenerateKeyAttestation(attester EnclaveAttester, publicKey *rsa.PublicKey, 
 	})
 	if err != nil {
 		log.Printf("ERROR: NSM key attestation failed: %v", err)
-		return nil, fmt.Errorf("NSM key attestation failed: %w", err)
+		return nil, nil, fmt.Errorf("NSM key attestation failed: %w", err)
 	}
 
 	log.Printf("Key attestation generated: %d bytes", len(attestationCBOR))
 
-	return ParseKeyAttestation(attestationCBOR, keyUserData, time.Now())
+	keyAttestation, err := ParseKeyAttestation(attestationCBOR, keyUserData, time.Now())
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Return both the parsed attestation and the raw COSE bytes
+	return keyAttestation, attestationCBOR, nil
 }
 
 // ParseKeyAttestation parses CBOR attestation specifically for key attestation
 func ParseKeyAttestation(cborData []byte, keyUserData *enclaveapi.KeyAttestationUserData, timestamp time.Time) (*enclaveapi.KeyAttestationDoc, error) {
-	// Extract nested attestation document
-	attestationDoc, err := extractNestedAttestationDoc(cborData)
+	// Extract attestation document
+	attestationDoc, err := extractAttestationDoc(cborData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract nested attestation document: %w", err)
 	}
 
 	// Parse the nested document
-	var doc NitroAttestationDocument
+	var doc parsing.NitroAttestationDocument
 	err = cbor.Unmarshal(attestationDoc, &doc)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse CBOR attestation document: %w", err)
 	}
 
 	// Extract PCRs
-	pcrs := extractPCRs(doc.PCRs)
+	pcrs := parsing.ExtractPCRs(doc.PCRs)
 
 	log.Printf("INFO: Successfully parsed key attestation document with module ID: %s", doc.ModuleID)
 
@@ -359,7 +327,7 @@ func ParseKeyAttestation(cborData []byte, keyUserData *enclaveapi.KeyAttestation
 			DigestAlgorithm: doc.Digest,
 			PCRs:            pcrs,
 			Certificate:     base64.StdEncoding.EncodeToString(doc.Certificate),
-			CABundle:        encodeCertificateBundle(doc.CABundle),
+			CABundle:        parsing.EncodeCertificateBundle(doc.CABundle),
 			PublicKey:       base64.StdEncoding.EncodeToString(doc.PublicKey),
 			Nonce:           string(doc.Nonce),
 		},

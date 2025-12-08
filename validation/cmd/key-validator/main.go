@@ -1,14 +1,39 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 
 	enclaveapi "github.com/cloudx-io/openauction/enclaveapi"
 	"github.com/cloudx-io/openauction/validation"
 )
+
+// plainTextHandler is a simple slog handler that writes plain text to stdout
+// without timestamps or log levels - appropriate for CLI output
+type plainTextHandler struct{}
+
+func (*plainTextHandler) Enabled(_ context.Context, _ slog.Level) bool {
+	return true
+}
+
+func (*plainTextHandler) Handle(_ context.Context, r slog.Record) error {
+	_, err := fmt.Fprintln(os.Stdout, r.Message)
+	return err
+}
+
+func (h *plainTextHandler) WithAttrs(_ []slog.Attr) slog.Handler {
+	return h
+}
+
+func (h *plainTextHandler) WithGroup(_ string) slog.Handler {
+	return h
+}
+
+var logger = slog.New(&plainTextHandler{})
 
 func main() {
 	// Define CLI flags
@@ -53,7 +78,10 @@ func main() {
 
 	// Output results
 	if *outputFormat == "json" {
-		outputJSON(result)
+		if err := outputJSON(result); err != nil {
+			fmt.Fprintf(os.Stderr, "Error marshaling JSON: %v\n", err)
+			os.Exit(2)
+		}
 	} else {
 		outputText(result)
 	}
@@ -66,37 +94,37 @@ func main() {
 }
 
 func showUsage() {
-	fmt.Println("TEE Key Attestation Validator")
-	fmt.Println()
-	fmt.Println("Validates TEE public key attestations for E2E encryption.")
-	fmt.Println("Example CLI tool demonstrating the validation library.")
-	fmt.Println()
-	fmt.Println("Usage:")
-	fmt.Println("  tee-key-validator --attestation <path> --public-key <pem> [options]")
-	fmt.Println()
-	fmt.Println("Required Flags:")
-	fmt.Println("  --attestation <path>              Path to key response JSON file")
-	fmt.Println("  --public-key <path>               Path to public key PEM file")
-	fmt.Println()
-	fmt.Println("Optional Flags:")
-	fmt.Println("  --format <text|json>              Output format (default: text)")
-	fmt.Println("  --help                            Show this help message")
-	fmt.Println()
-	fmt.Println("Examples:")
-	fmt.Println("  # Validate key attestation")
-	fmt.Println("  tee-key-validator --attestation response.json --public-key public_key.pem")
-	fmt.Println()
-	fmt.Println("  # JSON output")
-	fmt.Println("  tee-key-validator --attestation response.json --public-key public_key.pem --format json")
-	fmt.Println()
-	fmt.Println("Exit Codes:")
-	fmt.Println("  0 - Validation passed")
-	fmt.Println("  1 - Validation failed")
-	fmt.Println("  2 - Invalid input or runtime error")
-	fmt.Println()
-	fmt.Println("Library Usage:")
-	fmt.Println("  This CLI tool is an example. For programmatic use, import:")
-	fmt.Println("  github.com/cloudx-io/openauction/validation")
+	logger.Info("TEE Key Attestation Validator")
+	logger.Info("")
+	logger.Info("Validates TEE public key attestations for E2E encryption.")
+	logger.Info("Example CLI tool demonstrating the validation library.")
+	logger.Info("")
+	logger.Info("Usage:")
+	logger.Info("  tee-key-validator --attestation <path> --public-key <pem> [options]")
+	logger.Info("")
+	logger.Info("Required Flags:")
+	logger.Info("  --attestation <path>              Path to key response JSON file")
+	logger.Info("  --public-key <path>               Path to public key PEM file")
+	logger.Info("")
+	logger.Info("Optional Flags:")
+	logger.Info("  --format <text|json>              Output format (default: text)")
+	logger.Info("  --help                            Show this help message")
+	logger.Info("")
+	logger.Info("Examples:")
+	logger.Info("  # Validate key attestation")
+	logger.Info("  tee-key-validator --attestation response.json --public-key public_key.pem")
+	logger.Info("")
+	logger.Info("  # JSON output")
+	logger.Info("  tee-key-validator --attestation response.json --public-key public_key.pem --format json")
+	logger.Info("")
+	logger.Info("Exit Codes:")
+	logger.Info("  0 - Validation passed")
+	logger.Info("  1 - Validation failed")
+	logger.Info("  2 - Invalid input or runtime error")
+	logger.Info("")
+	logger.Info("Library Usage:")
+	logger.Info("  This CLI tool is an example. For programmatic use, import:")
+	logger.Info("  github.com/cloudx-io/openauction/validation")
 }
 
 func readKeyResponse(path string) (*enclaveapi.KeyResponse, error) {
@@ -127,32 +155,32 @@ func readPublicKey(path string) (string, error) {
 }
 
 func outputText(result *validation.KeyValidationResult) {
-	fmt.Println("TEE Key Attestation Validator")
-	fmt.Println("=============================")
-	fmt.Println()
+	logger.Info("TEE Key Attestation Validator")
+	logger.Info("=============================")
+	logger.Info("")
 
-	fmt.Println("Validation Results:")
-	fmt.Println("-------------------")
+	logger.Info("Validation Results:")
+	logger.Info("-------------------")
 
-	fmt.Println()
-	fmt.Println("Summary:")
-	fmt.Printf("  PCRs Valid:        %v\n", result.PCRsValid)
-	fmt.Printf("  Certificate Valid: %v\n", result.CertificateValid)
-	fmt.Printf("  Signature Valid:   %v\n", result.SignatureValid)
-	fmt.Printf("  Public Key Match:  %v\n", result.PublicKeyMatch)
+	logger.Info("")
+	logger.Info("Summary:")
+	logger.Info(fmt.Sprintf("  PCRs Valid:        %v", result.PCRsValid))
+	logger.Info(fmt.Sprintf("  Certificate Valid: %v", result.CertificateValid))
+	logger.Info(fmt.Sprintf("  Signature Valid:   %v", result.SignatureValid))
+	logger.Info(fmt.Sprintf("  Public Key Match:  %v", result.PublicKeyMatch))
 
-	fmt.Println()
-	fmt.Println("=============================")
+	logger.Info("")
+	logger.Info("=============================")
 	if result.IsValid() {
-		fmt.Println("VALIDATION: ✓ PASSED")
-		fmt.Println("Exit Code: 0")
+		logger.Info("VALIDATION: ✓ PASSED")
+		logger.Info("Exit Code: 0")
 	} else {
-		fmt.Println("VALIDATION: ✗ FAILED")
-		fmt.Println("Exit Code: 1")
+		logger.Info("VALIDATION: ✗ FAILED")
+		logger.Info("Exit Code: 1")
 	}
 }
 
-func outputJSON(result *validation.KeyValidationResult) {
+func outputJSON(result *validation.KeyValidationResult) error {
 	output := map[string]any{
 		"valid":             result.IsValid(),
 		"pcrs_valid":        result.PCRsValid,
@@ -164,8 +192,8 @@ func outputJSON(result *validation.KeyValidationResult) {
 
 	data, err := json.MarshalIndent(output, "", "  ")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error marshaling JSON: %v\n", err)
-		os.Exit(2)
+		return err
 	}
-	fmt.Println(string(data))
+	logger.Info(string(data))
+	return nil
 }

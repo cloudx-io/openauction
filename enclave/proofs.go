@@ -180,7 +180,7 @@ func GenerateAttestation(
 	return ParseCBORAttestation(attestationCBOR, userData, now)
 }
 
-// DEPRECATED: can delete this once we've migrated to the new attestation format
+// Deprecated: can delete this once we've migrated to the new attestation format
 // ParseCBORAttestation parses the CBOR attestation document from AWS Nitro Enclaves for auctions
 func ParseCBORAttestation(cborData []byte, userData *enclaveapi.AttestationUserData, timestamp time.Time) (*enclaveapi.AuctionAttestationDoc, error) {
 	// Extract nested attestation document from AWS Nitro 4-element array

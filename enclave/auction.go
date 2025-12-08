@@ -243,16 +243,6 @@ func filterBidsByConsumedTokens(decryptedBids []decryptedBidData, consumedTokens
 			log.Printf("INFO: Bid %s has valid token: %s", decBid.encBid.ID, decBid.payload.AuctionToken)
 		}
 
-		// Validate decrypted price
-		if decBid.payload.Price <= 0 {
-			log.Printf("INFO: Invalid price in decrypted bid %s: %.2f", decBid.encBid.ID, decBid.payload.Price)
-			excludedBids = append(excludedBids, core.ExcludedBid{
-				BidID:  decBid.encBid.ID,
-				Reason: "invalid_price",
-			})
-			continue // Exclude this bid from auction
-		}
-
 		// Create CoreBid with decrypted price
 		unencryptedBid := decBid.encBid.CoreBid
 		unencryptedBid.Price = decBid.payload.Price

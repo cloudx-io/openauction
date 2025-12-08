@@ -173,3 +173,91 @@ func TestRunAuction_PreservesOriginalBids(t *testing.T) {
 	// Result should have adjusted price
 	check.Equal(t, 4.0, result.Winner.Price)
 }
+
+func TestRunAuction_RejectsNegativePrices(t *testing.T) {
+	// Test that negative prices are rejected during price validation
+	bids := []CoreBid{
+		{ID: "bid1", Bidder: "bidder_a", Price: 2.0},
+		{ID: "bid2", Bidder: "bidder_b", Price: -1.5},
+	}
+
+	result := RunAuction(bids, nil, 0.0)
+
+	check.NotNil(t, result)
+	check.NotNil(t, result.Winner)
+
+	// Check eligible bids
+	eligibleIDs := make(map[string]bool)
+	for _, bid := range result.EligibleBids {
+		eligibleIDs[bid.ID] = true
+	}
+	check.True(t, eligibleIDs["bid1"])
+	check.False(t, eligibleIDs["bid2"])
+
+	// Check rejected bids
+	check.Equal(t, "bid2", result.PriceRejectedBidIDs[0])
+
+	check.Equal(t, "bidder_a", result.Winner.Bidder)
+	check.Nil(t, result.RunnerUp)
+}
+
+func TestRunAuction_RejectsZeroPrices(t *testing.T) {
+	// Test that zero prices are rejected
+	bids := []CoreBid{
+		{ID: "bid1", Bidder: "bidder_a", Price: 2.0},
+		{ID: "bid2", Bidder: "bidder_b", Price: 0.0},
+	}
+
+	result := RunAuction(bids, nil, 0.0)
+
+	check.NotNil(t, result)
+
+	// Check eligible bids
+	eligibleIDs := map[string]bool{}
+	for _, bid := range result.EligibleBids {
+		eligibleIDs[bid.ID] = true
+	}
+	check.True(t, eligibleIDs["bid1"])
+	check.False(t, eligibleIDs["bid2"])
+
+	// Check rejected bids
+	check.Equal(t, "bid2", result.PriceRejectedBidIDs[0])
+
+	check.Equal(t, "bidder_a", result.Winner.Bidder)
+	check.Nil(t, result.RunnerUp)
+}
+
+func TestRunAuction_MixedPriceValidation(t *testing.T) {
+	// Test combination of valid, negative, and zero price bids
+	bids := []CoreBid{
+		{ID: "bid1", Bidder: "bidder_a", Price: 2.0},
+		{ID: "bid2", Bidder: "bidder_b", Price: -0.5},
+		{ID: "bid3", Bidder: "bidder_c", Price: 0.0},
+		{ID: "bid4", Bidder: "bidder_d", Price: 0.0},
+		{ID: "bid5", Bidder: "bidder_e", Price: 1.5},
+	}
+
+	result := RunAuction(bids, nil, 0.0)
+
+	check.NotNil(t, result)
+
+	// Check eligible bids
+	eligibleIDs := map[string]bool{}
+	for _, bid := range result.EligibleBids {
+		eligibleIDs[bid.ID] = true
+	}
+	check.True(t, eligibleIDs["bid1"])
+	check.True(t, eligibleIDs["bid5"])
+	check.False(t, eligibleIDs["bid2"])
+	check.False(t, eligibleIDs["bid3"])
+	check.False(t, eligibleIDs["bid4"])
+
+	// Check rejected bids
+	rejectedIDs := map[string]bool{}
+	for _, id := range result.PriceRejectedBidIDs {
+		rejectedIDs[id] = true
+	}
+	check.True(t, rejectedIDs["bid2"])
+	check.True(t, rejectedIDs["bid3"])
+	check.True(t, rejectedIDs["bid4"])
+}

@@ -109,10 +109,17 @@ func TestDecryptBids_InvalidPrice(t *testing.T) {
 	}
 
 	decryptedData, _, errors := decryptAllBids(encBids, km)
-	assert.Equal(t, 0, len(errors)) // Decryption succeeds
+	assert.Equal(t, 0, len(errors))
 
-	finalBids, _ := filterBidsByConsumedTokens(decryptedData, make(map[string]bool))
-	assert.Equal(t, 0, len(finalBids)) // Excluded due to invalid price in filtering stage
+	finalBids, excludedBids := filterBidsByConsumedTokens(decryptedData, make(map[string]bool))
+	assert.Equal(t, 1, len(finalBids))
+	assert.Equal(t, 0, len(excludedBids))
+
+	// Verify the bid will be rejected later in RunAuction
+	auctionResult := core.RunAuction(finalBids, nil, 0.0)
+	assert.Nil(t, auctionResult.Winner)
+	assert.Equal(t, 1, len(auctionResult.PriceRejectedBidIDs))
+	assert.Equal(t, "bid1", auctionResult.PriceRejectedBidIDs[0])
 }
 
 func TestDecryptBids_NilKeyManager(t *testing.T) {

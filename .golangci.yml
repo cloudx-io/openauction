@@ -154,15 +154,14 @@ linters:
       # Allow shadowing of `err` because it's so common
       - path: (.+)\.go$
         text: declaration of "err" shadows declaration at
+      # Allow os.Exit in cmd/ directories (CLI tools need exit codes)
+      - path: (.+)/cmd/(.+)\.go$
+        text: "deep-exit"
+        linters:
+          - revive
 issues:
   max-issues-per-linter: 10000
   max-same-issues: 10000
-  exclude-rules:
-    # Allow os.Exit in cmd/ directories (CLI tools need exit codes)
-    - path: (.+)/cmd/(.+)\.go$
-      text: "deep-exit"
-      linters:
-        - revive
 formatters:
   enable:
     - gci

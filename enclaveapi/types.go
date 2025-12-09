@@ -140,13 +140,14 @@ type EnclaveAuctionRequest struct {
 
 // EnclaveAuctionResponse represents the response from TEE enclaves after auction processing
 type EnclaveAuctionResponse struct {
-	Type                string                 `json:"type"`
-	Success             bool                   `json:"success"`
-	Message             string                 `json:"message"`
-	AttestationDoc      *AuctionAttestationDoc `json:"attestation_document,omitempty"`
-	ExcludedBids        []core.ExcludedBid     `json:"excluded_bids,omitempty"`          // Decryption failures, validation errors
-	FloorRejectedBidIDs []string               `json:"floor_rejected_bid_ids,omitempty"` // Bid IDs that were below floor
-	ProcessingTime      int64                  `json:"processing_time_ms"`
+	Type                  string                 `json:"type"`
+	Success               bool                   `json:"success"`
+	Message               string                 `json:"message"`
+	AttestationDoc        *AuctionAttestationDoc `json:"attestation_document,omitempty"`    // Deprecated: Use attestation_cose_base64
+	AttestationCOSEBase64 string                 `json:"attestation_cose_base64,omitempty"` // Base64-encoded COSE_Sign1 attestation
+	ExcludedBids          []core.ExcludedBid     `json:"excluded_bids,omitempty"`           // Decryption failures, validation errors
+	FloorRejectedBidIDs   []string               `json:"floor_rejected_bid_ids,omitempty"`  // Bid IDs that were below floor
+	ProcessingTime        int64                  `json:"processing_time_ms"`
 }
 
 // KeyResponse represents the response from a key request to the TEE enclave

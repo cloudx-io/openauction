@@ -27,20 +27,20 @@ type EnclaveAttester interface {
 	Attest(options enclave.AttestationOptions) ([]byte, error)
 }
 
-func GenerateTEEProofs(attester EnclaveAttester, req enclaveapi.EnclaveAuctionRequest, unencryptedBids []core.CoreBid, winner, runnerUp *core.CoreBid) (*enclaveapi.AuctionAttestationDoc, error) {
+func GenerateTEEProofs(attester EnclaveAttester, req enclaveapi.EnclaveAuctionRequest, unencryptedBids []core.CoreBid, winner, runnerUp *core.CoreBid) (*enclaveapi.AuctionAttestationDoc, []byte, error) {
 	bidHashNonce, err := generateNonce()
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate bid hash nonce: %w", err)
+		return nil, nil, fmt.Errorf("failed to generate bid hash nonce: %w", err)
 	}
 
 	requestNonce, err := generateNonce()
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate request nonce: %w", err)
+		return nil, nil, fmt.Errorf("failed to generate request nonce: %w", err)
 	}
 
 	adjustmentFactorsNonce, err := generateNonce()
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate adjustment factors nonce: %w", err)
+		return nil, nil, fmt.Errorf("failed to generate adjustment factors nonce: %w", err)
 	}
 
 	// Build list of bid hashes from unencrypted bid prices
@@ -132,7 +132,7 @@ func GenerateAttestation(
 	adjustmentFactorsNonce string,
 	winner *core.CoreBid,
 	runnerUp *core.CoreBid,
-) (*enclaveapi.AuctionAttestationDoc, error) {
+) (*enclaveapi.AuctionAttestationDoc, []byte, error) {
 	now := time.Now()
 
 	// Create the user data that will be embedded in the attestation
@@ -152,17 +152,17 @@ func GenerateAttestation(
 	}
 
 	if attester == nil {
-		return nil, fmt.Errorf("enclave attester is nil")
+		return nil, nil, fmt.Errorf("enclave attester is nil")
 	}
 
 	// Marshal user data for the real attestation
 	userDataBytes, err := json.Marshal(userData)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal user data: %w", err)
+		return nil, nil, fmt.Errorf("failed to marshal user data: %w", err)
 	}
 	randomNonce, err := generateNonce()
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate attestation nonce: %w", err)
+		return nil, nil, fmt.Errorf("failed to generate attestation nonce: %w", err)
 	}
 
 	attestationCBOR, err := attester.Attest(enclave.AttestationOptions{
@@ -171,13 +171,19 @@ func GenerateAttestation(
 	})
 	if err != nil {
 		log.Printf("ERROR: NSM attestation failed: %v", err)
-		return nil, fmt.Errorf("NSM attestation failed: %w", err)
+		return nil, nil, fmt.Errorf("NSM attestation failed: %w", err)
 	}
 
 	log.Printf("INFO: Real NSM attestation generated: %d bytes", len(attestationCBOR))
 
 	// Parse the CBOR attestation document into structured format
-	return ParseCBORAttestation(attestationCBOR, userData, now)
+	attestationDoc, err := ParseCBORAttestation(attestationCBOR, userData, now)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Return both the parsed attestation and the raw COSE bytes
+	return attestationDoc, attestationCBOR, nil
 }
 
 // Deprecated: can delete this once we've migrated to the new attestation format

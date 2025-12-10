@@ -1,0 +1,1160 @@
+openapi: 3.0.3
+info:
+  title: CloudX IQ API
+  description: |
+    CloudX IQ provides advanced auction analytics and machine learning predictions
+    for programmatic advertising. This API enables you to analyze auction logs,
+    optimize floor prices, and detect anomalies in real-time.
+
+    ## Authentication
+    All requests require a Bearer token in the Authorization header.
+
+    ## Rate Limiting
+    API requests are rate-limited based on your subscription tier.
+
+    ## Support
+    - Documentation: https://docs.cloudxiq.com
+    - Support: support@cloudxiq.com
+  version: 1.0.0
+  contact:
+    name: CloudX IQ Support
+    email: support@cloudxiq.com
+    url: https://cloudxiq.com/support
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.cloudxiq.com/api/v1
+    description: Production API
+  - url: https://ml.cloudxiq.com/api/v1
+    description: Production ML Service
+  - url: http://localhost:8080/api/v1
+    description: Development Backend
+  - url: http://localhost:8000/api/v1
+    description: Development ML Service
+
+tags:
+  - name: Authentication
+    description: User authentication and token management
+  - name: Analyses
+    description: Auction analysis operations
+  - name: Predictions
+    description: ML predictions for floor prices and anomalies
+  - name: Models
+    description: ML model management and monitoring
+
+paths:
+  /auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register new user
+      description: Create a new user account
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Email already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Login user
+      description: Authenticate existing user
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/refresh:
+    post:
+      tags:
+        - Authentication
+      summary: Refresh access token
+      description: Get new access token using refresh token
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /analyses:
+    get:
+      tags:
+        - Analyses
+      summary: List analyses
+      description: List analyses with pagination and filtering
+      operationId: listAnalyses
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortOrder'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, processing, completed, failed]
+        - name: publisherId
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of analyses
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysesList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags:
+        - Analyses
+      summary: Create analysis
+      description: Create a new auction analysis
+      operationId: createAnalysis
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAnalysisRequest'
+      responses:
+        '201':
+          description: Analysis created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Analysis'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /analyses/{id}:
+    get:
+      tags:
+        - Analyses
+      summary: Get analysis
+      description: Retrieve analysis by ID
+      operationId: getAnalysis
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AnalysisId'
+      responses:
+        '200':
+          description: Analysis details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Analysis'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /analyses/{id}/metrics:
+    get:
+      tags:
+        - Analyses
+      summary: Get analysis metrics
+      description: Retrieve detailed metrics for an analysis
+      operationId: getAnalysisMetrics
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AnalysisId'
+      responses:
+        '200':
+          description: Analysis metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisMetrics'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /analyses/{id}/insights:
+    get:
+      tags:
+        - Analyses
+      summary: Get analysis insights
+      description: Retrieve actionable insights from an analysis
+      operationId: getAnalysisInsights
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AnalysisId'
+      responses:
+        '200':
+          description: Analysis insights
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Insight'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /predict/floor-price:
+    post:
+      tags:
+        - Predictions
+      summary: Predict floor price
+      description: Predict optimal floor price for ad inventory
+      operationId: predictFloorPrice
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FloorPricePredictionRequest'
+      responses:
+        '200':
+          description: Floor price prediction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FloorPricePrediction'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /predict/floor-price/batch:
+    post:
+      tags:
+        - Predictions
+      summary: Batch floor price prediction
+      description: Predict floor prices for multiple configurations
+      operationId: predictFloorPriceBatch
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchFloorPricePredictionRequest'
+      responses:
+        '200':
+          description: Batch predictions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchFloorPricePrediction'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /predict/anomaly:
+    post:
+      tags:
+        - Predictions
+      summary: Detect anomaly
+      description: Detect anomalies in auction data
+      operationId: detectAnomaly
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnomalyDetectionRequest'
+      responses:
+        '200':
+          description: Anomaly detection result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnomalyDetection'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /models:
+    get:
+      tags:
+        - Models
+      summary: List models
+      description: List all available ML models
+      operationId: listModels
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of models
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelsList'
+
+  /models/{name}:
+    get:
+      tags:
+        - Models
+      summary: Get model details
+      description: Get detailed information about a specific model
+      operationId: getModel
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Model details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelDetails'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /models/health:
+    get:
+      tags:
+        - Models
+      summary: Model health check
+      description: Check health and performance of ML models
+      operationId: getModelsHealth
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Models health status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelsHealth'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    AnalysisId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^ana_[a-zA-Z0-9]+$'
+      description: Analysis ID
+      example: ana_67890
+
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+      description: Page number
+
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 10
+      description: Items per page
+
+    SortBy:
+      name: sortBy
+      in: query
+      schema:
+        type: string
+        enum: [createdAt, updatedAt, status, auctionsCount]
+        default: createdAt
+      description: Sort field
+
+    SortOrder:
+      name: sortOrder
+      in: query
+      schema:
+        type: string
+        enum: [asc, desc]
+        default: desc
+      description: Sort order
+
+  schemas:
+    RegisterRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        password:
+          type: string
+          format: password
+          minLength: 8
+          example: securepassword123
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        password:
+          type: string
+          format: password
+          example: securepassword123
+
+    RefreshRequest:
+      type: object
+      required:
+        - refreshToken
+      properties:
+        refreshToken:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIs...
+
+    AuthResponse:
+      type: object
+      properties:
+        accessToken:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIs...
+        refreshToken:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIs...
+        user:
+          $ref: '#/components/schemas/User'
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          example: usr_12345
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        createdAt:
+          type: string
+          format: date-time
+          example: '2024-01-15T10:30:00Z'
+
+    CreateAnalysisRequest:
+      type: object
+      required:
+        - publisherId
+        - timeRangeStart
+        - timeRangeEnd
+      properties:
+        publisherId:
+          type: string
+          example: pub_12345
+        timeRangeStart:
+          type: string
+          format: date-time
+          example: '2024-01-01T00:00:00Z'
+        timeRangeEnd:
+          type: string
+          format: date-time
+          example: '2024-01-31T23:59:59Z'
+        includeModels:
+          type: array
+          items:
+            type: string
+            enum: [floor_price, anomaly]
+          example: [floor_price, anomaly]
+
+    Analysis:
+      type: object
+      properties:
+        id:
+          type: string
+          example: ana_67890
+        userId:
+          type: string
+          example: usr_12345
+        publisherId:
+          type: string
+          example: pub_12345
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+          example: completed
+        auctionsCount:
+          type: integer
+          example: 125000
+        timeRangeStart:
+          type: string
+          format: date-time
+          example: '2024-01-01T00:00:00Z'
+        timeRangeEnd:
+          type: string
+          format: date-time
+          example: '2024-01-31T23:59:59Z'
+        includeModels:
+          type: array
+          items:
+            type: string
+          example: [floor_price, anomaly]
+        errorMessage:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+          example: '2024-01-15T10:30:00Z'
+        updatedAt:
+          type: string
+          format: date-time
+          example: '2024-01-15T10:35:00Z'
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: '2024-01-15T10:35:00Z'
+
+    AnalysesList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Analysis'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 10
+        total:
+          type: integer
+          example: 42
+        totalPages:
+          type: integer
+          example: 5
+        hasNext:
+          type: boolean
+          example: true
+        hasPrev:
+          type: boolean
+          example: false
+
+    AnalysisMetrics:
+      type: object
+      properties:
+        totalAuctions:
+          type: integer
+          example: 125000
+        totalRevenue:
+          type: number
+          format: float
+          example: 15234.50
+        avgFillRate:
+          type: number
+          format: float
+          example: 0.7523
+        avgCPM:
+          type: number
+          format: float
+          example: 2.45
+        avgBidRate:
+          type: number
+          format: float
+          example: 0.8123
+        topPlatforms:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlatformMetric'
+        topAdFormats:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdFormatMetric'
+        hourlyTrends:
+          type: array
+          items:
+            $ref: '#/components/schemas/HourlyTrend'
+        dailyTrends:
+          type: array
+          items:
+            $ref: '#/components/schemas/DailyTrend'
+
+    PlatformMetric:
+      type: object
+      properties:
+        platform:
+          type: string
+          example: mobile_app
+        count:
+          type: integer
+          example: 75000
+        revenue:
+          type: number
+          format: float
+          example: 9500.25
+
+    AdFormatMetric:
+      type: object
+      properties:
+        adFormat:
+          type: string
+          example: banner_300x250
+        count:
+          type: integer
+          example: 60000
+        revenue:
+          type: number
+          format: float
+          example: 7200.00
+
+    HourlyTrend:
+      type: object
+      properties:
+        hour:
+          type: integer
+          minimum: 0
+          maximum: 23
+          example: 14
+        auctions:
+          type: integer
+          example: 3200
+        revenue:
+          type: number
+          format: float
+          example: 385.50
+        fillRate:
+          type: number
+          format: float
+          example: 0.72
+
+    DailyTrend:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+          example: '2024-01-01'
+        auctions:
+          type: integer
+          example: 4500
+        revenue:
+          type: number
+          format: float
+          example: 542.75
+        fillRate:
+          type: number
+          format: float
+          example: 0.75
+
+    Insight:
+      type: object
+      properties:
+        id:
+          type: string
+          example: ins_11111
+        analysisId:
+          type: string
+          example: ana_67890
+        priority:
+          type: string
+          enum: [low, medium, high]
+          example: high
+        category:
+          type: string
+          enum: [optimization, performance, anomaly, trend]
+          example: optimization
+        title:
+          type: string
+          example: Suboptimal floor prices detected
+        description:
+          type: string
+          example: Floor prices for banner_300x250 are 15% below optimal levels
+        impact:
+          type: string
+          example: +$2,340 monthly revenue potential
+        recommendation:
+          type: string
+          example: Increase floor price to $2.80 for banner_300x250
+        metrics:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+          example: '2024-01-15T10:35:00Z'
+
+    FloorPricePredictionRequest:
+      type: object
+      required:
+        - platform
+        - adFormat
+        - hour
+        - dayOfWeek
+        - avgBid
+        - bidRate
+        - fillRate
+      properties:
+        platform:
+          type: string
+          enum: [web, mobile_app, mobile_web]
+          example: mobile_app
+        adFormat:
+          type: string
+          example: banner_300x250
+        hour:
+          type: integer
+          minimum: 0
+          maximum: 23
+          example: 14
+        dayOfWeek:
+          type: integer
+          minimum: 0
+          maximum: 6
+          example: 2
+        avgBid:
+          type: number
+          format: float
+          example: 2.35
+        bidRate:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          example: 0.78
+        fillRate:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          example: 0.72
+
+    FloorPricePrediction:
+      type: object
+      properties:
+        optimalFloorPrice:
+          type: number
+          format: float
+          example: 2.80
+        confidence:
+          type: number
+          format: float
+          example: 0.89
+        expectedRevenueLift:
+          type: number
+          format: float
+          example: 340.50
+        expectedFillRate:
+          type: number
+          format: float
+          example: 0.75
+        recommendation:
+          type: string
+          example: Increase floor price to $2.80 for optimal revenue
+        factors:
+          type: object
+          additionalProperties:
+            type: number
+            format: float
+        modelVersion:
+          type: string
+          example: v2.3.1
+        timestamp:
+          type: string
+          format: date-time
+          example: '2024-01-15T14:30:00Z'
+
+    BatchFloorPricePredictionRequest:
+      type: object
+      required:
+        - predictions
+      properties:
+        predictions:
+          type: array
+          items:
+            allOf:
+              - type: object
+                required:
+                  - id
+                properties:
+                  id:
+                    type: string
+                    example: pred_001
+              - $ref: '#/components/schemas/FloorPricePredictionRequest'
+          maxItems: 100
+
+    BatchFloorPricePrediction:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                example: pred_001
+              optimalFloorPrice:
+                type: number
+                format: float
+                example: 2.80
+              confidence:
+                type: number
+                format: float
+                example: 0.89
+              expectedRevenueLift:
+                type: number
+                format: float
+                example: 340.50
+        totalPredictions:
+          type: integer
+          example: 2
+        processingTime:
+          type: number
+          format: float
+          example: 0.142
+        timestamp:
+          type: string
+          format: date-time
+          example: '2024-01-15T14:30:00Z'
+
+    AnomalyDetectionRequest:
+      type: object
+      required:
+        - platform
+        - adFormat
+        - hour
+        - fillRate
+        - avgBid
+        - bidRate
+        - revenue
+        - auctionCount
+      properties:
+        platform:
+          type: string
+          enum: [web, mobile_app, mobile_web]
+          example: mobile_app
+        adFormat:
+          type: string
+          example: banner_300x250
+        hour:
+          type: integer
+          minimum: 0
+          maximum: 23
+          example: 14
+        fillRate:
+          type: number
+          format: float
+          example: 0.42
+        avgBid:
+          type: number
+          format: float
+          example: 1.85
+        bidRate:
+          type: number
+          format: float
+          example: 0.55
+        revenue:
+          type: number
+          format: float
+          example: 125.50
+        auctionCount:
+          type: integer
+          example: 1500
+
+    AnomalyDetection:
+      type: object
+      properties:
+        isAnomaly:
+          type: boolean
+          example: true
+        anomalyScore:
+          type: number
+          format: float
+          example: 0.87
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+          example: high
+        type:
+          type: string
+          example: fill_rate_drop
+        description:
+          type: string
+          example: Fill rate is 35% below expected levels
+        expectedValue:
+          type: number
+          format: float
+          example: 0.75
+        actualValue:
+          type: number
+          format: float
+          example: 0.42
+        deviation:
+          type: number
+          format: float
+          example: -0.33
+        possibleCauses:
+          type: array
+          items:
+            type: string
+        recommendations:
+          type: array
+          items:
+            type: string
+        affectedMetrics:
+          type: object
+          additionalProperties:
+            type: number
+            format: float
+        modelVersion:
+          type: string
+          example: v1.8.2
+        timestamp:
+          type: string
+          format: date-time
+          example: '2024-01-15T14:30:00Z'
+
+    ModelsList:
+      type: object
+      properties:
+        models:
+          type: array
+          items:
+            $ref: '#/components/schemas/Model'
+
+    Model:
+      type: object
+      properties:
+        name:
+          type: string
+          example: floor_price_predictor
+        version:
+          type: string
+          example: v2.3.1
+        type:
+          type: string
+          enum: [regression, classification]
+          example: regression
+        status:
+          type: string
+          enum: [active, inactive, training]
+          example: active
+        accuracy:
+          type: number
+          format: float
+          example: 0.94
+        trainedOn:
+          type: string
+          format: date-time
+          example: '2024-01-10T00:00:00Z'
+        lastUpdated:
+          type: string
+          format: date-time
+          example: '2024-01-10T12:00:00Z'
+        features:
+          type: array
+          items:
+            type: string
+
+    ModelDetails:
+      allOf:
+        - $ref: '#/components/schemas/Model'
+        - type: object
+          properties:
+            metrics:
+              type: object
+              additionalProperties:
+                type: number
+                format: float
+            trainingDataSize:
+              type: integer
+              example: 5000000
+            features:
+              type: array
+              items:
+                $ref: '#/components/schemas/Feature'
+            hyperparameters:
+              type: object
+              additionalProperties: true
+
+    Feature:
+      type: object
+      properties:
+        name:
+          type: string
+          example: platform
+        importance:
+          type: number
+          format: float
+          example: 0.28
+        type:
+          type: string
+          enum: [categorical, numeric]
+          example: categorical
+
+    ModelsHealth:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+          example: healthy
+        models:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModelHealth'
+        systemHealth:
+          $ref: '#/components/schemas/SystemHealth'
+        timestamp:
+          type: string
+          format: date-time
+          example: '2024-01-15T14:30:00Z'
+
+    ModelHealth:
+      type: object
+      properties:
+        name:
+          type: string
+          example: floor_price_predictor
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+          example: healthy
+        responseTime:
+          type: number
+          format: float
+          example: 0.045
+        lastPrediction:
+          type: string
+          format: date-time
+          example: '2024-01-15T14:29:58Z'
+        predictionsToday:
+          type: integer
+          example: 15234
+
+    SystemHealth:
+      type: object
+      properties:
+        cpuUsage:
+          type: number
+          format: float
+          example: 45.2
+        memoryUsage:
+          type: number
+          format: float
+          example: 62.8
+        diskUsage:
+          type: number
+          format: float
+          example: 38.5
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Invalid request
+        details:
+          type: object
+          additionalProperties: true
+        requestId:
+          type: string
+          example: req_abc123
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    ValidationError:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

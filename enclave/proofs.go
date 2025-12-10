@@ -27,7 +27,7 @@ type EnclaveAttester interface {
 	Attest(options enclave.AttestationOptions) ([]byte, error)
 }
 
-func GenerateTEEProofs(attester EnclaveAttester, req enclaveapi.EnclaveAuctionRequest, unencryptedBids []core.CoreBid, winner, runnerUp *core.CoreBid) (*enclaveapi.AuctionAttestationDoc, []byte, error) {
+func GenerateTEEProofs(attester EnclaveAttester, req enclaveapi.EnclaveAuctionRequest, unencryptedBids []core.CoreBid, winner, runnerUp *core.CoreBid) (*enclaveapi.AuctionAttestationDoc, enclaveapi.AttestationCOSE, error) {
 	bidHashNonce, err := generateNonce()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to generate bid hash nonce: %w", err)
@@ -132,7 +132,7 @@ func GenerateAttestation(
 	adjustmentFactorsNonce string,
 	winner *core.CoreBid,
 	runnerUp *core.CoreBid,
-) (*enclaveapi.AuctionAttestationDoc, []byte, error) {
+) (*enclaveapi.AuctionAttestationDoc, enclaveapi.AttestationCOSE, error) {
 	now := time.Now()
 
 	// Create the user data that will be embedded in the attestation
@@ -183,7 +183,7 @@ func GenerateAttestation(
 	}
 
 	// Return both the parsed attestation and the raw COSE bytes
-	return attestationDoc, attestationCBOR, nil
+	return attestationDoc, enclaveapi.AttestationCOSE(attestationCBOR), nil
 }
 
 // Deprecated: can delete this once we've migrated to the new attestation format
@@ -259,7 +259,7 @@ func publicKeyToPEM(publicKey *rsa.PublicKey) (string, error) {
 
 // GenerateKeyAttestation generates an attestation document for E2EE public keys
 // Returns the parsed attestation and the raw COSE bytes
-func GenerateKeyAttestation(attester EnclaveAttester, publicKey *rsa.PublicKey, auctionToken string) (*enclaveapi.KeyAttestationDoc, []byte, error) {
+func GenerateKeyAttestation(attester EnclaveAttester, publicKey *rsa.PublicKey, auctionToken string) (*enclaveapi.KeyAttestationDoc, enclaveapi.AttestationCOSE, error) {
 	if attester == nil {
 		return nil, nil, fmt.Errorf("enclave attester is nil")
 	}
@@ -303,7 +303,7 @@ func GenerateKeyAttestation(attester EnclaveAttester, publicKey *rsa.PublicKey, 
 	}
 
 	// Return both the parsed attestation and the raw COSE bytes
-	return keyAttestation, attestationCBOR, nil
+	return keyAttestation, enclaveapi.AttestationCOSE(attestationCBOR), nil
 }
 
 // ParseKeyAttestation parses CBOR attestation specifically for key attestation

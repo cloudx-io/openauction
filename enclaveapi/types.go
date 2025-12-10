@@ -1,9 +1,14 @@
 package enclaveapi
 
 import (
+	"bytes"
+	"compress/gzip"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/cloudx-io/openauction/core"
@@ -144,7 +149,7 @@ type EnclaveAuctionResponse struct {
 	Success               bool                   `json:"success"`
 	Message               string                 `json:"message"`
 	AttestationDoc        *AuctionAttestationDoc `json:"attestation_document,omitempty"`    // Deprecated: Use attestation_cose_base64
-	AttestationCOSEBase64 string                 `json:"attestation_cose_base64,omitempty"` // Base64-encoded COSE_Sign1 attestation
+	AttestationCOSEBase64 AttestationCOSEBase64  `json:"attestation_cose_base64,omitempty"` // Base64-encoded COSE_Sign1 attestation
 	ExcludedBids          []core.ExcludedBid     `json:"excluded_bids,omitempty"`           // Decryption failures, validation errors
 	FloorRejectedBidIDs   []string               `json:"floor_rejected_bid_ids,omitempty"`  // Bid IDs that were below floor
 	ProcessingTime        int64                  `json:"processing_time_ms"`
@@ -152,11 +157,11 @@ type EnclaveAuctionResponse struct {
 
 // KeyResponse represents the response from a key request to the TEE enclave
 type KeyResponse struct {
-	Type                  string             `json:"type"`
-	PublicKey             string             `json:"public_key"`                        // PEM format
-	TEEInstanceIP         string             `json:"tee_instance_ip,omitempty"`         // Injected by HTTP bridge
-	KeyAttestation        *KeyAttestationDoc `json:"key_attestation"`                   // Deprecated: Use attestation_cose_base64 instead
-	AttestationCOSEBase64 string             `json:"attestation_cose_base64,omitempty"` // Base64-encoded COSE_Sign1 attestation
+	Type                  string                `json:"type"`
+	PublicKey             string                `json:"public_key"`                        // PEM format
+	TEEInstanceIP         string                `json:"tee_instance_ip,omitempty"`         // Injected by HTTP bridge
+	KeyAttestation        *KeyAttestationDoc    `json:"key_attestation"`                   // Deprecated: Use attestation_cose_base64 instead
+	AttestationCOSEBase64 AttestationCOSEBase64 `json:"attestation_cose_base64,omitempty"` // Base64-encoded COSE_Sign1 attestation
 }
 
 // KeyAttestationUserData represents the key-specific data embedded in key attestation
@@ -164,4 +169,129 @@ type KeyAttestationUserData struct {
 	KeyAlgorithm string `json:"key_algorithm"` // e.g., "RSA-2048"
 	PublicKey    string `json:"public_key"`    // PEM-encoded public key
 	AuctionToken string `json:"auction_token"` // Single-use token for bid replay protection
+}
+
+// AttestationCOSE represents raw COSE_Sign1 bytes from AWS Nitro Enclaves
+type AttestationCOSE []byte
+
+// EncodeBase64 converts COSE bytes to standard base64 string
+func (a AttestationCOSE) EncodeBase64() AttestationCOSEBase64 {
+	return AttestationCOSEBase64(base64.StdEncoding.EncodeToString(a))
+}
+
+// EncodeURLSafe converts COSE bytes to URL-safe base64 string (no padding)
+func (a AttestationCOSE) EncodeURLSafe() AttestationCOSEURLBase64 {
+	encoded := base64.URLEncoding.EncodeToString(a)
+	// Remove padding for URL safety
+	encoded = strings.TrimRight(encoded, "=")
+	return AttestationCOSEURLBase64(encoded)
+}
+
+// CompressGzip compresses COSE bytes with GZIP and encodes as base64url (no padding)
+// Used for URL-safe transmission in win/loss notifications and bid responses
+func (a AttestationCOSE) CompressGzip() (AttestationCOSEGzip, error) {
+	var buf bytes.Buffer
+	w, err := gzip.NewWriterLevel(&buf, gzip.BestCompression)
+	if err != nil {
+		return "", fmt.Errorf("create gzip writer: %w", err)
+	}
+	if _, err := w.Write(a); err != nil {
+		return "", fmt.Errorf("gzip write: %w", err)
+	}
+	if err := w.Close(); err != nil {
+		return "", fmt.Errorf("gzip close: %w", err)
+	}
+
+	// Encode to URL-safe base64 without padding
+	encoded := base64.URLEncoding.EncodeToString(buf.Bytes())
+	encoded = strings.TrimRight(encoded, "=")
+	return AttestationCOSEGzip(encoded), nil
+}
+
+// AttestationCOSEBase64 represents standard base64-encoded COSE bytes
+type AttestationCOSEBase64 string
+
+// Decode converts base64 string to raw COSE bytes
+func (a AttestationCOSEBase64) Decode() (AttestationCOSE, error) {
+	data, err := base64.StdEncoding.DecodeString(string(a))
+	if err != nil {
+		return nil, fmt.Errorf("decode COSE base64: %w", err)
+	}
+	return AttestationCOSE(data), nil
+}
+
+// String returns the underlying string value for JSON marshaling
+func (a AttestationCOSEBase64) String() string {
+	return string(a)
+}
+
+// CompressGzip decodes, compresses with GZIP, and encodes as base64url (no padding)
+// Convenience method that combines Decode() and CompressGzip()
+func (a AttestationCOSEBase64) CompressGzip() (AttestationCOSEGzip, error) {
+	cose, err := a.Decode()
+	if err != nil {
+		return "", err
+	}
+	return cose.CompressGzip()
+}
+
+// AttestationCOSEURLBase64 represents URL-safe base64-encoded COSE bytes (no padding)
+type AttestationCOSEURLBase64 string
+
+// Decode converts URL-safe base64 string to raw COSE bytes
+func (a AttestationCOSEURLBase64) Decode() (AttestationCOSE, error) {
+	str := string(a)
+	// Add padding if needed
+	if padding := len(str) % 4; padding > 0 {
+		str += strings.Repeat("=", 4-padding)
+	}
+	data, err := base64.URLEncoding.DecodeString(str)
+	if err != nil {
+		return nil, fmt.Errorf("decode COSE URL base64: %w", err)
+	}
+	return AttestationCOSE(data), nil
+}
+
+// String returns the underlying string value
+func (a AttestationCOSEURLBase64) String() string {
+	return string(a)
+}
+
+// AttestationCOSEGzip represents GZIP-compressed, base64url-encoded (no padding) COSE bytes
+// optimized for URL inclusion. Common format for win/loss notifications and bid responses.
+// Encoding pipeline: COSE bytes → GZIP compress → base64url encode → trim padding
+type AttestationCOSEGzip string
+
+// String returns the underlying string value for JSON marshaling
+func (a AttestationCOSEGzip) String() string {
+	return string(a)
+}
+
+// Decompress decompresses and returns raw COSE bytes
+func (a AttestationCOSEGzip) Decompress() (AttestationCOSE, error) {
+	// Add padding if needed for base64url decoding
+	str := string(a)
+	if padding := len(str) % 4; padding > 0 {
+		str += strings.Repeat("=", 4-padding)
+	}
+
+	// Decode base64url
+	gzipData, err := base64.URLEncoding.DecodeString(str)
+	if err != nil {
+		return nil, fmt.Errorf("decode base64url: %w", err)
+	}
+
+	// GZIP decompress
+	reader, err := gzip.NewReader(bytes.NewReader(gzipData))
+	if err != nil {
+		return nil, fmt.Errorf("create gzip reader: %w", err)
+	}
+	defer func() { _ = reader.Close() }()
+
+	coseBytes, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, fmt.Errorf("decompress: %w", err)
+	}
+
+	return AttestationCOSE(coseBytes), nil
 }

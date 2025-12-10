@@ -3,7 +3,6 @@ package main
 import (
 	"crypto/rsa"
 	"crypto/x509"
-	"encoding/base64"
 	"encoding/pem"
 	"fmt"
 
@@ -56,18 +55,15 @@ func HandleKeyRequest(attester EnclaveAttester, keyManager *KeyManager, tokenMan
 
 	auctionToken := tokenManager.GenerateToken()
 
-	keyAttestation, attestationCBOR, err := GenerateKeyAttestation(attester, keyManager.PublicKey, auctionToken)
+	keyAttestation, coseAttestation, err := GenerateKeyAttestation(attester, keyManager.PublicKey, auctionToken)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate key attestation: %w", err)
 	}
-
-	// Encode COSE bytes to base64 for JSON transport
-	attestationCOSEBase64 := base64.StdEncoding.EncodeToString(attestationCBOR)
 
 	return &enclaveapi.KeyResponse{
 		Type:                  "key_response",
 		PublicKey:             publicKeyPEM,
 		KeyAttestation:        keyAttestation,
-		AttestationCOSEBase64: attestationCOSEBase64,
+		AttestationCOSEBase64: coseAttestation.EncodeBase64(),
 	}, nil
 }

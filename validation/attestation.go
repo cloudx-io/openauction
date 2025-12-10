@@ -13,9 +13,9 @@ import (
 // validateCommonAttestation performs validation common to all attestation types
 // Parses the COSE bytes internally and validates PCRs, certificate chain, and signature
 // Returns BaseValidationResult with validation results
-func validateCommonAttestation(attestationCOSEBase64 string) (*BaseValidationResult, error) {
+func validateCommonAttestation(attestationCOSEBase64 enclaveapi.AttestationCOSEBase64) (*BaseValidationResult, error) {
 	// Decode and parse COSE to get attestation document
-	coseBytes, err := base64.StdEncoding.DecodeString(attestationCOSEBase64)
+	coseBytes, err := attestationCOSEBase64.Decode()
 	if err != nil {
 		return nil, fmt.Errorf("decode COSE bytes: %w", err)
 	}

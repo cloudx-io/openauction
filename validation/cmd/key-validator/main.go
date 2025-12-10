@@ -110,7 +110,7 @@ func readKeyResponse(path string) (*enclaveapi.KeyResponse, error) {
 		return nil, fmt.Errorf("failed to parse JSON: %w", err)
 	}
 
-	if keyResponse.AttestationCOSEBase64 == "" {
+	if keyResponse.AttestationCOSEBase64.String() == "" {
 		return nil, fmt.Errorf("missing attestation_cose_base64 field in key response")
 	}
 

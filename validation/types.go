@@ -27,12 +27,21 @@ func (r *KeyValidationResult) IsValid() bool {
 // AuctionValidationResult contains validation results specific to auction attestations
 type AuctionValidationResult struct {
 	BaseValidationResult
-	BidHashValid bool
+	BidHashValid        bool
+	ClearingPriceValid  bool
+	BidFloorValid       bool
+	AdjustmentHashValid bool
+	RequestHashValid    bool
 }
 
 // IsValid returns true if all auction validation checks passed
 func (r *AuctionValidationResult) IsValid() bool {
-	return r.BaseValidationResult.IsValid() && r.BidHashValid
+	return r.BaseValidationResult.IsValid() &&
+		r.BidHashValid &&
+		r.ClearingPriceValid &&
+		r.BidFloorValid &&
+		r.AdjustmentHashValid &&
+		r.RequestHashValid
 }
 
 // PCRSet represents a known-good set of PCR measurements

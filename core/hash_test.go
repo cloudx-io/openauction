@@ -132,3 +132,138 @@ func TestComputeBidHash_EdgeCases(t *testing.T) {
 		})
 	}
 }
+
+func TestComputeRequestHash(t *testing.T) {
+	auctionID := "auction-123"
+	roundID := 1
+	nonce := "test-nonce"
+
+	hash := ComputeRequestHash(auctionID, roundID, nonce)
+
+	// Verify hash is 64 characters (SHA256 hex encoding)
+	if len(hash) != 64 {
+		t.Errorf("ComputeRequestHash() hash length = %d, want 64", len(hash))
+	}
+
+	// Verify hash contains only hex characters
+	for _, c := range hash {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+			t.Errorf("ComputeRequestHash() contains non-hex character: %c", c)
+		}
+	}
+
+	// Test determinism
+	hash2 := ComputeRequestHash(auctionID, roundID, nonce)
+	if hash != hash2 {
+		t.Errorf("ComputeRequestHash() not deterministic")
+	}
+
+	// Test that different inputs produce different hashes
+	hash3 := ComputeRequestHash(auctionID, roundID+1, nonce)
+	if hash == hash3 {
+		t.Errorf("Different round IDs should produce different hashes")
+	}
+
+	hash4 := ComputeRequestHash("different-auction", roundID, nonce)
+	if hash == hash4 {
+		t.Errorf("Different auction IDs should produce different hashes")
+	}
+
+	hash5 := ComputeRequestHash(auctionID, roundID, "different-nonce")
+	if hash == hash5 {
+		t.Errorf("Different nonces should produce different hashes")
+	}
+
+	// Verify exact hash calculation
+	expectedData := fmt.Sprintf("%s|%d|%s", auctionID, roundID, nonce)
+	expectedHash := fmt.Sprintf("%x", sha256.Sum256([]byte(expectedData)))
+	if hash != expectedHash {
+		t.Errorf("ComputeRequestHash() = %v, want %v", hash, expectedHash)
+	}
+}
+
+func TestComputeAdjustmentFactorsHash(t *testing.T) {
+	nonce := "test-nonce"
+	factors := map[string]float64{
+		"meta":     1.0,
+		"appnexus": 0.95,
+		"pubmatic": 1.15,
+	}
+
+	hash := ComputeAdjustmentFactorsHash(factors, nonce)
+
+	// Verify hash is 64 characters (SHA256 hex encoding)
+	if len(hash) != 64 {
+		t.Errorf("ComputeAdjustmentFactorsHash() hash length = %d, want 64", len(hash))
+	}
+
+	// Verify hash contains only hex characters
+	for _, c := range hash {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+			t.Errorf("ComputeAdjustmentFactorsHash() contains non-hex character: %c", c)
+		}
+	}
+
+	// Test determinism
+	hash2 := ComputeAdjustmentFactorsHash(factors, nonce)
+	if hash != hash2 {
+		t.Errorf("ComputeAdjustmentFactorsHash() not deterministic")
+	}
+
+	// Test that different nonces produce different hashes
+	hash3 := ComputeAdjustmentFactorsHash(factors, "different-nonce")
+	if hash == hash3 {
+		t.Errorf("Different nonces should produce different hashes")
+	}
+
+	// Test that different factors produce different hashes
+	differentFactors := map[string]float64{
+		"meta":     1.0,
+		"appnexus": 0.96, // Different value
+		"pubmatic": 1.15,
+	}
+	hash4 := ComputeAdjustmentFactorsHash(differentFactors, nonce)
+	if hash == hash4 {
+		t.Errorf("Different adjustment factors should produce different hashes")
+	}
+}
+
+func TestComputeAdjustmentFactorsHash_Sorting(t *testing.T) {
+	nonce := "test"
+
+	// These should produce the same hash because they're the same factors, just in different map iteration order
+	factors1 := map[string]float64{"meta": 1.0, "appnexus": 0.95}
+	factors2 := map[string]float64{"appnexus": 0.95, "meta": 1.0}
+
+	hash1 := ComputeAdjustmentFactorsHash(factors1, nonce)
+	hash2 := ComputeAdjustmentFactorsHash(factors2, nonce)
+
+	if hash1 != hash2 {
+		t.Errorf("Same factors in different order should produce same hash due to sorting")
+	}
+
+	// Verify exact calculation with sorted keys
+	expectedData := "test|appnexus:0.950000|meta:1.000000"
+	expectedHash := fmt.Sprintf("%x", sha256.Sum256([]byte(expectedData)))
+	if hash1 != expectedHash {
+		t.Errorf("ComputeAdjustmentFactorsHash() = %v, want %v", hash1, expectedHash)
+	}
+}
+
+func TestComputeAdjustmentFactorsHash_EmptyMap(t *testing.T) {
+	nonce := "test-nonce"
+	emptyFactors := map[string]float64{}
+
+	hash := ComputeAdjustmentFactorsHash(emptyFactors, nonce)
+
+	// Verify hash is 64 characters
+	if len(hash) != 64 {
+		t.Errorf("ComputeAdjustmentFactorsHash() hash length = %d, want 64", len(hash))
+	}
+
+	// Empty map should produce hash of just the nonce
+	expectedHash := fmt.Sprintf("%x", sha256.Sum256([]byte(nonce)))
+	if hash != expectedHash {
+		t.Errorf("Empty map should hash just the nonce")
+	}
+}

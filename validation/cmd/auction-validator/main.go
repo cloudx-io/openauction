@@ -40,16 +40,8 @@ func main() {
 		os.Exit(2)
 	}
 
-	// Convert AttestationCOSEGzip to AttestationCOSEBase64
-	attestationCOSE, err := auctionInput.Attestation.Decompress()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error decompressing attestation: %v\n", err)
-		os.Exit(2)
-	}
-	attestationCOSEBase64 := attestationCOSE.EncodeBase64()
-
 	// Validate using library
-	result, err := validation.ValidateAuctionAttestation(attestationCOSEBase64, auctionInput.BidID, auctionInput.BidPrice)
+	result, err := validation.ValidateAuctionAttestation(auctionInput)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Validation error: %v\n", err)
 		os.Exit(2)
@@ -79,7 +71,7 @@ func showUsage() {
 	fmt.Println("  auction-validator <json-input> [options]")
 	fmt.Println()
 	fmt.Println("Arguments:")
-	fmt.Println("  <json-input>                      JSON string containing bid_id, bid_price, and attestation_cose_gzip_base64")
+	fmt.Println("  <json-input>                      JSON string with bid details and attestation")
 	fmt.Println()
 	fmt.Println("Optional Flags:")
 	fmt.Println("  --format <text|json>              Output format (default: text)")
@@ -89,15 +81,20 @@ func showUsage() {
 	fmt.Println("  {")
 	fmt.Println("    \"bid_id\": \"bid-123\",")
 	fmt.Println("    \"bid_price\": 2.50,")
+	fmt.Println("    \"bid_floor\": 2.00,")
+	fmt.Println("    \"clearing_price\": 2.50,                    // or null if no winner")
+	fmt.Println("    \"adjustment_factors\": {\"meta\": 1.0},     // optional, defaults to {}")
+	fmt.Println("    \"auction_id\": \"auction-123\",             // required for request hash")
+	fmt.Println("    \"round_id\": 1,                             // required for request hash")
 	fmt.Println("    \"attestation_cose_gzip_base64\": \"H4sIAAAA...\"")
 	fmt.Println("  }")
 	fmt.Println()
 	fmt.Println("Examples:")
-	fmt.Println("  # Validate bid was included in auction")
-	fmt.Println("  auction-validator '{\"bid_id\":\"bid-123\",\"bid_price\":2.50,\"attestation_cose_gzip_base64\":\"...\"}'")
+	fmt.Println("  # Validate winning bid")
+	fmt.Println("  auction-validator '{\"bid_id\":\"bid-123\",\"bid_price\":2.50,\"bid_floor\":2.00,\"clearing_price\":2.50,\"auction_id\":\"auction-123\",\"round_id\":1,\"attestation_cose_gzip_base64\":\"...\"}'")
 	fmt.Println()
-	fmt.Println("  # JSON output")
-	fmt.Println("  auction-validator --format json '{\"bid_id\":\"bid-123\",\"bid_price\":2.50,\"attestation_cose_gzip_base64\":\"...\"}'")
+	fmt.Println("  # Validate losing bid (no winner)")
+	fmt.Println("  auction-validator '{\"bid_id\":\"bid-456\",\"bid_price\":1.50,\"bid_floor\":2.00,\"clearing_price\":null,\"auction_id\":\"auction-123\",\"round_id\":1,\"attestation_cose_gzip_base64\":\"...\"}'")
 	fmt.Println()
 	fmt.Println("Exit Codes:")
 	fmt.Println("  0 - Validation passed")
@@ -109,31 +106,53 @@ func showUsage() {
 	fmt.Println("  github.com/cloudx-io/openauction/validation")
 }
 
-type auctionInput struct {
-	BidID       string                         `json:"bid_id"`
-	BidPrice    float64                        `json:"bid_price"`
-	Attestation enclaveapi.AttestationCOSEGzip `json:"attestation_cose_gzip_base64"`
-}
+func parseAuctionInput(jsonInput string) (*validation.AuctionValidationInput, error) {
+	var rawInput struct {
+		BidID             string                         `json:"bid_id"`
+		BidPrice          float64                        `json:"bid_price"`
+		BidFloor          float64                        `json:"bid_floor"`
+		ClearingPrice     *float64                       `json:"clearing_price"`
+		AdjustmentFactors map[string]float64             `json:"adjustment_factors"`
+		AuctionID         string                         `json:"auction_id"`
+		RoundID           int                            `json:"round_id"`
+		Attestation       enclaveapi.AttestationCOSEGzip `json:"attestation_cose_gzip_base64"`
+	}
 
-func parseAuctionInput(jsonInput string) (*auctionInput, error) {
-	var input auctionInput
-	if err := json.Unmarshal([]byte(jsonInput), &input); err != nil {
+	if err := json.Unmarshal([]byte(jsonInput), &rawInput); err != nil {
 		return nil, fmt.Errorf("failed to parse JSON: %w", err)
 	}
 
-	if input.BidID == "" {
+	if rawInput.BidID == "" {
 		return nil, fmt.Errorf("missing bid_id field in JSON input")
 	}
 
-	if input.BidPrice == 0 {
+	if rawInput.BidPrice == 0 {
 		return nil, fmt.Errorf("missing or zero bid_price field in JSON input")
 	}
 
-	if input.Attestation.String() == "" {
+	if rawInput.Attestation.String() == "" {
 		return nil, fmt.Errorf("missing attestation_cose_gzip_base64 field in JSON input")
 	}
 
-	return &input, nil
+	if rawInput.AuctionID == "" {
+		return nil, fmt.Errorf("missing auction_id field in JSON input")
+	}
+
+	// Initialize adjustment factors to empty map if not provided
+	if rawInput.AdjustmentFactors == nil {
+		rawInput.AdjustmentFactors = map[string]float64{}
+	}
+
+	return &validation.AuctionValidationInput{
+		AttestationCOSEGzip: rawInput.Attestation,
+		BidID:               rawInput.BidID,
+		BidPrice:            rawInput.BidPrice,
+		BidFloor:            rawInput.BidFloor,
+		ClearingPrice:       rawInput.ClearingPrice,
+		AdjustmentFactors:   rawInput.AdjustmentFactors,
+		AuctionID:           rawInput.AuctionID,
+		RoundID:             rawInput.RoundID,
+	}, nil
 }
 
 func outputText(result *validation.AuctionValidationResult) {
@@ -146,10 +165,14 @@ func outputText(result *validation.AuctionValidationResult) {
 
 	fmt.Println()
 	fmt.Println("Summary:")
-	fmt.Printf("  PCRs Valid:        %v\n", result.PCRsValid)
-	fmt.Printf("  Certificate Valid: %v\n", result.CertificateValid)
-	fmt.Printf("  Signature Valid:   %v\n", result.SignatureValid)
-	fmt.Printf("  Bid Hash Valid:    %v\n", result.BidHashValid)
+	fmt.Printf("  PCRs Valid:              %v\n", result.PCRsValid)
+	fmt.Printf("  Certificate Valid:       %v\n", result.CertificateValid)
+	fmt.Printf("  Signature Valid:         %v\n", result.SignatureValid)
+	fmt.Printf("  Bid Hash Valid:          %v\n", result.BidHashValid)
+	fmt.Printf("  Clearing Price Valid:    %v\n", result.ClearingPriceValid)
+	fmt.Printf("  Bid Floor Valid:         %v\n", result.BidFloorValid)
+	fmt.Printf("  Adjustment Hash Valid:   %v\n", result.AdjustmentHashValid)
+	fmt.Printf("  Request Hash Valid:      %v\n", result.RequestHashValid)
 
 	fmt.Println()
 	fmt.Println("Details:")
@@ -170,12 +193,16 @@ func outputText(result *validation.AuctionValidationResult) {
 
 func outputJSON(result *validation.AuctionValidationResult) {
 	output := map[string]any{
-		"valid":             result.IsValid(),
-		"pcrs_valid":        result.PCRsValid,
-		"certificate_valid": result.CertificateValid,
-		"signature_valid":   result.SignatureValid,
-		"bid_hash_valid":    result.BidHashValid,
-		"details":           result.ValidationDetails,
+		"valid":                 result.IsValid(),
+		"pcrs_valid":            result.PCRsValid,
+		"certificate_valid":     result.CertificateValid,
+		"signature_valid":       result.SignatureValid,
+		"bid_hash_valid":        result.BidHashValid,
+		"clearing_price_valid":  result.ClearingPriceValid,
+		"bid_floor_valid":       result.BidFloorValid,
+		"adjustment_hash_valid": result.AdjustmentHashValid,
+		"request_hash_valid":    result.RequestHashValid,
+		"details":               result.ValidationDetails,
 	}
 
 	data, err := json.MarshalIndent(output, "", "  ")

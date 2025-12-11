@@ -3,7 +3,6 @@ package main
 import (
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
@@ -11,7 +10,6 @@ import (
 	"encoding/pem"
 	"fmt"
 	"log"
-	"sort"
 	"time"
 
 	enclave "github.com/edgebitio/nitro-enclaves-sdk-go"
@@ -78,27 +76,11 @@ func generateNonce() (string, error) {
 }
 
 func calculateRequestHash(req enclaveapi.EnclaveAuctionRequest, nonce string) string {
-	data := fmt.Sprintf("%s|%d|%s", req.AuctionID, req.RoundID, nonce)
-	hash := sha256.Sum256([]byte(data))
-	return fmt.Sprintf("%x", hash)
+	return core.ComputeRequestHash(req.AuctionID, req.RoundID, nonce)
 }
 
 func calculateAdjustmentFactorsHash(adjustmentFactors map[string]float64, nonce string) string {
-	data := nonce
-
-	// Sort bidders to ensure deterministic hash calculation
-	bidders := make([]string, 0, len(adjustmentFactors))
-	for bidder := range adjustmentFactors {
-		bidders = append(bidders, bidder)
-	}
-	sort.Strings(bidders)
-
-	for _, bidder := range bidders {
-		factor := adjustmentFactors[bidder]
-		data += fmt.Sprintf("|%s:%.6f", bidder, factor)
-	}
-	hash := sha256.Sum256([]byte(data))
-	return fmt.Sprintf("%x", hash)
+	return core.ComputeAdjustmentFactorsHash(adjustmentFactors, nonce)
 }
 
 // stripBidderName converts a CoreBid to CoreBidWithoutBidder, removing bidder identity

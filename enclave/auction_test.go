@@ -68,7 +68,7 @@ func TestProcessAuction_OneBid(t *testing.T) {
 
 	// Verify bid hashes contains single bid
 	nonce := response.AttestationDoc.UserData.BidHashNonce
-	expectedHash := generateBidHash("bid1", 2.50, nonce)
+	expectedHash := core.ComputeBidHash("bid1", 2.50, nonce)
 
 	check.Equal(t, 1, len(response.AttestationDoc.UserData.BidHashes))
 	check.True(t, slices.Contains(response.AttestationDoc.UserData.BidHashes, expectedHash))
@@ -112,8 +112,8 @@ func TestProcessAuction_TwoBids(t *testing.T) {
 
 	// Verify bid hashes contains both bids
 	nonce := response.AttestationDoc.UserData.BidHashNonce
-	hash1 := generateBidHash("bid1", 2.50, nonce)
-	hash2 := generateBidHash("bid2", 3.00, nonce)
+	hash1 := core.ComputeBidHash("bid1", 2.50, nonce)
+	hash2 := core.ComputeBidHash("bid2", 3.00, nonce)
 
 	check.Equal(t, 2, len(response.AttestationDoc.UserData.BidHashes))
 	check.True(t, slices.Contains(response.AttestationDoc.UserData.BidHashes, hash1))
@@ -162,9 +162,9 @@ func TestProcessAuction_ThreeBids(t *testing.T) {
 
 	// Verify bid hashes contains all three bids
 	nonce := response.AttestationDoc.UserData.BidHashNonce
-	hash1 := generateBidHash("bid1", 2.50, nonce)
-	hash2 := generateBidHash("bid2", 3.00, nonce)
-	hash3 := generateBidHash("bid3", 2.25, nonce)
+	hash1 := core.ComputeBidHash("bid1", 2.50, nonce)
+	hash2 := core.ComputeBidHash("bid2", 3.00, nonce)
+	hash3 := core.ComputeBidHash("bid3", 2.25, nonce)
 
 	check.Equal(t, 3, len(response.AttestationDoc.UserData.BidHashes))
 	check.True(t, slices.Contains(response.AttestationDoc.UserData.BidHashes, hash1))

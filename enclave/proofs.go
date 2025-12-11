@@ -46,7 +46,7 @@ func GenerateTEEProofs(attester EnclaveAttester, req enclaveapi.EnclaveAuctionRe
 	// Build list of bid hashes from unencrypted bid prices
 	bidHashes := make([]string, 0, len(unencryptedBids))
 	for _, bid := range unencryptedBids {
-		bidHashes = append(bidHashes, generateBidHash(bid.ID, bid.Price, bidHashNonce))
+		bidHashes = append(bidHashes, core.ComputeBidHash(bid.ID, bid.Price, bidHashNonce))
 	}
 
 	requestHash := calculateRequestHash(req, requestNonce)
@@ -75,12 +75,6 @@ func generateNonce() (string, error) {
 		return "", fmt.Errorf("failed to generate secure nonce - %w", err)
 	}
 	return hex.EncodeToString(randomBytes), nil
-}
-
-func generateBidHash(bidID string, price float64, nonce string) string {
-	data := fmt.Sprintf("%s|%.6f|%s", bidID, price, nonce)
-	hash := sha256.Sum256([]byte(data))
-	return fmt.Sprintf("%x", hash)
 }
 
 func calculateRequestHash(req enclaveapi.EnclaveAuctionRequest, nonce string) string {

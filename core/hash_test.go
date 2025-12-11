@@ -1,0 +1,134 @@
+package core
+
+import (
+	"crypto/sha256"
+	"fmt"
+	"testing"
+)
+
+func TestComputeBidHash(t *testing.T) {
+	bidID := "bid_123"
+	price := 2.50
+	nonce := "test_nonce_456"
+
+	hash := ComputeBidHash(bidID, price, nonce)
+
+	// Verify hash is 64 characters (SHA256 hex encoding)
+	if len(hash) != 64 {
+		t.Errorf("ComputeBidHash() hash length = %d, want 64", len(hash))
+	}
+
+	// Verify hash contains only hex characters
+	for _, c := range hash {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+			t.Errorf("ComputeBidHash() contains non-hex character: %c", c)
+		}
+	}
+
+	// Same inputs should produce same hash (deterministic)
+	hash2 := ComputeBidHash(bidID, price, nonce)
+	if hash != hash2 {
+		t.Errorf("ComputeBidHash() not deterministic")
+	}
+
+	// Different inputs should produce different hashes
+	hash3 := ComputeBidHash(bidID, price+1, nonce)
+	if hash == hash3 {
+		t.Errorf("Different inputs should produce different hashes")
+	}
+
+	// Verify exact hash calculation
+	expectedData := fmt.Sprintf("%s|%.6f|%s", bidID, price, nonce)
+	expectedHash := fmt.Sprintf("%x", sha256.Sum256([]byte(expectedData)))
+	if hash != expectedHash {
+		t.Errorf("ComputeBidHash() = %v, want %v", hash, expectedHash)
+	}
+}
+
+func TestComputeBidHash_PriceFormatting(t *testing.T) {
+	// Test that price is formatted to exactly 6 decimal places
+	nonce := "test"
+
+	// These should produce the same hash because they're the same to 6 decimal places
+	hash1 := ComputeBidHash("bid-1", 2.123456, nonce)
+	hash2 := ComputeBidHash("bid-1", 2.1234560, nonce)
+	hash3 := ComputeBidHash("bid-1", 2.12345600000, nonce)
+
+	if hash1 != hash2 || hash1 != hash3 {
+		t.Errorf("Prices with same 6 decimal places should produce same hash")
+	}
+
+	// These should produce different hashes (differ in 6th decimal)
+	hash4 := ComputeBidHash("bid-1", 2.123456, nonce)
+	hash5 := ComputeBidHash("bid-1", 2.123457, nonce)
+
+	if hash4 == hash5 {
+		t.Errorf("Prices with different 6th decimal should produce different hashes")
+	}
+}
+
+func TestComputeBidHash_DifferentInputs(t *testing.T) {
+	nonce := "test-nonce"
+
+	// Different bid IDs should produce different hashes
+	hash1 := ComputeBidHash("bid-1", 2.50, nonce)
+	hash2 := ComputeBidHash("bid-2", 2.50, nonce)
+	if hash1 == hash2 {
+		t.Errorf("Different bid IDs should produce different hashes")
+	}
+
+	// Different prices should produce different hashes
+	hash3 := ComputeBidHash("bid-1", 2.50, nonce)
+	hash4 := ComputeBidHash("bid-1", 2.51, nonce)
+	if hash3 == hash4 {
+		t.Errorf("Different prices should produce different hashes")
+	}
+
+	// Different nonces should produce different hashes
+	hash5 := ComputeBidHash("bid-1", 2.50, "nonce-1")
+	hash6 := ComputeBidHash("bid-1", 2.50, "nonce-2")
+	if hash5 == hash6 {
+		t.Errorf("Different nonces should produce different hashes")
+	}
+}
+
+func TestComputeBidHash_EdgeCases(t *testing.T) {
+	testCases := []struct {
+		name  string
+		bidID string
+		price float64
+		nonce string
+	}{
+		{"zero price", "bid-1", 0.0, "nonce"},
+		{"high price", "bid-1", 999.999999, "nonce"},
+		{"many decimals", "bid-2", 1.234567891234, "nonce"},
+		{"negative price", "bid-3", -1.50, "nonce"},
+		{"empty bid ID", "", 2.50, "nonce"},
+		{"empty nonce", "bid-1", 2.50, ""},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			hash := ComputeBidHash(tc.bidID, tc.price, tc.nonce)
+
+			// Verify the hash is deterministic
+			hash2 := ComputeBidHash(tc.bidID, tc.price, tc.nonce)
+			if hash != hash2 {
+				t.Errorf("Hash not deterministic for bidID=%s, price=%f, nonce=%s",
+					tc.bidID, tc.price, tc.nonce)
+			}
+
+			// Verify hash format
+			if len(hash) != 64 {
+				t.Errorf("Hash has wrong length: got %d, want 64", len(hash))
+			}
+
+			// Verify hash contains only hex characters
+			for _, c := range hash {
+				if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+					t.Errorf("Hash contains non-hex character: %c", c)
+				}
+			}
+		})
+	}
+}

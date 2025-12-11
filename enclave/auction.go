@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -58,7 +57,7 @@ func ProcessAuction(attester EnclaveAttester, req enclaveapi.EnclaveAuctionReque
 	winner := auctionResult.Winner
 	runnerUp := auctionResult.RunnerUp
 
-	teeData, attestationCOSE, err := GenerateTEEProofs(attester, req, unencryptedBids, winner, runnerUp)
+	teeData, coseAttestation, err := GenerateTEEProofs(attester, req, unencryptedBids, winner, runnerUp)
 	processingTime := time.Since(startTime).Milliseconds()
 
 	log.Printf("INFO: Auction complete: winner=%s (%.2f), runner-up=%s (%.2f), processing=%dms",
@@ -82,7 +81,7 @@ func ProcessAuction(attester EnclaveAttester, req enclaveapi.EnclaveAuctionReque
 		Success:               true,
 		Message:               fmt.Sprintf("Processed %d bids in enclave", len(req.Bids)),
 		AttestationDoc:        teeData,
-		AttestationCOSEBase64: base64.StdEncoding.EncodeToString(attestationCOSE),
+		AttestationCOSEBase64: coseAttestation.EncodeBase64(),
 		ExcludedBids:          excludedBids,
 		FloorRejectedBidIDs:   floorRejectedBidIDs,
 		ProcessingTime:        processingTime,

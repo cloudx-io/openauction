@@ -22,7 +22,7 @@ import (
 // Returns:
 //   - KeyValidationResult with detailed results (call result.IsValid() to check overall status)
 //   - error if validation cannot be performed (e.g., malformed input, missing config)
-func ValidateKeyAttestation(attestationCOSEBase64 string, expectedPublicKey string) (*KeyValidationResult, error) {
+func ValidateKeyAttestation(attestationCOSEBase64 enclaveapi.AttestationCOSEBase64, expectedPublicKey string) (*KeyValidationResult, error) {
 	// Perform common attestation validation (PCRs, certificate, signature)
 	baseResult, err := validateCommonAttestation(attestationCOSEBase64)
 	if err != nil {
@@ -64,9 +64,9 @@ func ValidateKeyAttestation(attestationCOSEBase64 string, expectedPublicKey stri
 
 // parseKeyAttestationFromCOSE parses a KeyAttestationDoc from base64-encoded COSE bytes
 // This extracts the attestation document from the COSE_Sign1 payload
-func parseKeyAttestationFromCOSE(attestationCOSEB64 string) (*enclaveapi.KeyAttestationDoc, error) {
+func parseKeyAttestationFromCOSE(attestationCOSEB64 enclaveapi.AttestationCOSEBase64) (*enclaveapi.KeyAttestationDoc, error) {
 	// Decode base64 COSE bytes
-	coseBytes, err := base64.StdEncoding.DecodeString(attestationCOSEB64)
+	coseBytes, err := attestationCOSEB64.Decode()
 	if err != nil {
 		return nil, fmt.Errorf("decode COSE bytes: %w", err)
 	}

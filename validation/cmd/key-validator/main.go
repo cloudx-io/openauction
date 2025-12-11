@@ -13,39 +13,43 @@ import (
 func main() {
 	// Define CLI flags
 	var (
-		attestationPath = flag.String("attestation", "", "Path to key response JSON file (required)")
-		publicKeyPath   = flag.String("public-key", "", "Path to public key PEM file (required)")
-		outputFormat    = flag.String("format", "text", "Output format: text or json")
-		help            = flag.Bool("help", false, "Show usage information")
+		outputFormat = flag.String("format", "text", "Output format: text or json")
+		help         = flag.Bool("help", false, "Show usage information")
 	)
 
 	flag.Parse()
 
 	// Show help
-	if *help || *attestationPath == "" || *publicKeyPath == "" {
+	if *help {
 		showUsage()
-		if *attestationPath == "" || *publicKeyPath == "" {
-			os.Exit(1)
-		}
 		os.Exit(0)
 	}
 
-	// Read key response file
-	keyResponse, err := readKeyResponse(*attestationPath)
+	// Check for JSON input argument
+	if flag.NArg() == 0 {
+		showUsage()
+		fmt.Fprintf(os.Stderr, "\nError: JSON input is required\n")
+		os.Exit(1)
+	}
+
+	// Parse JSON input
+	jsonInput := flag.Arg(0)
+	keyWithAttestation, err := parseKeyWithAttestation(jsonInput)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading attestation: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error parsing JSON input: %v\n", err)
 		os.Exit(2)
 	}
 
-	// Read public key file
-	publicKey, err := readPublicKey(*publicKeyPath)
+	// Convert AttestationCOSEGzip to AttestationCOSEBase64
+	attestationCOSE, err := keyWithAttestation.Attestation.Decompress()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading public key: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error decompressing attestation: %v\n", err)
 		os.Exit(2)
 	}
+	attestationCOSEBase64 := attestationCOSE.EncodeBase64()
 
 	// Validate using library
-	result, err := validation.ValidateKeyAttestation(keyResponse.AttestationCOSEBase64, publicKey)
+	result, err := validation.ValidateKeyAttestation(attestationCOSEBase64, keyWithAttestation.PublicKey)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Validation error: %v\n", err)
 		os.Exit(2)
@@ -72,22 +76,27 @@ func showUsage() {
 	fmt.Println("Example CLI tool demonstrating the validation library.")
 	fmt.Println()
 	fmt.Println("Usage:")
-	fmt.Println("  tee-key-validator --attestation <path> --public-key <pem> [options]")
+	fmt.Println("  tee-key-validator <json-input> [options]")
 	fmt.Println()
-	fmt.Println("Required Flags:")
-	fmt.Println("  --attestation <path>              Path to key response JSON file")
-	fmt.Println("  --public-key <path>               Path to public key PEM file")
+	fmt.Println("Arguments:")
+	fmt.Println("  <json-input>                      JSON string containing public_key and attestation_cose_gzip_base64")
 	fmt.Println()
 	fmt.Println("Optional Flags:")
 	fmt.Println("  --format <text|json>              Output format (default: text)")
 	fmt.Println("  --help                            Show this help message")
 	fmt.Println()
+	fmt.Println("JSON Input Format:")
+	fmt.Println("  {")
+	fmt.Println("    \"public_key\": \"-----BEGIN PUBLIC KEY-----\\n...\",")
+	fmt.Println("    \"attestation_cose_gzip_base64\": \"H4sIAAAA...\"")
+	fmt.Println("  }")
+	fmt.Println()
 	fmt.Println("Examples:")
 	fmt.Println("  # Validate key attestation")
-	fmt.Println("  tee-key-validator --attestation response.json --public-key public_key.pem")
+	fmt.Println("  tee-key-validator '{\"public_key\":\"...\",\"attestation_cose_gzip_base64\":\"...\"}'")
 	fmt.Println()
 	fmt.Println("  # JSON output")
-	fmt.Println("  tee-key-validator --attestation response.json --public-key public_key.pem --format json")
+	fmt.Println("  tee-key-validator --format json '{\"public_key\":\"...\",\"attestation_cose_gzip_base64\":\"...\"}'")
 	fmt.Println()
 	fmt.Println("Exit Codes:")
 	fmt.Println("  0 - Validation passed")
@@ -99,31 +108,21 @@ func showUsage() {
 	fmt.Println("  github.com/cloudx-io/openauction/validation")
 }
 
-func readKeyResponse(path string) (*enclaveapi.KeyResponse, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file: %w", err)
-	}
-
-	var keyResponse enclaveapi.KeyResponse
-	if err := json.Unmarshal(data, &keyResponse); err != nil {
+func parseKeyWithAttestation(jsonInput string) (*enclaveapi.KeyWithAttestation, error) {
+	var keyWithAttestation enclaveapi.KeyWithAttestation
+	if err := json.Unmarshal([]byte(jsonInput), &keyWithAttestation); err != nil {
 		return nil, fmt.Errorf("failed to parse JSON: %w", err)
 	}
 
-	if keyResponse.AttestationCOSEBase64 == "" {
-		return nil, fmt.Errorf("missing attestation_cose_base64 field in key response")
+	if keyWithAttestation.PublicKey == "" {
+		return nil, fmt.Errorf("missing public_key field in JSON input")
 	}
 
-	return &keyResponse, nil
-}
-
-func readPublicKey(path string) (string, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", fmt.Errorf("failed to read file: %w", err)
+	if keyWithAttestation.Attestation.String() == "" {
+		return nil, fmt.Errorf("missing attestation_cose_gzip_base64 field in JSON input")
 	}
 
-	return string(data), nil
+	return &keyWithAttestation, nil
 }
 
 func outputText(result *validation.KeyValidationResult) {

@@ -8,6 +8,8 @@ import (
 
 	"github.com/fxamacker/cbor/v2"
 	"github.com/veraison/go-cose"
+
+	enclaveapi "github.com/cloudx-io/openauction/enclaveapi"
 )
 
 // ExtractCOSEPayload extracts the payload from a COSE_Sign1 4-element array
@@ -33,9 +35,9 @@ func ExtractCOSEPayload(coseBytes []byte) ([]byte, error) {
 }
 
 // VerifyCOSESignature verifies a COSE_Sign1 signature given base64-encoded COSE bytes and certificate
-func VerifyCOSESignature(coseB64 string, certB64 string) error {
+func VerifyCOSESignature(coseB64 enclaveapi.AttestationCOSEBase64, certB64 string) error {
 	// Decode base64 COSE bytes
-	coseBytes, err := base64.StdEncoding.DecodeString(coseB64)
+	coseBytes, err := coseB64.Decode()
 	if err != nil {
 		return fmt.Errorf("decode COSE bytes: %w", err)
 	}

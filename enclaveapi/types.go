@@ -164,6 +164,13 @@ type KeyResponse struct {
 	AttestationCOSEBase64 AttestationCOSEBase64 `json:"attestation_cose_base64,omitempty"` // Base64-encoded COSE_Sign1 attestation
 }
 
+// KeyWithAttestation represents a public key with its TEE attestation
+// Used in bid requests and key validation tools
+type KeyWithAttestation struct {
+	PublicKey   string              `json:"public_key"`                             // PEM-encoded RSA public key
+	Attestation AttestationCOSEGzip `json:"attestation_cose_gzip_base64,omitempty"` // Gzipped and base64-encoded COSE_Sign1 attestation
+}
+
 // KeyAttestationUserData represents the key-specific data embedded in key attestation
 type KeyAttestationUserData struct {
 	KeyAlgorithm string `json:"key_algorithm"` // e.g., "RSA-2048"

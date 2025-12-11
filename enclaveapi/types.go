@@ -189,9 +189,7 @@ func (a AttestationCOSE) EncodeBase64() AttestationCOSEBase64 {
 // EncodeURLSafe converts COSE bytes to URL-safe base64 string (no padding)
 func (a AttestationCOSE) EncodeURLSafe() AttestationCOSEURLBase64 {
 	encoded := base64.URLEncoding.EncodeToString(a)
-	// Remove padding for URL safety
-	encoded = strings.TrimRight(encoded, "=")
-	return AttestationCOSEURLBase64(encoded)
+	return AttestationCOSEURLBase64(removeBase64Padding(encoded))
 }
 
 // CompressGzip compresses COSE bytes with GZIP and encodes as base64url (no padding)
@@ -211,8 +209,7 @@ func (a AttestationCOSE) CompressGzip() (AttestationCOSEGzip, error) {
 
 	// Encode to URL-safe base64 without padding
 	encoded := base64.URLEncoding.EncodeToString(buf.Bytes())
-	encoded = strings.TrimRight(encoded, "=")
-	return AttestationCOSEGzip(encoded), nil
+	return AttestationCOSEGzip(removeBase64Padding(encoded)), nil
 }
 
 // AttestationCOSEBase64 represents standard base64-encoded COSE bytes
@@ -245,13 +242,22 @@ func (a AttestationCOSEBase64) CompressGzip() (AttestationCOSEGzip, error) {
 // AttestationCOSEURLBase64 represents URL-safe base64-encoded COSE bytes (no padding)
 type AttestationCOSEURLBase64 string
 
-// Decode converts URL-safe base64 string to raw COSE bytes
-func (a AttestationCOSEURLBase64) Decode() (AttestationCOSE, error) {
-	str := string(a)
-	// Add padding if needed
+// addBase64Padding adds padding to a base64 string if needed
+func addBase64Padding(str string) string {
 	if padding := len(str) % 4; padding > 0 {
 		str += strings.Repeat("=", 4-padding)
 	}
+	return str
+}
+
+// removeBase64Padding removes padding from a base64 string for URL safety
+func removeBase64Padding(str string) string {
+	return strings.TrimRight(str, "=")
+}
+
+// Decode converts URL-safe base64 string to raw COSE bytes
+func (a AttestationCOSEURLBase64) Decode() (AttestationCOSE, error) {
+	str := addBase64Padding(string(a))
 	data, err := base64.URLEncoding.DecodeString(str)
 	if err != nil {
 		return nil, fmt.Errorf("decode COSE URL base64: %w", err)
@@ -277,10 +283,7 @@ func (a AttestationCOSEGzip) String() string {
 // Decompress decompresses and returns raw COSE bytes
 func (a AttestationCOSEGzip) Decompress() (AttestationCOSE, error) {
 	// Add padding if needed for base64url decoding
-	str := string(a)
-	if padding := len(str) % 4; padding > 0 {
-		str += strings.Repeat("=", 4-padding)
-	}
+	str := addBase64Padding(string(a))
 
 	// Decode base64url
 	gzipData, err := base64.URLEncoding.DecodeString(str)

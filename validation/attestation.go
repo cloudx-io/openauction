@@ -1,13 +1,9 @@
 package validation
 
 import (
-	"encoding/base64"
 	"fmt"
 
-	"github.com/fxamacker/cbor/v2"
-
 	enclaveapi "github.com/cloudx-io/openauction/enclaveapi"
-	"github.com/cloudx-io/openauction/enclaveapi/parsing"
 )
 
 // validateCommonAttestation performs validation common to all attestation types
@@ -20,23 +16,11 @@ func validateCommonAttestation(attestationCOSEBase64 enclaveapi.AttestationCOSEB
 		return nil, fmt.Errorf("decode COSE bytes: %w", err)
 	}
 
-	payload, err := ExtractCOSEPayload(coseBytes)
+	attestationDoc, _, err := coseBytes.ParseAttestationDoc()
 	if err != nil {
-		return nil, fmt.Errorf("extract COSE payload: %w", err)
+		return nil, fmt.Errorf("parse attestation document: %w", err)
 	}
 
-	var doc parsing.NitroAttestationDocument
-	if err := cbor.Unmarshal(payload, &doc); err != nil {
-		return nil, fmt.Errorf("parse CBOR attestation document: %w", err)
-	}
-
-	// Convert to AttestationDoc
-	pcrs := parsing.ExtractPCRs(doc.PCRs)
-	attestationDoc := &enclaveapi.AttestationDoc{
-		PCRs:        pcrs,
-		Certificate: base64.StdEncoding.EncodeToString(doc.Certificate),
-		CABundle:    parsing.EncodeCertificateBundle(doc.CABundle),
-	}
 	result := &BaseValidationResult{
 		ValidationDetails: []string{},
 	}

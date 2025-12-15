@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fxamacker/cbor/v2"
+
 	"github.com/cloudx-io/openauction/core"
 )
 
@@ -77,7 +79,7 @@ type AttestationDoc struct {
 type AuctionAttestationDoc struct {
 	AttestationDoc
 	// User data embedded in the attestation (auction proof data)
-	UserData *AttestationUserData `json:"user_data"`
+	UserData *AuctionAttestationUserData `json:"user_data"`
 }
 
 // KeyAttestationDoc represents attestation specifically for key distribution
@@ -97,8 +99,8 @@ type CoreBidWithoutBidder struct {
 	BidType  string  `json:"bid_type,omitempty"`
 }
 
-// AttestationUserData represents the auction-specific data embedded in the attestation
-type AttestationUserData struct {
+// AuctionAttestationUserData represents the auction-specific data embedded in the attestation
+type AuctionAttestationUserData struct {
 	AuctionID              string                `json:"auction_id"`
 	RoundID                int                   `json:"round_id"`
 	BidHashes              []string              `json:"bid_hashes"`
@@ -145,14 +147,13 @@ type EnclaveAuctionRequest struct {
 
 // EnclaveAuctionResponse represents the response from TEE enclaves after auction processing
 type EnclaveAuctionResponse struct {
-	Type                  string                 `json:"type"`
-	Success               bool                   `json:"success"`
-	Message               string                 `json:"message"`
-	AttestationDoc        *AuctionAttestationDoc `json:"attestation_document,omitempty"`    // Deprecated: Use attestation_cose_base64
-	AttestationCOSEBase64 AttestationCOSEBase64  `json:"attestation_cose_base64,omitempty"` // Base64-encoded COSE_Sign1 attestation
-	ExcludedBids          []core.ExcludedBid     `json:"excluded_bids,omitempty"`           // Decryption failures, validation errors
-	FloorRejectedBidIDs   []string               `json:"floor_rejected_bid_ids,omitempty"`  // Bid IDs that were below floor
-	ProcessingTime        int64                  `json:"processing_time_ms"`
+	Type                  string                `json:"type"`
+	Success               bool                  `json:"success"`
+	Message               string                `json:"message"`
+	AttestationCOSEBase64 AttestationCOSEBase64 `json:"attestation_cose_base64,omitempty"` // Base64-encoded COSE_Sign1 attestation
+	ExcludedBids          []core.ExcludedBid    `json:"excluded_bids,omitempty"`           // Decryption failures, validation errors
+	FloorRejectedBidIDs   []string              `json:"floor_rejected_bid_ids,omitempty"`  // Bid IDs that were below floor
+	ProcessingTime        int64                 `json:"processing_time_ms"`
 }
 
 // KeyResponse represents the response from a key request to the TEE enclave
@@ -180,6 +181,82 @@ type KeyAttestationUserData struct {
 
 // AttestationCOSE represents raw COSE_Sign1 bytes from AWS Nitro Enclaves
 type AttestationCOSE []byte
+
+// nitroAttestationDocument represents the raw CBOR structure from AWS Nitro Enclaves
+// This is an internal type used only by ParseAttestationDoc()
+type nitroAttestationDocument struct {
+	ModuleID    string            `cbor:"module_id"`
+	Digest      string            `cbor:"digest"`
+	Timestamp   uint64            `cbor:"timestamp"`
+	PCRs        map[uint64][]byte `cbor:"pcrs"`
+	Certificate []byte            `cbor:"certificate"`
+	CABundle    [][]byte          `cbor:"cabundle"`
+	PublicKey   []byte            `cbor:"public_key"`
+	UserData    []byte            `cbor:"user_data"`
+	Nonce       []byte            `cbor:"nonce"`
+}
+
+// ParseAttestationDoc extracts the AttestationDoc and user data from AWS Nitro COSE bytes.
+// Returns the attestation document and raw user_data bytes that can be unmarshaled into
+// the appropriate type (AttestationUserData for auctions, KeyAttestationUserData for keys, etc.).
+func (a AttestationCOSE) ParseAttestationDoc() (AttestationDoc, []byte, error) {
+	// Extract nested attestation document from AWS Nitro 4-element CBOR array
+	var outerArray []any
+	if err := cbor.Unmarshal(a, &outerArray); err != nil {
+		return AttestationDoc{}, nil, fmt.Errorf("parse outer array: %w", err)
+	}
+	if len(outerArray) < 3 {
+		return AttestationDoc{}, nil, fmt.Errorf("outer array has only %d elements, expected at least 3", len(outerArray))
+	}
+	nestedBytes, ok := outerArray[2].([]byte)
+	if !ok {
+		return AttestationDoc{}, nil, fmt.Errorf("array[2] is not []byte, type: %T", outerArray[2])
+	}
+
+	// Parse the CBOR into nitroAttestationDocument
+	var doc nitroAttestationDocument
+	if err := cbor.Unmarshal(nestedBytes, &doc); err != nil {
+		return AttestationDoc{}, nil, fmt.Errorf("unmarshal CBOR attestation: %w", err)
+	}
+
+	// Format PCRs
+	pcrs := PCRs{
+		ImageFileHash:   formatPCR(doc.PCRs[0]),
+		KernelHash:      formatPCR(doc.PCRs[1]),
+		ApplicationHash: formatPCR(doc.PCRs[2]),
+		IAMRoleHash:     formatPCR(doc.PCRs[3]),
+		InstanceIDHash:  formatPCR(doc.PCRs[4]),
+		SigningCertHash: formatPCR(doc.PCRs[8]),
+	}
+
+	// Encode certificate bundle
+	caBundle := make([]string, len(doc.CABundle))
+	for i, cert := range doc.CABundle {
+		caBundle[i] = base64.StdEncoding.EncodeToString(cert)
+	}
+
+	// Build AttestationDoc
+	attestationDoc := AttestationDoc{
+		ModuleID:        doc.ModuleID,
+		Timestamp:       time.Unix(int64(doc.Timestamp/1000), 0),
+		DigestAlgorithm: doc.Digest,
+		PCRs:            pcrs,
+		Certificate:     base64.StdEncoding.EncodeToString(doc.Certificate),
+		CABundle:        caBundle,
+		PublicKey:       base64.StdEncoding.EncodeToString(doc.PublicKey),
+		Nonce:           string(doc.Nonce),
+	}
+
+	return attestationDoc, doc.UserData, nil
+}
+
+// formatPCR formats PCR bytes as hex string
+func formatPCR(pcrData []byte) string {
+	if len(pcrData) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%x", pcrData)
+}
 
 // EncodeBase64 converts COSE bytes to standard base64 string
 func (a AttestationCOSE) EncodeBase64() AttestationCOSEBase64 {

@@ -26,7 +26,6 @@ func ProcessAuction(attester EnclaveAttester, req enclaveapi.EnclaveAuctionReque
 			Type:           "auction_response",
 			Success:        false,
 			Message:        fmt.Sprintf("Invalid negative floor price %.4f", req.BidFloor),
-			AttestationDoc: nil,
 			ProcessingTime: time.Since(startTime).Milliseconds(),
 		}
 	}
@@ -57,7 +56,7 @@ func ProcessAuction(attester EnclaveAttester, req enclaveapi.EnclaveAuctionReque
 	winner := auctionResult.Winner
 	runnerUp := auctionResult.RunnerUp
 
-	teeData, coseAttestation, err := GenerateTEEProofs(attester, req, unencryptedBids, winner, runnerUp)
+	coseAttestation, err := GenerateTEEProofs(attester, req, unencryptedBids, winner, runnerUp)
 	processingTime := time.Since(startTime).Milliseconds()
 
 	log.Printf("INFO: Auction complete: winner=%s (%.2f), runner-up=%s (%.2f), processing=%dms",
@@ -71,7 +70,6 @@ func ProcessAuction(attester EnclaveAttester, req enclaveapi.EnclaveAuctionReque
 			Type:           "auction_response",
 			Success:        false,
 			Message:        fmt.Sprintf("Enclave processing failed: %v", err),
-			AttestationDoc: nil,
 			ProcessingTime: processingTime,
 		}
 	}
@@ -80,7 +78,6 @@ func ProcessAuction(attester EnclaveAttester, req enclaveapi.EnclaveAuctionReque
 		Type:                  "auction_response",
 		Success:               true,
 		Message:               fmt.Sprintf("Processed %d bids in enclave", len(req.Bids)),
-		AttestationDoc:        teeData,
 		AttestationCOSEBase64: coseAttestation.EncodeBase64(),
 		ExcludedBids:          excludedBids,
 		FloorRejectedBidIDs:   floorRejectedBidIDs,

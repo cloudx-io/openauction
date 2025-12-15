@@ -1,16 +1,11 @@
 package validation
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
-
-	"github.com/fxamacker/cbor/v2"
 
 	enclaveapi "github.com/cloudx-io/openauction/enclaveapi"
-	"github.com/cloudx-io/openauction/enclaveapi/parsing"
 )
 
 // ValidateKeyAttestation validates a TEE key attestation from COSE bytes
@@ -72,45 +67,23 @@ func parseKeyAttestationFromCOSE(attestationCOSEB64 enclaveapi.AttestationCOSEBa
 	}
 
 	// Extract payload from COSE_Sign1 array
-	payload, err := ExtractCOSEPayload(coseBytes)
+	attestationDoc, userDataBytes, err := coseBytes.ParseAttestationDoc()
 	if err != nil {
-		return nil, fmt.Errorf("extract COSE payload: %w", err)
+		return nil, fmt.Errorf("parse attestation document: %w", err)
 	}
-
-	// Parse the CBOR attestation document
-	var doc parsing.NitroAttestationDocument
-	err = cbor.Unmarshal(payload, &doc)
-	if err != nil {
-		return nil, fmt.Errorf("parse CBOR attestation document: %w", err)
-	}
-
-	// Extract PCRs and convert to hex strings
-	pcrs := parsing.ExtractPCRs(doc.PCRs)
 
 	// Parse user data JSON to get KeyAttestationUserData
 	var keyUserData enclaveapi.KeyAttestationUserData
-	if len(doc.UserData) > 0 {
-		if err := json.Unmarshal(doc.UserData, &keyUserData); err != nil {
+	if len(userDataBytes) > 0 {
+		if err := json.Unmarshal(userDataBytes, &keyUserData); err != nil {
 			return nil, fmt.Errorf("parse user data: %w", err)
 		}
 	}
 
-	// Convert timestamp from milliseconds to time.Time
-	timestamp := time.Unix(int64(doc.Timestamp/1000), int64((doc.Timestamp%1000)*1000000))
-
-	// Build KeyAttestationDoc
+	// Build KeyAttestationDoc using the parsed attestation
 	attestation := &enclaveapi.KeyAttestationDoc{
-		AttestationDoc: enclaveapi.AttestationDoc{
-			ModuleID:        doc.ModuleID,
-			Timestamp:       timestamp,
-			DigestAlgorithm: doc.Digest,
-			PCRs:            pcrs,
-			Certificate:     base64.StdEncoding.EncodeToString(doc.Certificate),
-			CABundle:        parsing.EncodeCertificateBundle(doc.CABundle),
-			PublicKey:       base64.StdEncoding.EncodeToString(doc.PublicKey),
-			Nonce:           string(doc.Nonce),
-		},
-		UserData: &keyUserData,
+		AttestationDoc: attestationDoc,
+		UserData:       &keyUserData,
 	}
 
 	return attestation, nil

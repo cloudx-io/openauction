@@ -159,7 +159,6 @@ type EnclaveAuctionResponse struct {
 type KeyResponse struct {
 	Type                  string                `json:"type"`
 	PublicKey             string                `json:"public_key"`                        // PEM format
-	TEEInstanceIP         string                `json:"tee_instance_ip,omitempty"`         // Injected by HTTP bridge
 	KeyAttestation        *KeyAttestationDoc    `json:"key_attestation"`                   // Deprecated: Use attestation_cose_base64 instead
 	AttestationCOSEBase64 AttestationCOSEBase64 `json:"attestation_cose_base64,omitempty"` // Base64-encoded COSE_Sign1 attestation
 }

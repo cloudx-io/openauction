@@ -13,6 +13,21 @@ import (
 	"github.com/cloudx-io/openauction/enclaveapi"
 )
 
+// parseAttestationFromResponse is a test helper that parses the COSE attestation from a response
+func parseAttestationFromResponse(t *testing.T, response enclaveapi.EnclaveAuctionResponse) *enclaveapi.AuctionAttestationDoc {
+	t.Helper()
+
+	// Return nil for responses without attestation (e.g., validation failures)
+	if response.AttestationCOSEBase64 == "" {
+		return nil
+	}
+
+	coseBytes, err := response.AttestationCOSEBase64.Decode()
+	assert.Nil(t, err)
+
+	return parseAuctionAttestationFromCOSE(t, coseBytes)
+}
+
 func TestProcessAuction_ZeroBids(t *testing.T) {
 	mockAttester := CreateMockEnclave(t)
 
@@ -28,14 +43,14 @@ func TestProcessAuction_ZeroBids(t *testing.T) {
 	response := ProcessAuction(mockAttester, req, nil, tokenManager)
 
 	// Validate successful response and attestation structure
-	validateSuccessfulResponse(t, response, req, 0)
+	attestationDoc := validateSuccessfulResponse(t, response, req, 0)
 
 	// Verify attestation document contains no winner/runner-up
-	check.Nil(t, response.AttestationDoc.UserData.Winner)
-	check.Nil(t, response.AttestationDoc.UserData.RunnerUp)
+	check.Nil(t, attestationDoc.UserData.Winner)
+	check.Nil(t, attestationDoc.UserData.RunnerUp)
 
 	// Verify empty bid hashes
-	check.Equal(t, []string{}, response.AttestationDoc.UserData.BidHashes)
+	check.Equal(t, []string{}, attestationDoc.UserData.BidHashes)
 }
 
 func TestProcessAuction_OneBid(t *testing.T) {
@@ -56,22 +71,22 @@ func TestProcessAuction_OneBid(t *testing.T) {
 	response := ProcessAuction(mockAttester, req, nil, tokenManager)
 
 	// Validate successful response and attestation structure
-	validateSuccessfulResponse(t, response, req, 1)
+	attestationDoc := validateSuccessfulResponse(t, response, req, 1)
 
 	// Verify attestation document contains winner but no runner-up
-	check.NotNil(t, response.AttestationDoc.UserData.Winner)
-	check.Nil(t, response.AttestationDoc.UserData.RunnerUp)
+	check.NotNil(t, attestationDoc.UserData.Winner)
+	check.Nil(t, attestationDoc.UserData.RunnerUp)
 
 	// Verify winner details
-	check.Equal(t, "bid1", response.AttestationDoc.UserData.Winner.ID)
-	check.Equal(t, 2.50, response.AttestationDoc.UserData.Winner.Price)
+	check.Equal(t, "bid1", attestationDoc.UserData.Winner.ID)
+	check.Equal(t, 2.50, attestationDoc.UserData.Winner.Price)
 
 	// Verify bid hashes contains single bid
-	nonce := response.AttestationDoc.UserData.BidHashNonce
+	nonce := attestationDoc.UserData.BidHashNonce
 	expectedHash := generateBidHash("bid1", 2.50, nonce)
 
-	check.Equal(t, 1, len(response.AttestationDoc.UserData.BidHashes))
-	check.True(t, slices.Contains(response.AttestationDoc.UserData.BidHashes, expectedHash))
+	check.Equal(t, 1, len(attestationDoc.UserData.BidHashes))
+	check.True(t, slices.Contains(attestationDoc.UserData.BidHashes, expectedHash))
 }
 
 func TestProcessAuction_TwoBids(t *testing.T) {
@@ -96,28 +111,28 @@ func TestProcessAuction_TwoBids(t *testing.T) {
 	response := ProcessAuction(mockAttester, req, nil, tokenManager)
 
 	// Validate successful response and attestation structure
-	validateSuccessfulResponse(t, response, req, 2)
+	attestationDoc := validateSuccessfulResponse(t, response, req, 2)
 
 	// Verify attestation document contains winner and runner-up
-	check.NotNil(t, response.AttestationDoc.UserData.Winner)
-	check.NotNil(t, response.AttestationDoc.UserData.RunnerUp)
+	check.NotNil(t, attestationDoc.UserData.Winner)
+	check.NotNil(t, attestationDoc.UserData.RunnerUp)
 
 	// Verify winner is the highest bid (bidder_b at 3.00)
-	check.Equal(t, "bid2", response.AttestationDoc.UserData.Winner.ID)
-	check.Equal(t, 3.00, response.AttestationDoc.UserData.Winner.Price)
+	check.Equal(t, "bid2", attestationDoc.UserData.Winner.ID)
+	check.Equal(t, 3.00, attestationDoc.UserData.Winner.Price)
 
 	// Verify runner-up is the second highest bid (bidder_a at 2.50)
-	check.Equal(t, "bid1", response.AttestationDoc.UserData.RunnerUp.ID)
-	check.Equal(t, 2.50, response.AttestationDoc.UserData.RunnerUp.Price)
+	check.Equal(t, "bid1", attestationDoc.UserData.RunnerUp.ID)
+	check.Equal(t, 2.50, attestationDoc.UserData.RunnerUp.Price)
 
 	// Verify bid hashes contains both bids
-	nonce := response.AttestationDoc.UserData.BidHashNonce
+	nonce := attestationDoc.UserData.BidHashNonce
 	hash1 := generateBidHash("bid1", 2.50, nonce)
 	hash2 := generateBidHash("bid2", 3.00, nonce)
 
-	check.Equal(t, 2, len(response.AttestationDoc.UserData.BidHashes))
-	check.True(t, slices.Contains(response.AttestationDoc.UserData.BidHashes, hash1))
-	check.True(t, slices.Contains(response.AttestationDoc.UserData.BidHashes, hash2))
+	check.Equal(t, 2, len(attestationDoc.UserData.BidHashes))
+	check.True(t, slices.Contains(attestationDoc.UserData.BidHashes, hash1))
+	check.True(t, slices.Contains(attestationDoc.UserData.BidHashes, hash2))
 }
 
 func TestProcessAuction_ThreeBids(t *testing.T) {
@@ -144,32 +159,32 @@ func TestProcessAuction_ThreeBids(t *testing.T) {
 	response := ProcessAuction(mockAttester, req, nil, tokenManager)
 
 	// Validate successful response and attestation structure
-	validateSuccessfulResponse(t, response, req, 3)
+	attestationDoc := validateSuccessfulResponse(t, response, req, 3)
 
 	// Verify attestation document contains winner and runner-up
-	check.NotNil(t, response.AttestationDoc.UserData.Winner)
-	check.NotNil(t, response.AttestationDoc.UserData.RunnerUp)
+	check.NotNil(t, attestationDoc.UserData.Winner)
+	check.NotNil(t, attestationDoc.UserData.RunnerUp)
 
 	// After adjustment factors, the ranking should be:
 	// 1. bidder_b: 2.70 (winner) - 3.00 * 0.9 = 2.70
 	// 2. bidder_a: 2.50 (runner-up) - 2.50 * 1.0 = 2.50
 	// 3. bidder_c: 2.475 - 2.25 * 1.1 = 2.475
-	check.Equal(t, "bid2", response.AttestationDoc.UserData.Winner.ID)
-	check.Equal(t, 2.70, response.AttestationDoc.UserData.Winner.Price)
+	check.Equal(t, "bid2", attestationDoc.UserData.Winner.ID)
+	check.Equal(t, 2.70, attestationDoc.UserData.Winner.Price)
 
-	check.Equal(t, "bid1", response.AttestationDoc.UserData.RunnerUp.ID)
-	check.Equal(t, 2.50, response.AttestationDoc.UserData.RunnerUp.Price)
+	check.Equal(t, "bid1", attestationDoc.UserData.RunnerUp.ID)
+	check.Equal(t, 2.50, attestationDoc.UserData.RunnerUp.Price)
 
 	// Verify bid hashes contains all three bids
-	nonce := response.AttestationDoc.UserData.BidHashNonce
+	nonce := attestationDoc.UserData.BidHashNonce
 	hash1 := generateBidHash("bid1", 2.50, nonce)
 	hash2 := generateBidHash("bid2", 3.00, nonce)
 	hash3 := generateBidHash("bid3", 2.25, nonce)
 
-	check.Equal(t, 3, len(response.AttestationDoc.UserData.BidHashes))
-	check.True(t, slices.Contains(response.AttestationDoc.UserData.BidHashes, hash1))
-	check.True(t, slices.Contains(response.AttestationDoc.UserData.BidHashes, hash2))
-	check.True(t, slices.Contains(response.AttestationDoc.UserData.BidHashes, hash3))
+	check.Equal(t, 3, len(attestationDoc.UserData.BidHashes))
+	check.True(t, slices.Contains(attestationDoc.UserData.BidHashes, hash1))
+	check.True(t, slices.Contains(attestationDoc.UserData.BidHashes, hash2))
+	check.True(t, slices.Contains(attestationDoc.UserData.BidHashes, hash3))
 }
 
 func TestGetBidderName(t *testing.T) {
@@ -195,35 +210,41 @@ func TestGetBidPrice(t *testing.T) {
 }
 
 // validateSuccessfulResponse validates common fields of successful auction responses and attestation docs
-func validateSuccessfulResponse(t *testing.T, response enclaveapi.EnclaveAuctionResponse, req enclaveapi.EnclaveAuctionRequest, expectedBidCount int) {
+func validateSuccessfulResponse(t *testing.T, response enclaveapi.EnclaveAuctionResponse, req enclaveapi.EnclaveAuctionRequest, expectedBidCount int) *enclaveapi.AuctionAttestationDoc {
 	t.Helper()
 
 	// Basic response validation
 	check.Equal(t, "auction_response", response.Type)
 	check.True(t, response.Success)
 	check.Equal(t, fmt.Sprintf("Processed %d bids in enclave", expectedBidCount), response.Message)
-	check.NotNil(t, response.AttestationDoc)
+	check.NotEqual(t, "", response.AttestationCOSEBase64)
 	check.GreaterThanOrEqual(t, response.ProcessingTime, int64(0))
 
+	// Parse attestation from COSE format
+	attestationDoc := parseAttestationFromResponse(t, response)
+	check.NotNil(t, attestationDoc)
+
 	// Attestation document structure validation
-	check.Equal(t, "test-enclave-12345", response.AttestationDoc.ModuleID)
-	check.Equal(t, "SHA384", response.AttestationDoc.DigestAlgorithm)
-	check.NotEqual(t, "", response.AttestationDoc.Certificate)
-	check.NotEqual(t, []string{}, response.AttestationDoc.CABundle)
-	check.NotEqual(t, "", response.AttestationDoc.PublicKey)
-	check.NotEqual(t, "", response.AttestationDoc.Nonce)
-	check.NotEqual(t, time.Time{}, response.AttestationDoc.Timestamp)
+	check.Equal(t, "test-enclave-12345", attestationDoc.ModuleID)
+	check.Equal(t, "SHA384", attestationDoc.DigestAlgorithm)
+	check.NotEqual(t, "", attestationDoc.Certificate)
+	check.NotEqual(t, []string{}, attestationDoc.CABundle)
+	check.NotEqual(t, "", attestationDoc.PublicKey)
+	check.NotEqual(t, "", attestationDoc.Nonce)
+	check.NotEqual(t, time.Time{}, attestationDoc.Timestamp)
 
 	// User data core fields validation
-	check.Equal(t, response.AttestationDoc.UserData.AuctionID, req.AuctionID)
-	check.Equal(t, response.AttestationDoc.UserData.RoundID, req.RoundID)
+	check.Equal(t, attestationDoc.UserData.AuctionID, req.AuctionID)
+	check.Equal(t, attestationDoc.UserData.RoundID, req.RoundID)
 
 	// User data hashes and nonces validation
-	check.NotEqual(t, "", response.AttestationDoc.UserData.RequestHash)
-	check.NotEqual(t, "", response.AttestationDoc.UserData.AdjustmentFactorsHash)
-	check.NotEqual(t, "", response.AttestationDoc.UserData.BidHashNonce)
-	check.NotEqual(t, "", response.AttestationDoc.UserData.RequestNonce)
-	check.NotEqual(t, "", response.AttestationDoc.UserData.AdjustmentFactorsNonce)
+	check.NotEqual(t, "", attestationDoc.UserData.RequestHash)
+	check.NotEqual(t, "", attestationDoc.UserData.AdjustmentFactorsHash)
+	check.NotEqual(t, "", attestationDoc.UserData.BidHashNonce)
+	check.NotEqual(t, "", attestationDoc.UserData.RequestNonce)
+	check.NotEqual(t, "", attestationDoc.UserData.AdjustmentFactorsNonce)
+
+	return attestationDoc
 }
 
 // Bid floor enforcement tests
@@ -251,25 +272,26 @@ func TestProcessAuction_BidFloorEnforcement(t *testing.T) {
 
 	// Validate successful response
 	assert.True(t, response.Success)
-	assert.NotNil(t, response.AttestationDoc)
-	assert.NotNil(t, response.AttestationDoc.UserData)
+	attestationDoc := parseAttestationFromResponse(t, response)
+	assert.NotNil(t, attestationDoc)
+	assert.NotNil(t, attestationDoc.UserData)
 
 	// Verify per-bidder floors are included in attestation
-	check.Equal(t, 2.50, response.AttestationDoc.UserData.BidFloor)
+	check.Equal(t, 2.50, attestationDoc.UserData.BidFloor)
 
 	// Verify ALL bids are in attestation (including floor-rejected bid3)
 	// This allows bidders rejected by floor to verify the auction and see the floor
-	check.Equal(t, 3, len(response.AttestationDoc.UserData.BidHashes))
+	check.Equal(t, 3, len(attestationDoc.UserData.BidHashes))
 
 	// Verify winner is highest bid above floor
-	check.NotNil(t, response.AttestationDoc.UserData.Winner)
-	check.Equal(t, "bid1", response.AttestationDoc.UserData.Winner.ID)
-	check.Equal(t, 3.00, response.AttestationDoc.UserData.Winner.Price)
+	check.NotNil(t, attestationDoc.UserData.Winner)
+	check.Equal(t, "bid1", attestationDoc.UserData.Winner.ID)
+	check.Equal(t, 3.00, attestationDoc.UserData.Winner.Price)
 
 	// Verify runner-up is bid at floor
-	check.NotNil(t, response.AttestationDoc.UserData.RunnerUp)
-	check.Equal(t, "bid2", response.AttestationDoc.UserData.RunnerUp.ID)
-	check.Equal(t, 2.50, response.AttestationDoc.UserData.RunnerUp.Price)
+	check.NotNil(t, attestationDoc.UserData.RunnerUp)
+	check.Equal(t, "bid2", attestationDoc.UserData.RunnerUp.ID)
+	check.Equal(t, 2.50, attestationDoc.UserData.RunnerUp.Price)
 }
 
 // TestProcessAuction_BidFloorAllRejected tests when all bids are below floor
@@ -294,18 +316,19 @@ func TestProcessAuction_BidFloorAllRejected(t *testing.T) {
 
 	// Validate successful response
 	assert.True(t, response.Success)
-	assert.NotNil(t, response.AttestationDoc)
+	attestationDoc := parseAttestationFromResponse(t, response)
+	assert.NotNil(t, attestationDoc)
 
 	// Verify floors are included in attestation
-	check.Equal(t, 2.50, response.AttestationDoc.UserData.BidFloor)
+	check.Equal(t, 2.50, attestationDoc.UserData.BidFloor)
 
 	// Verify ALL bids are still in attestation (even though rejected by floor)
 	// This allows bidders to verify the auction and see the floor that rejected them
-	check.Equal(t, 2, len(response.AttestationDoc.UserData.BidHashes))
+	check.Equal(t, 2, len(attestationDoc.UserData.BidHashes))
 
 	// Verify no winner or runner-up (because all bids were below floor)
-	check.Nil(t, response.AttestationDoc.UserData.Winner)
-	check.Nil(t, response.AttestationDoc.UserData.RunnerUp)
+	check.Nil(t, attestationDoc.UserData.Winner)
+	check.Nil(t, attestationDoc.UserData.RunnerUp)
 }
 
 // Token validation tests
@@ -530,10 +553,12 @@ func TestAuctionTokenValidation_MultipleBidsWithTokens(t *testing.T) {
 	check.False(t, tokenManager.ValidateToken(token2))
 	check.False(t, tokenManager.ValidateToken(token3))
 
+	attestationDoc := parseAttestationFromResponse(t, response)
+
 	// Winner should be bid2 (highest price)
-	check.NotNil(t, response.AttestationDoc.UserData.Winner)
-	check.Equal(t, "bid2", response.AttestationDoc.UserData.Winner.ID)
-	check.Equal(t, 4.50, response.AttestationDoc.UserData.Winner.Price)
+	check.NotNil(t, attestationDoc.UserData.Winner)
+	check.Equal(t, "bid2", attestationDoc.UserData.Winner.ID)
+	check.Equal(t, 4.50, attestationDoc.UserData.Winner.Price)
 }
 
 func TestAuctionTokenValidation_MixedValidInvalidTokens(t *testing.T) {
@@ -591,9 +616,11 @@ func TestAuctionTokenValidation_MixedValidInvalidTokens(t *testing.T) {
 	// Valid token should be consumed
 	check.False(t, tokenManager.ValidateToken(validToken))
 
+	attestationDoc := parseAttestationFromResponse(t, response)
+
 	// Winner should be bid1
-	check.NotNil(t, response.AttestationDoc.UserData.Winner)
-	check.Equal(t, "bid1", response.AttestationDoc.UserData.Winner.ID)
+	check.NotNil(t, attestationDoc.UserData.Winner)
+	check.Equal(t, "bid1", attestationDoc.UserData.Winner.ID)
 }
 
 // End-to-end token flow test
@@ -732,10 +759,12 @@ func TestAuctionTokenValidation_MultipleBidsSameToken(t *testing.T) {
 	// Shared token should be consumed (only once)
 	check.False(t, tokenManager.ValidateToken(sharedToken))
 
+	attestationDoc := parseAttestationFromResponse(t, response)
+
 	// Winner should be bid2 (highest price)
-	check.NotNil(t, response.AttestationDoc.UserData.Winner)
-	check.Equal(t, "bid2", response.AttestationDoc.UserData.Winner.ID)
-	check.Equal(t, 4.50, response.AttestationDoc.UserData.Winner.Price)
+	check.NotNil(t, attestationDoc.UserData.Winner)
+	check.Equal(t, "bid2", attestationDoc.UserData.Winner.ID)
+	check.Equal(t, 4.50, attestationDoc.UserData.Winner.Price)
 }
 
 // TestProcessAuction_BidFloorZero tests that zero floor means no enforcement
@@ -760,13 +789,14 @@ func TestProcessAuction_BidFloorZero(t *testing.T) {
 
 	// Validate successful response
 	assert.True(t, response.Success)
-	assert.NotNil(t, response.AttestationDoc)
+	attestationDoc := parseAttestationFromResponse(t, response)
+	assert.NotNil(t, attestationDoc)
 
 	// Verify empty floor in attestation
-	check.Equal(t, 0.00, response.AttestationDoc.UserData.BidFloor)
+	check.Equal(t, 0.00, attestationDoc.UserData.BidFloor)
 
 	// Verify all bids pass (no floor enforcement)
-	check.Equal(t, 2, len(response.AttestationDoc.UserData.BidHashes))
+	check.Equal(t, 2, len(attestationDoc.UserData.BidHashes))
 }
 
 // TestProcessAuction_BidFloorWithAdjustments tests floor enforcement happens after adjustments
@@ -793,23 +823,24 @@ func TestProcessAuction_BidFloorWithAdjustments(t *testing.T) {
 
 	// Validate successful response
 	assert.True(t, response.Success)
-	assert.NotNil(t, response.AttestationDoc)
+	attestationDoc := parseAttestationFromResponse(t, response)
+	assert.NotNil(t, attestationDoc)
 
 	// Verify floors are included in attestation
-	check.Equal(t, 2.50, response.AttestationDoc.UserData.BidFloor)
+	check.Equal(t, 2.50, attestationDoc.UserData.BidFloor)
 
 	// Verify both bids are in attestation
-	check.Equal(t, 2, len(response.AttestationDoc.UserData.BidHashes))
+	check.Equal(t, 2, len(attestationDoc.UserData.BidHashes))
 
 	// Verify bidder_b won (after 2.0x adjustment: $2.00 × 2.0 = $4.00 > $2.50 floor)
-	check.NotNil(t, response.AttestationDoc.UserData.Winner)
-	check.Equal(t, "bid2", response.AttestationDoc.UserData.Winner.ID)
-	check.Equal(t, 4.00, response.AttestationDoc.UserData.Winner.Price)
+	check.NotNil(t, attestationDoc.UserData.Winner)
+	check.Equal(t, "bid2", attestationDoc.UserData.Winner.ID)
+	check.Equal(t, 4.00, attestationDoc.UserData.Winner.Price)
 
 	// Verify bidder_a is runner-up
-	check.NotNil(t, response.AttestationDoc.UserData.RunnerUp)
-	check.Equal(t, "bid1", response.AttestationDoc.UserData.RunnerUp.ID)
-	check.Equal(t, 3.00, response.AttestationDoc.UserData.RunnerUp.Price)
+	check.NotNil(t, attestationDoc.UserData.RunnerUp)
+	check.Equal(t, "bid1", attestationDoc.UserData.RunnerUp.ID)
+	check.Equal(t, 3.00, attestationDoc.UserData.RunnerUp.Price)
 }
 
 // TestProcessAuction_NegativeFloorRejected tests that TEE rejects negative floor prices
@@ -834,5 +865,6 @@ func TestProcessAuction_NegativeFloorRejected(t *testing.T) {
 	// Verify TEE rejected the request
 	check.False(t, response.Success)
 	check.Equal(t, "Invalid negative floor price -2.5000", response.Message)
-	check.Nil(t, response.AttestationDoc)
+	attestationDoc := parseAttestationFromResponse(t, response)
+	check.Nil(t, attestationDoc)
 }

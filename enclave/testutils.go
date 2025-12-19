@@ -2,11 +2,14 @@ package main
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"testing"
 
 	enclave "github.com/edgebitio/nitro-enclaves-sdk-go"
 	"github.com/fxamacker/cbor/v2"
+
+	"github.com/cloudx-io/openauction/enclaveapi"
 )
 
 // MockEnclaveHandle implements the Attest method for testing
@@ -68,5 +71,28 @@ func CreateMockEnclave(t *testing.T) *MockEnclaveHandle {
 
 			return cbor.Marshal(result) // Proper CBOR encoding
 		},
+	}
+}
+
+// parseAuctionAttestationFromCOSE is a shared test helper that parses COSE attestation bytes
+// and returns an AuctionAttestationDoc with parsed user data
+func parseAuctionAttestationFromCOSE(t *testing.T, coseBytes enclaveapi.AttestationCOSE) *enclaveapi.AuctionAttestationDoc {
+	t.Helper()
+
+	// Parse attestation document and user data
+	attestationDoc, userDataBytes, err := coseBytes.ParseAttestationDoc()
+	if err != nil {
+		t.Fatalf("Failed to parse attestation: %v", err)
+	}
+
+	// Parse the UserData JSON into AttestationUserData
+	var userData enclaveapi.AuctionAttestationUserData
+	if err := json.Unmarshal(userDataBytes, &userData); err != nil {
+		t.Fatalf("Failed to unmarshal user data: %v", err)
+	}
+
+	return &enclaveapi.AuctionAttestationDoc{
+		AttestationDoc: attestationDoc,
+		UserData:       &userData,
 	}
 }

@@ -7,19 +7,6 @@ import (
 	enclaveapi "github.com/cloudx-io/openauction/enclaveapi"
 )
 
-// NitroAttestationDocument represents the raw CBOR structure from AWS Nitro Enclaves
-type NitroAttestationDocument struct {
-	ModuleID    string            `cbor:"module_id"`
-	Digest      string            `cbor:"digest"`
-	Timestamp   uint64            `cbor:"timestamp"`
-	PCRs        map[uint64][]byte `cbor:"pcrs"`
-	Certificate []byte            `cbor:"certificate"`
-	CABundle    [][]byte          `cbor:"cabundle"`
-	PublicKey   []byte            `cbor:"public_key"`
-	UserData    []byte            `cbor:"user_data"`
-	Nonce       []byte            `cbor:"nonce"`
-}
-
 // FormatPCR formats PCR bytes as hex string
 func FormatPCR(pcrData []byte) string {
 	if len(pcrData) == 0 {

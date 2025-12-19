@@ -2,10 +2,8 @@ package main
 
 import (
 	"crypto/rsa"
-	"crypto/sha256"
 	"crypto/x509"
 	"encoding/pem"
-	"fmt"
 	"regexp"
 	"slices"
 	"strings"
@@ -24,29 +22,6 @@ func checkBidHashPattern(t *testing.T, test string) {
 	matched, err := regexp.MatchString(validBidHash, test)
 	check.Nil(t, err)
 	check.True(t, matched)
-}
-
-func TestGenerateBidHash(t *testing.T) {
-	bidID := "bid_123"
-	price := 2.50
-	nonce := "test_nonce_456"
-
-	hash := generateBidHash(bidID, price, nonce)
-
-	check.Equal(t, 64, len(hash))
-	checkBidHashPattern(t, hash)
-
-	// Same inputs should produce same hash
-	hash2 := generateBidHash(bidID, price, nonce)
-	check.Equal(t, hash2, hash)
-
-	// Different inputs should produce different hashes
-	hash3 := generateBidHash(bidID, price+1, nonce)
-	check.NotEqual(t, hash, hash3)
-
-	expectedData := fmt.Sprintf("%s|%.6f|%s", bidID, price, nonce)
-	expectedHash := fmt.Sprintf("%x", sha256.Sum256([]byte(expectedData)))
-	check.Equal(t, expectedHash, hash)
 }
 
 func TestGenerateSecureRandomBytes(t *testing.T) {
@@ -164,7 +139,7 @@ func TestGenerateAttestationWithMock(t *testing.T) {
 
 	// Generate bid hash
 	bidHashNonce := "test_bid_nonce"
-	bidHash := generateBidHash("bid1", 2.50, bidHashNonce)
+	bidHash := core.ComputeBidHash("bid1", 2.50, bidHashNonce)
 
 	// Test successful attestation generation with mock
 	coseBytes, err := GenerateAttestation(mockEnclave, req, []string{bidHash}, "test_request_hash", "test_adj_hash",
@@ -236,8 +211,8 @@ func TestGenerateAttestationWithEncryptedBids(t *testing.T) {
 	bidHashNonce := "test_bid_nonce_for_encrypted_bids"
 
 	// Calculate bid hashes from decrypted prices
-	hash2 := generateBidHash(winner.ID, winner.Price, bidHashNonce)     // Decrypted price
-	hash3 := generateBidHash(runnerUp.ID, runnerUp.Price, bidHashNonce) // Decrypted price
+	hash2 := core.ComputeBidHash(winner.ID, winner.Price, bidHashNonce)     // Decrypted price
+	hash3 := core.ComputeBidHash(runnerUp.ID, runnerUp.Price, bidHashNonce) // Decrypted price
 
 	// Build list of bid hashes
 	bidHashes := []string{hash2, hash3}
@@ -504,11 +479,11 @@ func TestGenerateAttestationWithMixedBidTypes(t *testing.T) {
 	bidHashNonce := "mixed_bid_nonce_12345"
 
 	// Calculate bid hashes from decrypted prices for all bids
-	hashU1 := generateBidHash("unencrypted_bid_1", 2.25, bidHashNonce)
-	hashE1 := generateBidHash("encrypted_bid_1", 4.50, bidHashNonce) // Decrypted price
-	hashU2 := generateBidHash("unencrypted_bid_2", 3.80, bidHashNonce)
-	hashE2 := generateBidHash("encrypted_bid_2", 4.00, bidHashNonce) // Decrypted price
-	hashU3 := generateBidHash("unencrypted_bid_3", 3.25, bidHashNonce)
+	hashU1 := core.ComputeBidHash("unencrypted_bid_1", 2.25, bidHashNonce)
+	hashE1 := core.ComputeBidHash("encrypted_bid_1", 4.50, bidHashNonce) // Decrypted price
+	hashU2 := core.ComputeBidHash("unencrypted_bid_2", 3.80, bidHashNonce)
+	hashE2 := core.ComputeBidHash("encrypted_bid_2", 4.00, bidHashNonce) // Decrypted price
+	hashU3 := core.ComputeBidHash("unencrypted_bid_3", 3.25, bidHashNonce)
 
 	// Build list of bid hashes
 	bidHashes := []string{hashU1, hashE1, hashU2, hashE2, hashU3}

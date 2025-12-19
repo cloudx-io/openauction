@@ -4,6 +4,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"fmt"
+	"time"
 )
 
 // awsNitroRootCA is the root certificate for AWS Nitro Enclaves
@@ -27,7 +28,8 @@ IwLz3/Y=
 -----END CERTIFICATE-----`
 
 // ValidateCertificateChain verifies the certificate chain using AWS Nitro root CA
-func ValidateCertificateChain(certB64 string, caBundleB64 []string) error {
+// attestationTime should be the timestamp from the attestation document
+func ValidateCertificateChain(certB64 string, caBundleB64 []string, attestationTime time.Time) error {
 	// Decode signing certificate
 	certDER, err := base64.StdEncoding.DecodeString(certB64)
 	if err != nil {
@@ -59,11 +61,13 @@ func ValidateCertificateChain(certB64 string, caBundleB64 []string) error {
 		return fmt.Errorf("failed to parse AWS Nitro root CA")
 	}
 
-	// Verify certificate chain
+	// Verify certificate chain at the time the attestation was generated
+	// This is important because AWS Nitro certificates are short-lived (hours)
 	opts := x509.VerifyOptions{
 		Roots:         roots,
 		Intermediates: intermediates,
 		KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
+		CurrentTime:   attestationTime, // Validate at attestation time, not current time
 	}
 
 	if _, err := cert.Verify(opts); err != nil {

@@ -41,7 +41,7 @@ on:
 
 env:
   AWS_REGION: us-east-1
-  INSTANCE_TYPE: c5.xlarge
+  INSTANCE_TYPE: m5.xlarge
   # Amazon Linux 2023 AMI
   # Update periodically to latest AMI
   #
@@ -132,14 +132,16 @@ jobs:
             --query 'Vpcs[0].VpcId' \
             --output text)
           
+          # Use us-east-1a for consistent instance type availability
           SUBNET_ID=$(aws ec2 describe-subnets \
             --filters "Name=vpc-id,Values=${VPC_ID}" \
+                      "Name=availability-zone,Values=us-east-1a" \
             --query 'Subnets[0].SubnetId' \
             --output text)
           
           echo "vpc_id=${VPC_ID}" >> $GITHUB_OUTPUT
           echo "subnet_id=${SUBNET_ID}" >> $GITHUB_OUTPUT
-          echo "Using VPC: ${VPC_ID}, Subnet: ${SUBNET_ID}"
+          echo "Using VPC: ${VPC_ID}, Subnet: ${SUBNET_ID} (us-east-1a)"
       
       - name: Create security group
         id: security-group

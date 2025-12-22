@@ -1,4 +1,4 @@
-name: build docker container image via Github Actions
+name: Docker Build
 on:
   workflow_run:
     workflows: ["Go"]

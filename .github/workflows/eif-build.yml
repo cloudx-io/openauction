@@ -41,7 +41,7 @@ on:
 
 env:
   AWS_REGION: us-east-1
-  INSTANCE_TYPE: m5.xlarge
+  INSTANCE_TYPE: c5.xlarge
   # Amazon Linux 2023 AMI
   # Update periodically to latest AMI
   #

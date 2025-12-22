@@ -36,23 +36,9 @@ func main() {
 	}
 
 	// Parse inputs
-	bidRequest, err := readJSONInput(*bidRequestInput)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading bid request: %v\n", err)
-		os.Exit(2)
-	}
-
-	bidResponse, err := readJSONInput(*bidResponseInput)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading bid response: %v\n", err)
-		os.Exit(2)
-	}
-
-	notification, err := readJSONInput(*notificationInput)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading notification: %v\n", err)
-		os.Exit(2)
-	}
+	bidRequest := readJSONInput(*bidRequestInput)
+	bidResponse := readJSONInput(*bidResponseInput)
+	notification := readJSONInput(*notificationInput)
 
 	// Extract validation data
 	validationInput, err := extractValidationInput(bidRequest, bidResponse, notification)
@@ -149,38 +135,38 @@ func showUsage() {
 	fmt.Println("  2 - Invalid input or runtime error")
 }
 
-func readJSONInput(input string) ([]byte, error) {
+func readJSONInput(input string) []byte {
 	// Try reading as file first
 	if data, err := os.ReadFile(input); err == nil {
-		return data, nil
+		return data
 	}
 	// Treat as inline JSON
-	return []byte(input), nil
+	return []byte(input)
 }
 
 func extractValidationInput(bidRequestJSON, bidResponseJSON, notificationJSON []byte) (*validation.AuctionValidationInput, error) {
 	// Parse bid request
-	var bidRequest map[string]interface{}
+	var bidRequest map[string]any
 	if err := json.Unmarshal(bidRequestJSON, &bidRequest); err != nil {
 		return nil, fmt.Errorf("parse bid request: %w", err)
 	}
 
 	// Parse bid response
-	var bidResponse map[string]interface{}
+	var bidResponse map[string]any
 	if err := json.Unmarshal(bidResponseJSON, &bidResponse); err != nil {
 		return nil, fmt.Errorf("parse bid response: %w", err)
 	}
 
 	// Parse notification
-	var notification map[string]interface{}
+	var notification map[string]any
 	if err := json.Unmarshal(notificationJSON, &notification); err != nil {
 		return nil, fmt.Errorf("parse notification: %w", err)
 	}
 
 	// Extract bid floor from first impression
 	bidFloor := 0.0
-	if imps, ok := bidRequest["imp"].([]interface{}); ok && len(imps) > 0 {
-		if imp, ok := imps[0].(map[string]interface{}); ok {
+	if imps, ok := bidRequest["imp"].([]any); ok && len(imps) > 0 {
+		if imp, ok := imps[0].(map[string]any); ok {
 			if floor, ok := imp["bidfloor"].(float64); ok {
 				bidFloor = floor
 			}
@@ -189,9 +175,9 @@ func extractValidationInput(bidRequestJSON, bidResponseJSON, notificationJSON []
 
 	// Extract adjustment factors from ext.prebid.bidadjustmentfactors
 	adjustmentFactors := map[string]float64{}
-	if ext, ok := bidRequest["ext"].(map[string]interface{}); ok {
-		if prebid, ok := ext["prebid"].(map[string]interface{}); ok {
-			if factors, ok := prebid["bidadjustmentfactors"].(map[string]interface{}); ok {
+	if ext, ok := bidRequest["ext"].(map[string]any); ok {
+		if prebid, ok := ext["prebid"].(map[string]any); ok {
+			if factors, ok := prebid["bidadjustmentfactors"].(map[string]any); ok {
 				for bidder, factor := range factors {
 					if f, ok := factor.(float64); ok {
 						adjustmentFactors[bidder] = f
@@ -206,10 +192,10 @@ func extractValidationInput(bidRequestJSON, bidResponseJSON, notificationJSON []
 	var bidPrice float64
 	var encryptedPayload string
 
-	if seatbids, ok := bidResponse["seatbid"].([]interface{}); ok && len(seatbids) > 0 {
-		if seatbid, ok := seatbids[0].(map[string]interface{}); ok {
-			if bids, ok := seatbid["bid"].([]interface{}); ok && len(bids) > 0 {
-				if bid, ok := bids[0].(map[string]interface{}); ok {
+	if seatbids, ok := bidResponse["seatbid"].([]any); ok && len(seatbids) > 0 {
+		if seatbid, ok := seatbids[0].(map[string]any); ok {
+			if bids, ok := seatbid["bid"].([]any); ok && len(bids) > 0 {
+				if bid, ok := bids[0].(map[string]any); ok {
 					if id, ok := bid["id"].(string); ok {
 						bidID = id
 					}
@@ -218,8 +204,8 @@ func extractValidationInput(bidRequestJSON, bidResponseJSON, notificationJSON []
 					}
 
 					// Check for encrypted bid
-					if ext, ok := bid["ext"].(map[string]interface{}); ok {
-						if encBid, ok := ext["encrypted_bid"].(map[string]interface{}); ok {
+					if ext, ok := bid["ext"].(map[string]any); ok {
+						if encBid, ok := ext["encrypted_bid"].(map[string]any); ok {
 							if payload, ok := encBid["encrypted_payload"].(string); ok {
 								encryptedPayload = payload
 							}

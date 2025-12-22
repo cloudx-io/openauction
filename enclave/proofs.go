@@ -22,7 +22,7 @@ type EnclaveAttester interface {
 	Attest(options enclave.AttestationOptions) ([]byte, error)
 }
 
-func GenerateTEEProofs(attester EnclaveAttester, req enclaveapi.EnclaveAuctionRequest, unencryptedBids []core.CoreBid, winner, runnerUp *core.CoreBid) (enclaveapi.AttestationCOSE, error) {
+func GenerateTEEProofs(attester EnclaveAttester, req enclaveapi.EnclaveAuctionRequest, _ []core.CoreBid, winner, runnerUp *core.CoreBid) (enclaveapi.AttestationCOSE, error) {
 	bidHashNonce, err := generateNonce()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate bid hash nonce: %w", err)

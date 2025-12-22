@@ -20,7 +20,7 @@ func TestComputeBidHash(t *testing.T) {
 
 	// Verify hash contains only hex characters
 	for _, c := range hash {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 			t.Errorf("ComputeBidHash() contains non-hex character: %c", c)
 		}
 	}
@@ -125,7 +125,7 @@ func TestComputeBidHash_EdgeCases(t *testing.T) {
 
 			// Verify hash contains only hex characters
 			for _, c := range hash {
-				if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+				if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 					t.Errorf("Hash contains non-hex character: %c", c)
 				}
 			}
@@ -147,7 +147,7 @@ func TestComputeRequestHash(t *testing.T) {
 
 	// Verify hash contains only hex characters
 	for _, c := range hash {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 			t.Errorf("ComputeRequestHash() contains non-hex character: %c", c)
 		}
 	}
@@ -199,7 +199,7 @@ func TestComputeAdjustmentFactorsHash(t *testing.T) {
 
 	// Verify hash contains only hex characters
 	for _, c := range hash {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 			t.Errorf("ComputeAdjustmentFactorsHash() contains non-hex character: %c", c)
 		}
 	}
@@ -282,7 +282,7 @@ func TestComputeBidHashEncrypted(t *testing.T) {
 
 	// Verify hash contains only hex characters
 	for _, c := range hash {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 			t.Errorf("ComputeBidHashEncrypted() contains non-hex character: %c", c)
 		}
 	}

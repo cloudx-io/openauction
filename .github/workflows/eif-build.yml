@@ -1,5 +1,5 @@
 name: Build EIF
-run-name: Build EIF - ${{ github.event.workflow_run.head_sha }}
+run-name: Build EIF - commit ${{ github.event.workflow_run.head_sha || github.sha }} from image ${{ github.event.inputs.image_tag || 'auto' }}
 
 # This workflow builds Enclave Image Files (EIFs) for AWS Nitro Enclaves
 # EIFs can only be built on Nitro-compatible EC2 instances, so this workflow:
@@ -32,6 +32,12 @@ on:
     types: [completed]
     branches: [main]
   workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Docker image tag to use (e.g., sha-abc1234, latest). Image must exist in ECR.'
+        required: true
+        default: 'latest'
+        type: string
 
 env:
   AWS_REGION: us-east-1
@@ -91,8 +97,18 @@ jobs:
       - name: Construct Docker image URI
         id: image-uri
         run: |
-          COMMIT_SHA="${{ steps.set-sha.outputs.commit_sha }}"
-          IMAGE_URI="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/cloudx-io/openauction/enclave:sha-${COMMIT_SHA}"
+          # For workflow_run: use commit SHA from triggering workflow
+          # For workflow_dispatch: use user-provided image tag
+          if [ -n "${{ github.event.inputs.image_tag }}" ]; then
+            IMAGE_TAG="${{ github.event.inputs.image_tag }}"
+            echo "Using manually specified image tag: ${IMAGE_TAG}"
+          else
+            COMMIT_SHA="${{ steps.set-sha.outputs.commit_sha }}"
+            IMAGE_TAG="sha-${COMMIT_SHA}"
+            echo "Using commit-based image tag: ${IMAGE_TAG}"
+          fi
+
+          IMAGE_URI="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/cloudx-io/openauction/enclave:${IMAGE_TAG}"
           echo "image_uri=${IMAGE_URI}" >> $GITHUB_OUTPUT
           echo "Docker image: ${IMAGE_URI}"
       
@@ -301,6 +317,10 @@ jobs:
           cat >> $GITHUB_STEP_SUMMARY << 'EOF'
           # EIF Build Complete ✅
           
+          ## Build Information
+          - Docker Image: `${{ steps.image-uri.outputs.image_uri }}`
+          - Commit: `${{ steps.set-sha.outputs.commit_sha }}`
+
           ## PCR Measurements
           | PCR | Value |
           |-----|-------|
@@ -308,9 +328,8 @@ jobs:
           | PCR1 | `${{ steps.extract-pcrs.outputs.pcr1 }}` |
           | PCR2 | `${{ steps.extract-pcrs.outputs.pcr2 }}` |
           
-          ## Artifact
+          ## EIF Artifact
           - SHA256: `${{ steps.extract-pcrs.outputs.eif_sha256 }}`
-          - Commit: `${{ steps.set-sha.outputs.commit_sha }}`
           EOF
       
       - name: Cleanup instance

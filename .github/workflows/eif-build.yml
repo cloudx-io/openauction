@@ -1,0 +1,340 @@
+name: Build EIF
+run-name: Build EIF - ${{ github.event.workflow_run.head_sha }}
+
+# This workflow builds Enclave Image Files (EIFs) for AWS Nitro Enclaves
+# EIFs can only be built on Nitro-compatible EC2 instances, so this workflow:
+# 1. Launches an ephemeral Nitro EC2 instance
+# 2. Builds the EIF from the Docker image
+# 3. Pushes the EIF to ECR as an OCI artifact
+# 4. Terminates the instance
+#
+# IAM Requirements:
+#
+# 1. GitHub Actions OIDC Role (eif-builder-workflow)
+#    This role is assumed by the GitHub Actions runner and needs:
+#    - ecr:GetAuthorizationToken (for ECR login)
+#    - ecr:PutImage, ecr:InitiateLayerUpload, etc. (to push EIF artifacts)
+#    - ec2:RunInstances, ec2:TerminateInstances (to manage build instance)
+#    - ec2:CreateKeyPair, ec2:DeleteKeyPair (for SSH access)
+#    - ec2:CreateSecurityGroup, ec2:DeleteSecurityGroup (for SSH access)
+#    - ec2:Describe* (to query VPC, subnets, instances)
+#    - iam:PassRole (to attach instance profile to EC2 instance)
+#
+# 2. EC2 Instance Profile (eif-builder-instance)
+#    This profile is attached to the ephemeral EC2 instance and needs:
+#    - ecr:GetAuthorizationToken (for ECR login from instance)
+#    - ecr:BatchGetImage, ecr:GetDownloadUrlForLayer (to pull Docker image)
+#    - ec2:DescribeInstances (for instance metadata access)
+
+on:
+  workflow_run:
+    workflows: ["Docker Build"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+  INSTANCE_TYPE: c5.xlarge
+  # Amazon Linux 2023 AMI
+  # Update periodically to latest AMI
+  #
+  # % aws ec2 describe-images \
+  #  --owners amazon \
+  #  --filters "Name=name,Values=al2023-ami-2023.*-x86_64" \
+  #  --filters "Name=state,Values=available" \
+  #  --query 'sort_by(Images, &CreationDate)[-1].[ImageId,Name,CreationDate]' \
+  #  --output table \
+  #  --region us-east-1
+  AMI_ID: ami-08d7aabbb50c2c24e 
+
+jobs:
+  build-eif:
+    name: Build EIF on Nitro EC2
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    permissions:
+      id-token: write
+      contents: read
+    
+    outputs:
+      pcr0: ${{ steps.extract-pcrs.outputs.pcr0 }}
+      pcr1: ${{ steps.extract-pcrs.outputs.pcr1 }}
+      pcr2: ${{ steps.extract-pcrs.outputs.pcr2 }}
+      eif_sha256: ${{ steps.extract-pcrs.outputs.eif_sha256 }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      
+      - name: Set commit SHA variable
+        id: set-sha
+        run: |
+          if [ -n "${{ github.event.workflow_run.head_sha }}" ]; then
+            COMMIT_SHA="${{ github.event.workflow_run.head_sha }}"
+          else
+            COMMIT_SHA="${{ github.sha }}"
+          fi
+          echo "commit_sha=${COMMIT_SHA}" >> $GITHUB_OUTPUT
+          echo "commit_short=${COMMIT_SHA:0:7}" >> $GITHUB_OUTPUT
+          echo "Building EIF for commit: ${COMMIT_SHA}"
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          # OIDC role for EIF building workflow (needs EC2 + ECR permissions)
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/eif-builder-workflow
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Construct Docker image URI
+        id: image-uri
+        run: |
+          COMMIT_SHA="${{ steps.set-sha.outputs.commit_sha }}"
+          IMAGE_URI="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/cloudx-io/openauction/enclave:sha-${COMMIT_SHA}"
+          echo "image_uri=${IMAGE_URI}" >> $GITHUB_OUTPUT
+          echo "Docker image: ${IMAGE_URI}"
+      
+      - name: Create EC2 key pair
+        id: create-key
+        run: |
+          KEY_NAME="eif-builder-${{ github.run_id }}-${{ github.run_attempt }}"
+          aws ec2 create-key-pair \
+            --key-name "${KEY_NAME}" \
+            --query 'KeyMaterial' \
+            --output text > /tmp/eif-builder-key.pem
+          chmod 400 /tmp/eif-builder-key.pem
+          echo "key_name=${KEY_NAME}" >> $GITHUB_OUTPUT
+          echo "Created key pair: ${KEY_NAME}"
+      
+      - name: Get default VPC and subnet
+        id: vpc-info
+        run: |
+          VPC_ID=$(aws ec2 describe-vpcs \
+            --filters "Name=isDefault,Values=true" \
+            --query 'Vpcs[0].VpcId' \
+            --output text)
+          
+          SUBNET_ID=$(aws ec2 describe-subnets \
+            --filters "Name=vpc-id,Values=${VPC_ID}" \
+            --query 'Subnets[0].SubnetId' \
+            --output text)
+          
+          echo "vpc_id=${VPC_ID}" >> $GITHUB_OUTPUT
+          echo "subnet_id=${SUBNET_ID}" >> $GITHUB_OUTPUT
+          echo "Using VPC: ${VPC_ID}, Subnet: ${SUBNET_ID}"
+      
+      - name: Create security group
+        id: security-group
+        run: |
+          SG_NAME="eif-builder-${{ github.run_id }}"
+          SG_ID=$(aws ec2 create-security-group \
+            --group-name "${SG_NAME}" \
+            --description "Temporary SG for EIF building - Run ${{ github.run_id }}" \
+            --vpc-id "${{ steps.vpc-info.outputs.vpc_id }}" \
+            --query 'GroupId' \
+            --output text)
+          
+          aws ec2 authorize-security-group-ingress \
+            --group-id "${SG_ID}" \
+            --protocol tcp \
+            --port 22 \
+            --cidr 0.0.0.0/0
+          
+          echo "security_group_id=${SG_ID}" >> $GITHUB_OUTPUT
+          echo "Created security group: ${SG_ID}"
+      
+      - name: Launch Nitro EC2 instance
+        id: launch-instance
+        run: |
+          # Launch Nitro-enabled instance with IAM instance profile
+          # The instance profile (eif-builder-instance) allows the instance to:
+          # - Pull Docker images from ECR
+          # - Access EC2 instance metadata
+
+          INSTANCE_ID=$(aws ec2 run-instances \
+            --image-id ${{ env.AMI_ID }} \
+            --instance-type ${{ env.INSTANCE_TYPE }} \
+            --key-name "${{ steps.create-key.outputs.key_name }}" \
+            --security-group-ids "${{ steps.security-group.outputs.security_group_id }}" \
+            --subnet-id "${{ steps.vpc-info.outputs.subnet_id }}" \
+            --enclave-options 'Enabled=true' \
+            --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=eif-builder},{Key=Purpose,Value=EIF-Build}]' \
+            --iam-instance-profile Name=eif-builder-instance \
+            --query 'Instances[0].InstanceId' \
+            --output text)
+          
+          echo "instance_id=${INSTANCE_ID}" >> $GITHUB_OUTPUT
+          echo "Launched instance: ${INSTANCE_ID}"
+          
+          echo "Waiting for instance to be running..."
+          aws ec2 wait instance-running --instance-ids "${INSTANCE_ID}"
+          
+          echo "Waiting for status checks..."
+          aws ec2 wait instance-status-ok --instance-ids "${INSTANCE_ID}"
+          
+          PUBLIC_IP=$(aws ec2 describe-instances \
+            --instance-ids "${INSTANCE_ID}" \
+            --query 'Reservations[0].Instances[0].PublicIpAddress' \
+            --output text)
+          
+          echo "public_ip=${PUBLIC_IP}" >> $GITHUB_OUTPUT
+          echo "Instance ready at: ${PUBLIC_IP}"
+      
+      - name: Wait for SSH
+        run: |
+          echo "Waiting for SSH..."
+          for i in {1..30}; do
+            if ssh -i /tmp/eif-builder-key.pem \
+                   -o StrictHostKeyChecking=no \
+                   -o ConnectTimeout=5 \
+                   ec2-user@${{ steps.launch-instance.outputs.public_ip }} \
+                   'echo Ready' 2>/dev/null; then
+              echo "SSH is ready!"
+              break
+            fi
+            echo "Attempt $i/30, waiting 10s..."
+            sleep 10
+          done
+      
+      - name: Copy scripts to instance
+        run: |
+          scp -i /tmp/eif-builder-key.pem \
+              -o StrictHostKeyChecking=no \
+              -r enclave/scripts \
+              ec2-user@${{ steps.launch-instance.outputs.public_ip }}:~/
+      
+      - name: Setup Nitro instance
+        run: |
+          ssh -i /tmp/eif-builder-key.pem \
+              -o StrictHostKeyChecking=no \
+              ec2-user@${{ steps.launch-instance.outputs.public_ip }} \
+              'sudo bash ~/scripts/setup-nitro-instance.sh'
+      
+      - name: Build EIF
+        run: |
+          ssh -i /tmp/eif-builder-key.pem \
+              -o StrictHostKeyChecking=no \
+              ec2-user@${{ steps.launch-instance.outputs.public_ip }} \
+              "sudo AWS_ACCESS_KEY_ID='${AWS_ACCESS_KEY_ID}' \
+                    AWS_SECRET_ACCESS_KEY='${AWS_SECRET_ACCESS_KEY}' \
+                    AWS_SESSION_TOKEN='${AWS_SESSION_TOKEN}' \
+                    bash ~/scripts/build-eif-ci.sh \
+                    '${{ steps.image-uri.outputs.image_uri }}' \
+                    '/tmp/auction.eif' \
+                    '${{ env.AWS_REGION }}'"
+      
+      - name: Download EIF and measurements
+        run: |
+          scp -i /tmp/eif-builder-key.pem \
+              -o StrictHostKeyChecking=no \
+              ec2-user@${{ steps.launch-instance.outputs.public_ip }}:/tmp/auction.eif \
+              ./auction.eif
+          
+          scp -i /tmp/eif-builder-key.pem \
+              -o StrictHostKeyChecking=no \
+              ec2-user@${{ steps.launch-instance.outputs.public_ip }}:/tmp/auction.eif.measurements.json \
+              ./measurements.json
+      
+      - name: Extract PCRs
+        id: extract-pcrs
+        run: |
+          PCR0=$(jq -r '.Measurements.PCR0' measurements.json)
+          PCR1=$(jq -r '.Measurements.PCR1' measurements.json)
+          PCR2=$(jq -r '.Measurements.PCR2' measurements.json)
+          EIF_SHA256=$(sha256sum auction.eif | cut -d' ' -f1)
+          
+          echo "pcr0=${PCR0}" >> $GITHUB_OUTPUT
+          echo "pcr1=${PCR1}" >> $GITHUB_OUTPUT
+          echo "pcr2=${PCR2}" >> $GITHUB_OUTPUT
+          echo "eif_sha256=${EIF_SHA256}" >> $GITHUB_OUTPUT
+      
+      - name: Install ORAS
+        run: |
+          VERSION="1.1.0"
+          curl -LO "https://github.com/oras-project/oras/releases/download/v${VERSION}/oras_${VERSION}_linux_amd64.tar.gz"
+          tar -zxf oras_${VERSION}_*.tar.gz
+          sudo mv oras /usr/local/bin/
+          oras version
+      
+      - name: Login to ECR
+        run: |
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
+            oras login --username AWS --password-stdin \
+              ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+      
+      - name: Push EIF to ECR
+        run: |
+          COMMIT_SHA="${{ steps.set-sha.outputs.commit_sha }}"
+          COMMIT_SHORT="${{ steps.set-sha.outputs.commit_short }}"
+          REGISTRY="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com"
+          REPO="cloudx-io/openauction/enclave-eif"
+          
+          oras push "${REGISTRY}/${REPO}:sha-${COMMIT_SHA}" \
+            --artifact-type application/vnd.aws.nitro.eif \
+            --annotation "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --annotation "org.opencontainers.image.revision=${COMMIT_SHA}" \
+            --annotation "com.aws.nitro.pcr0=${{ steps.extract-pcrs.outputs.pcr0 }}" \
+            --annotation "com.aws.nitro.pcr1=${{ steps.extract-pcrs.outputs.pcr1 }}" \
+            --annotation "com.aws.nitro.pcr2=${{ steps.extract-pcrs.outputs.pcr2 }}" \
+            auction.eif:application/octet-stream \
+            measurements.json:application/json
+          
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            oras tag "${REGISTRY}/${REPO}:sha-${COMMIT_SHA}" latest
+          fi
+          
+          oras tag "${REGISTRY}/${REPO}:sha-${COMMIT_SHA}" "sha-${COMMIT_SHORT}"
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: eif-${{ steps.set-sha.outputs.commit_short }}
+          path: |
+            auction.eif
+            measurements.json
+          retention-days: 90
+      
+      - name: Summary
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+          # EIF Build Complete ✅
+          
+          ## PCR Measurements
+          | PCR | Value |
+          |-----|-------|
+          | PCR0 | `${{ steps.extract-pcrs.outputs.pcr0 }}` |
+          | PCR1 | `${{ steps.extract-pcrs.outputs.pcr1 }}` |
+          | PCR2 | `${{ steps.extract-pcrs.outputs.pcr2 }}` |
+          
+          ## Artifact
+          - SHA256: `${{ steps.extract-pcrs.outputs.eif_sha256 }}`
+          - Commit: `${{ steps.set-sha.outputs.commit_sha }}`
+          EOF
+      
+      - name: Cleanup instance
+        if: always()
+        run: |
+          if [ -n "${{ steps.launch-instance.outputs.instance_id }}" ]; then
+            aws ec2 terminate-instances \
+              --instance-ids "${{ steps.launch-instance.outputs.instance_id }}"
+          fi
+      
+      - name: Cleanup security group
+        if: always()
+        run: |
+          if [ -n "${{ steps.security-group.outputs.security_group_id }}" ]; then
+            sleep 10
+            aws ec2 delete-security-group \
+              --group-id "${{ steps.security-group.outputs.security_group_id }}" || true
+          fi
+      
+      - name: Cleanup key pair
+        if: always()
+        run: |
+          if [ -n "${{ steps.create-key.outputs.key_name }}" ]; then
+            aws ec2 delete-key-pair \
+              --key-name "${{ steps.create-key.outputs.key_name }}"
+          fi
+          rm -f /tmp/eif-builder-key.pem

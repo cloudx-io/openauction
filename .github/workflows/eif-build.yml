@@ -338,28 +338,23 @@ jobs:
         if: always()
         run: |
           if [ -n "${{ steps.launch-instance.outputs.instance_id }}" ]; then
+            echo "Terminating instance..."
             aws ec2 terminate-instances \
               --instance-ids "${{ steps.launch-instance.outputs.instance_id }}"
+
+            echo "Waiting for instance to terminate..."
+            aws ec2 wait instance-terminated \
+              --instance-ids "${{ steps.launch-instance.outputs.instance_id }}" \
+              --cli-read-timeout 300
           fi
       
       - name: Cleanup security group
         if: always()
         run: |
           if [ -n "${{ steps.security-group.outputs.security_group_id }}" ]; then
-            # Wait for instance to fully terminate before deleting security group
-            if [ -n "${{ steps.launch-instance.outputs.instance_id }}" ]; then
-              echo "Waiting for instance to terminate..."
-              aws ec2 wait instance-terminated \
-                --instance-ids "${{ steps.launch-instance.outputs.instance_id }}" \
-                --cli-read-timeout 300 || true
-            fi
-
             echo "Deleting security group..."
             aws ec2 delete-security-group \
-              --group-id "${{ steps.security-group.outputs.security_group_id }}" || {
-              echo "Warning: Could not delete security group (may still be attached)"
-              echo "It will be automatically cleaned up after instance fully terminates"
-            }
+              --group-id "${{ steps.security-group.outputs.security_group_id }}"
           fi
       
       - name: Cleanup key pair

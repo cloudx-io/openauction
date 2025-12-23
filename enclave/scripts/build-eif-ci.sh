@@ -149,29 +149,14 @@ main() {
     
     local measurements_file="${EIF_FILE}.measurements.json"
     
-    # Save raw output first for debugging
-    cp "$build_output" "$measurements_file"
+    # nitro-cli outputs text format, extract PCR values and strip formatting
+    local pcr0 pcr1 pcr2
+    pcr0=$(grep -i "PCR0" "$build_output" | awk '{print $NF}' | tr -d ',"' || echo "unknown")
+    pcr1=$(grep -i "PCR1" "$build_output" | awk '{print $NF}' | tr -d ',"' || echo "unknown")
+    pcr2=$(grep -i "PCR2" "$build_output" | awk '{print $NF}' | tr -d ',"' || echo "unknown")
 
-    # Parse the nitro-cli output and extract measurements
-    if command -v jq > /dev/null 2>&1 && [ -f "$build_output" ]; then
-        # Try to parse as JSON and extract PCRs
-        local pcr0 pcr1 pcr2
-        
-        # nitro-cli outputs JSON with PCRs in base64-encoded format
-        # Try different possible JSON structures
-        if jq -e '.Measurements' "$build_output" > /dev/null 2>&1; then
-            pcr0=$(jq -r '.Measurements.PCR0 // "unknown"' "$build_output" 2>/dev/null || echo "unknown")
-            pcr1=$(jq -r '.Measurements.PCR1 // "unknown"' "$build_output" 2>/dev/null || echo "unknown")
-            pcr2=$(jq -r '.Measurements.PCR2 // "unknown"' "$build_output" 2>/dev/null || echo "unknown")
-        else
-            # Alternative: extract from text output if not valid JSON
-            log "Output is not JSON, attempting text parsing..."
-            pcr0=$(grep -i "PCR0" "$build_output" | awk '{print $NF}' | tr -d ',"' || echo "unknown")
-            pcr1=$(grep -i "PCR1" "$build_output" | awk '{print $NF}' | tr -d ',"' || echo "unknown")
-            pcr2=$(grep -i "PCR2" "$build_output" | awk '{print $NF}' | tr -d ',"' || echo "unknown")
-
-            # Create a proper JSON file for GitHub Actions
-            cat > "$measurements_file" <<EOF
+    # Create JSON file for GitHub Actions and downstream tools
+    cat > "$measurements_file" <<EOF
 {
   "Measurements": {
     "PCR0": "$pcr0",
@@ -180,24 +165,17 @@ main() {
   }
 }
 EOF
-        fi
 
-        log "PCR Measurements:"
-        log "  PCR0: $pcr0"
-        log "  PCR1: $pcr1"
-        log "  PCR2: $pcr2"
-        
-        # Output for GitHub Actions
-        echo "PCR0=$pcr0"
-        echo "PCR1=$pcr1"
-        echo "PCR2=$pcr2"
-        
-    else
-        log "jq not available, raw output saved"
-        log "PCR measurements file: $measurements_file"
-    fi
-
+    log "PCR Measurements:"
+    log "  PCR0: $pcr0"
+    log "  PCR1: $pcr1"
+    log "  PCR2: $pcr2"
     log "✓ PCR measurements saved to: $measurements_file"
+
+    # Output for GitHub Actions
+    echo "PCR0=$pcr0"
+    echo "PCR1=$pcr1"
+    echo "PCR2=$pcr2"
 
     # Cleanup Docker resources to free space
     log "Cleaning up Docker resources..."

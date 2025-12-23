@@ -166,9 +166,20 @@ main() {
         else
             # Alternative: extract from text output if not valid JSON
             log "Output is not JSON, attempting text parsing..."
-            pcr0=$(grep -i "PCR0" "$build_output" | awk '{print $NF}' || echo "unknown")
-            pcr1=$(grep -i "PCR1" "$build_output" | awk '{print $NF}' || echo "unknown")
-            pcr2=$(grep -i "PCR2" "$build_output" | awk '{print $NF}' || echo "unknown")
+            pcr0=$(grep -i "PCR0" "$build_output" | awk '{print $NF}' | tr -d ',"' || echo "unknown")
+            pcr1=$(grep -i "PCR1" "$build_output" | awk '{print $NF}' | tr -d ',"' || echo "unknown")
+            pcr2=$(grep -i "PCR2" "$build_output" | awk '{print $NF}' | tr -d ',"' || echo "unknown")
+
+            # Create a proper JSON file for GitHub Actions
+            cat > "$measurements_file" <<EOF
+{
+  "Measurements": {
+    "PCR0": "$pcr0",
+    "PCR1": "$pcr1",
+    "PCR2": "$pcr2"
+  }
+}
+EOF
         fi
 
         log "PCR Measurements:"

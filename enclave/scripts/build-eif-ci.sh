@@ -149,37 +149,33 @@ main() {
     
     local measurements_file="${EIF_FILE}.measurements.json"
     
-    # Parse the nitro-cli output and extract measurements
-    if command -v jq > /dev/null 2>&1 && [ -f "$build_output" ]; then
-        # Pretty-print to measurements file
-        cat "$build_output" | jq '.' > "$measurements_file" 2>/dev/null || {
-            log_error "Failed to parse PCR measurements with jq"
-            cat "$build_output" > "$measurements_file"
-        }
-        
-        # Extract key measurements
-        local pcr0 pcr1 pcr2
-        pcr0=$(cat "$build_output" | jq -r '.Measurements.PCR0 // "unknown"' 2>/dev/null || echo "unknown")
-        pcr1=$(cat "$build_output" | jq -r '.Measurements.PCR1 // "unknown"' 2>/dev/null || echo "unknown")
-        pcr2=$(cat "$build_output" | jq -r '.Measurements.PCR2 // "unknown"' 2>/dev/null || echo "unknown")
-        
-        log "PCR Measurements:"
-        log "  PCR0: $pcr0"
-        log "  PCR1: $pcr1"
-        log "  PCR2: $pcr2"
-        
-        # Output for GitHub Actions (can be captured)
-        echo "PCR0=$pcr0"
-        echo "PCR1=$pcr1"
-        echo "PCR2=$pcr2"
-        
-    else
-        log "jq not available, saving raw output"
-        cat "$build_output" > "$measurements_file"
-        log "Raw PCR measurements saved to: $measurements_file"
-    fi
+    # nitro-cli outputs text format, extract PCR values and strip formatting
+    local pcr0 pcr1 pcr2
+    pcr0=$(grep -i "PCR0" "$build_output" | awk '{print $NF}' | tr -d ',"' || echo "unknown")
+    pcr1=$(grep -i "PCR1" "$build_output" | awk '{print $NF}' | tr -d ',"' || echo "unknown")
+    pcr2=$(grep -i "PCR2" "$build_output" | awk '{print $NF}' | tr -d ',"' || echo "unknown")
 
+    # Create JSON file for GitHub Actions and downstream tools
+    cat > "$measurements_file" <<EOF
+{
+  "Measurements": {
+    "PCR0": "$pcr0",
+    "PCR1": "$pcr1",
+    "PCR2": "$pcr2"
+  }
+}
+EOF
+
+    log "PCR Measurements:"
+    log "  PCR0: $pcr0"
+    log "  PCR1: $pcr1"
+    log "  PCR2: $pcr2"
     log "✓ PCR measurements saved to: $measurements_file"
+
+    # Output for GitHub Actions
+    echo "PCR0=$pcr0"
+    echo "PCR1=$pcr1"
+    echo "PCR2=$pcr2"
 
     # Cleanup Docker resources to free space
     log "Cleaning up Docker resources..."

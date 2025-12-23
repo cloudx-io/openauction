@@ -132,14 +132,16 @@ jobs:
             --query 'Vpcs[0].VpcId' \
             --output text)
           
+          # Use us-east-1a for consistent instance type availability
           SUBNET_ID=$(aws ec2 describe-subnets \
             --filters "Name=vpc-id,Values=${VPC_ID}" \
+                      "Name=availability-zone,Values=us-east-1a" \
             --query 'Subnets[0].SubnetId' \
             --output text)
           
           echo "vpc_id=${VPC_ID}" >> $GITHUB_OUTPUT
           echo "subnet_id=${SUBNET_ID}" >> $GITHUB_OUTPUT
-          echo "Using VPC: ${VPC_ID}, Subnet: ${SUBNET_ID}"
+          echo "Using VPC: ${VPC_ID}, Subnet: ${SUBNET_ID} (us-east-1a)"
       
       - name: Create security group
         id: security-group
@@ -186,7 +188,7 @@ jobs:
           
           echo "Waiting for instance to be running..."
           aws ec2 wait instance-running --instance-ids "${INSTANCE_ID}"
-          
+
           echo "Waiting for status checks..."
           aws ec2 wait instance-status-ok --instance-ids "${INSTANCE_ID}"
           
@@ -336,17 +338,23 @@ jobs:
         if: always()
         run: |
           if [ -n "${{ steps.launch-instance.outputs.instance_id }}" ]; then
+            echo "Terminating instance..."
             aws ec2 terminate-instances \
               --instance-ids "${{ steps.launch-instance.outputs.instance_id }}"
+
+            echo "Waiting for instance to terminate..."
+            aws ec2 wait instance-terminated \
+              --instance-ids "${{ steps.launch-instance.outputs.instance_id }}" \
+              --cli-read-timeout 300
           fi
       
       - name: Cleanup security group
         if: always()
         run: |
           if [ -n "${{ steps.security-group.outputs.security_group_id }}" ]; then
-            sleep 10
+            echo "Deleting security group..."
             aws ec2 delete-security-group \
-              --group-id "${{ steps.security-group.outputs.security_group_id }}" || true
+              --group-id "${{ steps.security-group.outputs.security_group_id }}"
           fi
       
       - name: Cleanup key pair

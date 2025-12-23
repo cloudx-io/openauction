@@ -82,6 +82,24 @@ install_docker() {
     
     if command -v docker &> /dev/null; then
         log "Docker already installed: $(docker --version)"
+        # Docker is installed but might not be running - ensure it's started
+        if ! sudo systemctl is-active --quiet docker; then
+            log "Starting Docker service..."
+            sudo systemctl start docker
+            sudo systemctl enable docker
+
+            # Wait for Docker daemon
+            for i in {1..10}; do
+                if sudo docker info &> /dev/null; then
+                    log "✓ Docker daemon started"
+                    break
+                fi
+                log "Waiting for Docker daemon... (attempt $i/10)"
+                sleep 2
+            done
+        else
+            log "✓ Docker service already running"
+        fi
         return 0
     fi
     
@@ -97,16 +115,27 @@ install_docker() {
     fi
     
     # Start Docker service
+    log "Starting Docker service..."
     sudo systemctl start docker
     sudo systemctl enable docker
-    
+
+    # Wait for Docker socket to be available
+    for i in {1..10}; do
+        if sudo docker info &> /dev/null; then
+            log "Docker daemon is running"
+            break
+        fi
+        log "Waiting for Docker daemon... (attempt $i/10)"
+        sleep 2
+    done
+
     # Add current user to docker group (if not root)
     if [ "$EUID" -ne 0 ]; then
         sudo usermod -aG docker "$USER" || true
         log "Note: You may need to log out and back in for docker group changes to take effect"
     fi
     
-    log "✓ Docker installed: $(docker --version)"
+    log "✓ Docker installed: $(sudo docker --version)"
 }
 
 install_dependencies() {

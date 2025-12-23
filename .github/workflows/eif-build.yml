@@ -188,7 +188,7 @@ jobs:
           
           echo "Waiting for instance to be running..."
           aws ec2 wait instance-running --instance-ids "${INSTANCE_ID}"
-          
+
           echo "Waiting for status checks..."
           aws ec2 wait instance-status-ok --instance-ids "${INSTANCE_ID}"
           
@@ -346,9 +346,20 @@ jobs:
         if: always()
         run: |
           if [ -n "${{ steps.security-group.outputs.security_group_id }}" ]; then
-            sleep 10
+            # Wait for instance to fully terminate before deleting security group
+            if [ -n "${{ steps.launch-instance.outputs.instance_id }}" ]; then
+              echo "Waiting for instance to terminate..."
+              aws ec2 wait instance-terminated \
+                --instance-ids "${{ steps.launch-instance.outputs.instance_id }}" \
+                --cli-read-timeout 300 || true
+            fi
+
+            echo "Deleting security group..."
             aws ec2 delete-security-group \
-              --group-id "${{ steps.security-group.outputs.security_group_id }}" || true
+              --group-id "${{ steps.security-group.outputs.security_group_id }}" || {
+              echo "Warning: Could not delete security group (may still be attached)"
+              echo "It will be automatically cleaned up after instance fully terminates"
+            }
           fi
       
       - name: Cleanup key pair

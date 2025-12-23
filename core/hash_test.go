@@ -185,9 +185,9 @@ func TestComputeRequestHash(t *testing.T) {
 func TestComputeAdjustmentFactorsHash(t *testing.T) {
 	nonce := "test-nonce"
 	factors := map[string]float64{
-		"meta":     1.0,
-		"appnexus": 0.95,
-		"pubmatic": 1.15,
+		"bidderA": 1.0,
+		"bidderB": 0.95,
+		"bidderC": 1.15,
 	}
 
 	hash := ComputeAdjustmentFactorsHash(factors, nonce)
@@ -218,9 +218,9 @@ func TestComputeAdjustmentFactorsHash(t *testing.T) {
 
 	// Test that different factors produce different hashes
 	differentFactors := map[string]float64{
-		"meta":     1.0,
-		"appnexus": 0.96, // Different value
-		"pubmatic": 1.15,
+		"bidderA": 1.0,
+		"bidderB": 0.96, // Different value
+		"bidderC": 1.15,
 	}
 	hash4 := ComputeAdjustmentFactorsHash(differentFactors, nonce)
 	if hash == hash4 {
@@ -232,8 +232,8 @@ func TestComputeAdjustmentFactorsHash_Sorting(t *testing.T) {
 	nonce := "test"
 
 	// These should produce the same hash because they're the same factors, just in different map iteration order
-	factors1 := map[string]float64{"meta": 1.0, "appnexus": 0.95}
-	factors2 := map[string]float64{"appnexus": 0.95, "meta": 1.0}
+	factors1 := map[string]float64{"bidderA": 1.0, "bidderB": 0.95}
+	factors2 := map[string]float64{"bidderB": 0.95, "bidderA": 1.0}
 
 	hash1 := ComputeAdjustmentFactorsHash(factors1, nonce)
 	hash2 := ComputeAdjustmentFactorsHash(factors2, nonce)
@@ -243,7 +243,7 @@ func TestComputeAdjustmentFactorsHash_Sorting(t *testing.T) {
 	}
 
 	// Verify exact calculation with sorted keys
-	expectedData := "test|appnexus:0.950000|meta:1.000000"
+	expectedData := "test|bidderA:1.000000|bidderB:0.950000"
 	expectedHash := fmt.Sprintf("%x", sha256.Sum256([]byte(expectedData)))
 	if hash1 != expectedHash {
 		t.Errorf("ComputeAdjustmentFactorsHash() = %v, want %v", hash1, expectedHash)

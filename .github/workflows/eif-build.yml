@@ -104,7 +104,7 @@ jobs:
             echo "Using manually specified image tag: ${IMAGE_TAG}"
           else
             COMMIT_SHA="${{ steps.set-sha.outputs.commit_sha }}"
-            IMAGE_TAG="sha-${COMMIT_SHA}"
+            IMAGE_TAG="${COMMIT_SHA}"
             echo "Using commit-based image tag: ${IMAGE_TAG}"
           fi
 
@@ -289,7 +289,7 @@ jobs:
           REGISTRY="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com"
           REPO="cloudx-io/openauction/enclave-eif"
           
-          oras push "${REGISTRY}/${REPO}:sha-${COMMIT_SHA}" \
+          oras push "${REGISTRY}/${REPO}:${COMMIT_SHA}" \
             --artifact-type application/vnd.aws.nitro.eif \
             --annotation "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --annotation "org.opencontainers.image.revision=${COMMIT_SHA}" \
@@ -300,10 +300,10 @@ jobs:
             measurements.json:application/json
           
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            oras tag "${REGISTRY}/${REPO}:sha-${COMMIT_SHA}" latest
+            oras tag "${REGISTRY}/${REPO}:${COMMIT_SHA}" latest
           fi
           
-          oras tag "${REGISTRY}/${REPO}:sha-${COMMIT_SHA}" "sha-${COMMIT_SHORT}"
+          oras tag "${REGISTRY}/${REPO}:${COMMIT_SHA}" "${COMMIT_SHORT}"
       
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

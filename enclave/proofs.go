@@ -3,14 +3,12 @@ package main
 import (
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha256"
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"log"
-	"sort"
 	"time"
 
 	enclave "github.com/edgebitio/nitro-enclaves-sdk-go"
@@ -24,7 +22,7 @@ type EnclaveAttester interface {
 	Attest(options enclave.AttestationOptions) ([]byte, error)
 }
 
-func GenerateTEEProofs(attester EnclaveAttester, req enclaveapi.EnclaveAuctionRequest, unencryptedBids []core.CoreBid, winner, runnerUp *core.CoreBid) (enclaveapi.AttestationCOSE, error) {
+func GenerateTEEProofs(attester EnclaveAttester, req enclaveapi.EnclaveAuctionRequest, _ []core.CoreBid, winner, runnerUp *core.CoreBid) (enclaveapi.AttestationCOSE, error) {
 	bidHashNonce, err := generateNonce()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate bid hash nonce: %w", err)
@@ -40,10 +38,18 @@ func GenerateTEEProofs(attester EnclaveAttester, req enclaveapi.EnclaveAuctionRe
 		return nil, fmt.Errorf("failed to generate adjustment factors nonce: %w", err)
 	}
 
-	// Build list of bid hashes from unencrypted bid prices
-	bidHashes := make([]string, 0, len(unencryptedBids))
-	for _, bid := range unencryptedBids {
-		bidHashes = append(bidHashes, generateBidHash(bid.ID, bid.Price, bidHashNonce))
+	// Build list of bid hashes from original bids (use encrypted payload if encrypted, price if not)
+	bidHashes := make([]string, 0, len(req.Bids))
+	for _, bid := range req.Bids {
+		var hash string
+		if bid.EncryptedPrice != nil {
+			// For encrypted bids, hash the encrypted payload
+			hash = core.ComputeBidHashEncrypted(bid.ID, bid.EncryptedPrice.EncryptedPayload, bidHashNonce)
+		} else {
+			// For unencrypted bids, hash the price
+			hash = core.ComputeBidHash(bid.ID, bid.Price, bidHashNonce)
+		}
+		bidHashes = append(bidHashes, hash)
 	}
 
 	requestHash := calculateRequestHash(req, requestNonce)
@@ -74,34 +80,12 @@ func generateNonce() (string, error) {
 	return hex.EncodeToString(randomBytes), nil
 }
 
-func generateBidHash(bidID string, price float64, nonce string) string {
-	data := fmt.Sprintf("%s|%.6f|%s", bidID, price, nonce)
-	hash := sha256.Sum256([]byte(data))
-	return fmt.Sprintf("%x", hash)
-}
-
 func calculateRequestHash(req enclaveapi.EnclaveAuctionRequest, nonce string) string {
-	data := fmt.Sprintf("%s|%d|%s", req.AuctionID, req.RoundID, nonce)
-	hash := sha256.Sum256([]byte(data))
-	return fmt.Sprintf("%x", hash)
+	return core.ComputeRequestHash(req.AuctionID, req.RoundID, nonce)
 }
 
 func calculateAdjustmentFactorsHash(adjustmentFactors map[string]float64, nonce string) string {
-	data := nonce
-
-	// Sort bidders to ensure deterministic hash calculation
-	bidders := make([]string, 0, len(adjustmentFactors))
-	for bidder := range adjustmentFactors {
-		bidders = append(bidders, bidder)
-	}
-	sort.Strings(bidders)
-
-	for _, bidder := range bidders {
-		factor := adjustmentFactors[bidder]
-		data += fmt.Sprintf("|%s:%.6f", bidder, factor)
-	}
-	hash := sha256.Sum256([]byte(data))
-	return fmt.Sprintf("%x", hash)
+	return core.ComputeAdjustmentFactorsHash(adjustmentFactors, nonce)
 }
 
 // stripBidderName converts a CoreBid to CoreBidWithoutBidder, removing bidder identity

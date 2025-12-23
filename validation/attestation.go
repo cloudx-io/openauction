@@ -46,7 +46,7 @@ func validateCommonAttestation(attestationCOSEBase64 enclaveapi.AttestationCOSEB
 		}
 	}
 
-	// Validate certificate chain
+	// Validate certificate chain at the attestation timestamp
 	if attestationDoc.Certificate == "" {
 		result.CertificateValid = false
 		result.ValidationDetails = append(result.ValidationDetails, "Missing certificate")
@@ -54,7 +54,7 @@ func validateCommonAttestation(attestationCOSEBase64 enclaveapi.AttestationCOSEB
 		result.CertificateValid = false
 		result.ValidationDetails = append(result.ValidationDetails, "Missing CA bundle")
 	} else {
-		err = ValidateCertificateChain(attestationDoc.Certificate, attestationDoc.CABundle)
+		err = ValidateCertificateChain(attestationDoc.Certificate, attestationDoc.CABundle, attestationDoc.Timestamp)
 		if err != nil {
 			result.CertificateValid = false
 			result.ValidationDetails = append(result.ValidationDetails, fmt.Sprintf("Certificate chain validation failed: %v", err))

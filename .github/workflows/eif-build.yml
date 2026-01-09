@@ -58,7 +58,7 @@ jobs:
   build-eif:
     name: Build EIF on Nitro EC2
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     permissions:
       id-token: write
       contents: read

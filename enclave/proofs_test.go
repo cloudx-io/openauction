@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"regexp"
 	"slices"
@@ -292,47 +293,37 @@ func TestGenerateKeyAttestationWithMock(t *testing.T) {
 	check.NotNil(t, coseBytes)
 	check.True(t, len(coseBytes) > 0)
 
-	// Convert public key to PEM for comparison
-	publicKeyPEM, err := publicKeyToPEM(&privateKey.PublicKey)
+	// Verify COSE bytes can be parsed
+	attestationDoc, userData, err := enclaveapi.AttestationCOSE(coseBytes).ParseAttestationDoc()
 	check.NoError(t, err)
+	check.Equal(t, "test-enclave-12345", attestationDoc.ModuleID)
+	check.Equal(t, "SHA384", attestationDoc.DigestAlgorithm)
 
-	// Create the expected user data to parse the attestation
-	keyUserData := &enclaveapi.KeyAttestationUserData{
-		KeyAlgorithm: "RSA-2048",
-		PublicKey:    publicKeyPEM,
-		AuctionToken: testToken,
-	}
-
-	// Parse the COSE bytes to verify structure
-	keyAttestation, err := ParseKeyAttestation(coseBytes, keyUserData)
+	// Verify user data contains key attestation info
+	check.True(t, len(userData) > 0)
+	var keyUserData enclaveapi.KeyAttestationUserData
+	err = json.Unmarshal(userData, &keyUserData)
 	check.NoError(t, err)
-	check.NotNil(t, keyAttestation)
-	check.Equal(t, "test-enclave-12345", keyAttestation.ModuleID)
-	check.Equal(t, "SHA384", keyAttestation.DigestAlgorithm)
-
-	// Verify user data structure
-	check.NotNil(t, keyAttestation.UserData)
-	check.Equal(t, "RSA-2048", keyAttestation.UserData.KeyAlgorithm)
-	check.NotEqual(t, "", keyAttestation.UserData.PublicKey)
-	check.Equal(t, testToken, keyAttestation.UserData.AuctionToken)
+	check.Equal(t, "RSA-2048", keyUserData.KeyAlgorithm)
+	check.NotEqual(t, "", keyUserData.PublicKey)
+	check.Equal(t, testToken, keyUserData.AuctionToken)
 
 	// Verify public key is in PEM format
-	check.True(t, strings.Contains(keyAttestation.UserData.PublicKey, "-----BEGIN PUBLIC KEY-----"))
-	check.True(t, strings.Contains(keyAttestation.UserData.PublicKey, "-----END PUBLIC KEY-----"))
+	check.True(t, strings.Contains(keyUserData.PublicKey, "-----BEGIN PUBLIC KEY-----"))
+	check.True(t, strings.Contains(keyUserData.PublicKey, "-----END PUBLIC KEY-----"))
 
-	// Verify all PCRs are extracted with realistic production values
-	check.NotNil(t, keyAttestation.PCRs)
-	check.NotEqual(t, "", keyAttestation.PCRs.ImageFileHash)
-	check.NotEqual(t, "", keyAttestation.PCRs.KernelHash)
-	check.NotEqual(t, "", keyAttestation.PCRs.ApplicationHash)
-	check.NotEqual(t, "", keyAttestation.PCRs.IAMRoleHash)
-	check.NotEqual(t, "", keyAttestation.PCRs.InstanceIDHash)
+	// Verify all PCRs are present
+	check.NotEqual(t, "", attestationDoc.PCRs.ImageFileHash)
+	check.NotEqual(t, "", attestationDoc.PCRs.KernelHash)
+	check.NotEqual(t, "", attestationDoc.PCRs.ApplicationHash)
+	check.NotEqual(t, "", attestationDoc.PCRs.IAMRoleHash)
+	check.NotEqual(t, "", attestationDoc.PCRs.InstanceIDHash)
 
 	// Verify attestation metadata
-	check.NotEqual(t, "", keyAttestation.Certificate)
-	check.NotEqual(t, []string{}, keyAttestation.CABundle)
-	check.NotEqual(t, "", keyAttestation.PublicKey)
-	check.NotEqual(t, "", keyAttestation.Nonce)
+	check.NotEqual(t, "", attestationDoc.Certificate)
+	check.NotEqual(t, []string{}, attestationDoc.CABundle)
+	check.NotEqual(t, "", attestationDoc.PublicKey)
+	check.NotEqual(t, "", attestationDoc.Nonce)
 }
 
 func TestHandleKeyRequest(t *testing.T) {

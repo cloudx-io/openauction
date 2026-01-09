@@ -629,13 +629,12 @@ func TestEndToEndTokenFlow(t *testing.T) {
 	keyManager, _ := NewKeyManager()
 	tokenManager := NewTokenManager()
 
-	// Request key and get token from attestation user_data
+	// Request key and auction token
 	keyResp, err := HandleKeyRequest(mockAttester, keyManager, tokenManager)
 	check.NoError(t, err)
 	check.NotEqual(t, "", keyResp.PublicKey)
-	check.NotNil(t, keyResp.KeyAttestation)
-	check.NotEqual(t, "", keyResp.KeyAttestation.UserData.AuctionToken)
-	token := keyResp.KeyAttestation.UserData.AuctionToken
+	check.NotEqual(t, "", keyResp.AuctionToken)
+	token := keyResp.AuctionToken
 
 	// Token should be valid
 	check.True(t, tokenManager.ValidateToken(token))

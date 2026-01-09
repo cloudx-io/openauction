@@ -65,6 +65,16 @@ func HandleKeyRequest(attester EnclaveAttester, keyManager *KeyManager, tokenMan
 		return nil, fmt.Errorf("failed to compress attestation: %w", err)
 	}
 
+	keyUserData := &enclaveapi.KeyAttestationUserData{
+		KeyAlgorithm: "RSA-2048",
+		PublicKey:    publicKeyPEM,
+		AuctionToken: auctionToken,
+	}
+	keyAttestation, err := ParseKeyAttestation(coseAttestation, keyUserData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse key attestation: %w", err)
+	}
+
 	return &enclaveapi.KeyResponse{
 		KeyWithAttestation: enclaveapi.KeyWithAttestation{
 			PublicKey:    publicKeyPEM,
@@ -72,6 +82,7 @@ func HandleKeyRequest(attester EnclaveAttester, keyManager *KeyManager, tokenMan
 			AuctionToken: auctionToken,
 		},
 		Type:                  "key_response",
-		AttestationCOSEBase64: coseAttestation.EncodeBase64(), // Deprecated: kept for backward compatibility during migration
+		KeyAttestation:        keyAttestation,
+		AttestationCOSEBase64: coseAttestation.EncodeBase64(),
 	}, nil
 }

@@ -158,17 +158,17 @@ type EnclaveAuctionResponse struct {
 
 // KeyResponse represents the response from a key request to the TEE enclave
 type KeyResponse struct {
+	KeyWithAttestation
 	Type                  string                `json:"type"`
-	PublicKey             string                `json:"public_key"`                        // PEM format
-	KeyAttestation        *KeyAttestationDoc    `json:"key_attestation"`                   // Deprecated: Use attestation_cose_base64 instead
-	AttestationCOSEBase64 AttestationCOSEBase64 `json:"attestation_cose_base64,omitempty"` // Base64-encoded COSE_Sign1 attestation
+	AttestationCOSEBase64 AttestationCOSEBase64 `json:"attestation_cose_base64,omitempty"` // Deprecated: for backward compatibility during migration
 }
 
 // KeyWithAttestation represents a public key with its TEE attestation
 // Used in bid requests and key validation tools
 type KeyWithAttestation struct {
-	PublicKey   string              `json:"public_key"`                             // PEM-encoded RSA public key
-	Attestation AttestationCOSEGzip `json:"attestation_cose_gzip_base64,omitempty"` // Gzipped and base64-encoded COSE_Sign1 attestation
+	PublicKey    string              `json:"public_key"`                   // PEM-encoded RSA public key
+	Attestation  AttestationCOSEGzip `json:"attestation_cose_gzip_base64"` // Gzipped and base64-encoded COSE_Sign1 attestation
+	AuctionToken string              `json:"auction_token"`                // Single-use token for bid replay protection
 }
 
 // KeyAttestationUserData represents the key-specific data embedded in key attestation

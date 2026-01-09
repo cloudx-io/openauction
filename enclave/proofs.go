@@ -175,17 +175,16 @@ func publicKeyToPEM(publicKey *rsa.PublicKey) (string, error) {
 	return string(pem.EncodeToMemory(pemBlock)), nil
 }
 
-// GenerateKeyAttestation generates an attestation document for E2EE public keys
-// Returns the parsed attestation and the raw COSE bytes
-func GenerateKeyAttestation(attester EnclaveAttester, publicKey *rsa.PublicKey, auctionToken string) (*enclaveapi.KeyAttestationDoc, enclaveapi.AttestationCOSE, error) {
+// GenerateKeyAttestation generates raw COSE bytes for E2EE public keys
+func GenerateKeyAttestation(attester EnclaveAttester, publicKey *rsa.PublicKey, auctionToken string) (enclaveapi.AttestationCOSE, error) {
 	if attester == nil {
-		return nil, nil, fmt.Errorf("enclave attester is nil")
+		return nil, fmt.Errorf("enclave attester is nil")
 	}
 
 	// Convert public key to PEM format for inclusion in attestation
 	publicKeyPEM, err := publicKeyToPEM(publicKey)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to convert public key to PEM: %w", err)
+		return nil, fmt.Errorf("failed to convert public key to PEM: %w", err)
 	}
 
 	keyUserData := &enclaveapi.KeyAttestationUserData{
@@ -196,12 +195,12 @@ func GenerateKeyAttestation(attester EnclaveAttester, publicKey *rsa.PublicKey, 
 
 	userDataBytes, err := json.Marshal(keyUserData)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to marshal key user data: %w", err)
+		return nil, fmt.Errorf("failed to marshal key user data: %w", err)
 	}
 
 	randomNonce, err := generateNonce()
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to generate attestation nonce: %w", err)
+		return nil, fmt.Errorf("failed to generate attestation nonce: %w", err)
 	}
 
 	attestationCBOR, err := attester.Attest(enclave.AttestationOptions{
@@ -210,18 +209,12 @@ func GenerateKeyAttestation(attester EnclaveAttester, publicKey *rsa.PublicKey, 
 	})
 	if err != nil {
 		log.Printf("ERROR: NSM key attestation failed: %v", err)
-		return nil, nil, fmt.Errorf("NSM key attestation failed: %w", err)
+		return nil, fmt.Errorf("NSM key attestation failed: %w", err)
 	}
 
 	log.Printf("Key attestation generated: %d bytes", len(attestationCBOR))
 
-	keyAttestation, err := ParseKeyAttestation(attestationCBOR, keyUserData)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// Return both the parsed attestation and the raw COSE bytes
-	return keyAttestation, enclaveapi.AttestationCOSE(attestationCBOR), nil
+	return enclaveapi.AttestationCOSE(attestationCBOR), nil
 }
 
 // ParseKeyAttestation parses CBOR attestation specifically for key attestation

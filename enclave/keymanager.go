@@ -55,15 +55,23 @@ func HandleKeyRequest(attester EnclaveAttester, keyManager *KeyManager, tokenMan
 
 	auctionToken := tokenManager.GenerateToken()
 
-	keyAttestation, coseAttestation, err := GenerateKeyAttestation(attester, keyManager.PublicKey, auctionToken)
+	coseAttestation, err := GenerateKeyAttestation(attester, keyManager.PublicKey, auctionToken)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate key attestation: %w", err)
 	}
 
+	attestationGzip, err := coseAttestation.CompressGzip()
+	if err != nil {
+		return nil, fmt.Errorf("failed to compress attestation: %w", err)
+	}
+
 	return &enclaveapi.KeyResponse{
+		KeyWithAttestation: enclaveapi.KeyWithAttestation{
+			PublicKey:    publicKeyPEM,
+			Attestation:  attestationGzip,
+			AuctionToken: auctionToken,
+		},
 		Type:                  "key_response",
-		PublicKey:             publicKeyPEM,
-		KeyAttestation:        keyAttestation,
-		AttestationCOSEBase64: coseAttestation.EncodeBase64(),
+		AttestationCOSEBase64: coseAttestation.EncodeBase64(), // Deprecated: kept for backward compatibility during migration
 	}, nil
 }

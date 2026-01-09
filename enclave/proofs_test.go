@@ -265,11 +265,11 @@ func TestGenerateKeyAttestation(t *testing.T) {
 	check.NoError(t, err)
 
 	testToken := "550e8400-e29b-41d4-a716-446655440000"
-	keyAttestation, _, err := GenerateKeyAttestation(nil, &privateKey.PublicKey, testToken)
+	coseBytes, err := GenerateKeyAttestation(nil, &privateKey.PublicKey, testToken)
 
 	// Should fail with nil enclave handle
 	check.Error(t, err)
-	check.Nil(t, keyAttestation)
+	check.Nil(t, coseBytes)
 	check.True(t, strings.Contains(err.Error(), "enclave attester is nil"))
 }
 
@@ -285,9 +285,26 @@ func TestGenerateKeyAttestationWithMock(t *testing.T) {
 	testToken := "550e8400-e29b-41d4-a716-446655440000"
 
 	// Test successful key attestation generation with mock
-	keyAttestation, _, err := GenerateKeyAttestation(mockEnclave, &privateKey.PublicKey, testToken)
+	coseBytes, err := GenerateKeyAttestation(mockEnclave, &privateKey.PublicKey, testToken)
 
 	// Should succeed with mock enclave
+	check.NoError(t, err)
+	check.NotNil(t, coseBytes)
+	check.True(t, len(coseBytes) > 0)
+
+	// Convert public key to PEM for comparison
+	publicKeyPEM, err := publicKeyToPEM(&privateKey.PublicKey)
+	check.NoError(t, err)
+
+	// Create the expected user data to parse the attestation
+	keyUserData := &enclaveapi.KeyAttestationUserData{
+		KeyAlgorithm: "RSA-2048",
+		PublicKey:    publicKeyPEM,
+		AuctionToken: testToken,
+	}
+
+	// Parse the COSE bytes to verify structure
+	keyAttestation, err := ParseKeyAttestation(coseBytes, keyUserData)
 	check.NoError(t, err)
 	check.NotNil(t, keyAttestation)
 	check.Equal(t, "test-enclave-12345", keyAttestation.ModuleID)
@@ -353,13 +370,12 @@ func TestHandleKeyRequestWithMock(t *testing.T) {
 	// Verify response structure
 	check.Equal(t, "key_response", keyResponse.Type)
 	check.NotEqual(t, "", keyResponse.PublicKey)
-	check.NotNil(t, keyResponse.KeyAttestation)
 
-	// Verify auction token in attestation user_data
-	check.NotEqual(t, "", keyResponse.KeyAttestation.UserData.AuctionToken)
+	// Verify auction token
+	check.NotEqual(t, "", keyResponse.AuctionToken)
 
 	// Verify auction token is a valid UUID v4
-	parsedToken, err := uuid.Parse(keyResponse.KeyAttestation.UserData.AuctionToken)
+	parsedToken, err := uuid.Parse(keyResponse.AuctionToken)
 	check.NoError(t, err)
 	check.Equal(t, uuid.Version(4), parsedToken.Version())
 
@@ -377,15 +393,13 @@ func TestHandleKeyRequestWithMock(t *testing.T) {
 	check.NoError(t, err)
 	check.NotNil(t, parsedKey)
 
-	// Verify key attestation is properly structured
-	keyAttestation := keyResponse.KeyAttestation
-	check.Equal(t, "test-enclave-12345", keyAttestation.ModuleID)
-	check.Equal(t, "SHA384", keyAttestation.DigestAlgorithm)
-	check.NotNil(t, keyAttestation.UserData)
-	check.Equal(t, "RSA-2048", keyAttestation.UserData.KeyAlgorithm)
-	// Verify user data includes the public key
-	check.NotEqual(t, "", keyAttestation.UserData.PublicKey)
-	check.True(t, strings.Contains(keyAttestation.UserData.PublicKey, "-----BEGIN PUBLIC KEY-----"))
+	// Verify attestation is present
+	check.NotEqual(t, "", keyResponse.Attestation)
+
+	// Verify we can decompress and parse the attestation
+	coseBytes, err := keyResponse.Attestation.Decompress()
+	check.NoError(t, err)
+	check.True(t, len(coseBytes) > 0)
 }
 
 func TestHandleKeyRequest_PEMRoundTrip(t *testing.T) {

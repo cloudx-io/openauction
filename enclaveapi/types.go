@@ -159,9 +159,7 @@ type EnclaveAuctionResponse struct {
 // KeyResponse represents the response from a key request to the TEE enclave
 type KeyResponse struct {
 	KeyWithAttestation
-	Type                  string                `json:"type"`
-	KeyAttestation        *KeyAttestationDoc    `json:"key_attestation,omitempty"`         // Deprecated: for backward compatibility, will be removed after SSP migration
-	AttestationCOSEBase64 AttestationCOSEBase64 `json:"attestation_cose_base64,omitempty"` // Deprecated: for backward compatibility during migration
+	Type string `json:"type"`
 }
 
 // KeyWithAttestation represents a public key with its TEE attestation

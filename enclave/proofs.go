@@ -216,19 +216,3 @@ func GenerateKeyAttestation(attester EnclaveAttester, publicKey *rsa.PublicKey, 
 
 	return enclaveapi.AttestationCOSE(attestationCBOR), nil
 }
-
-// ParseKeyAttestation parses CBOR attestation specifically for key attestation
-// TODO: remove after KeyResponse.KeyAttestation is removed
-func ParseKeyAttestation(cborData []byte, keyUserData *enclaveapi.KeyAttestationUserData) (*enclaveapi.KeyAttestationDoc, error) {
-	attestationDoc, _, err := enclaveapi.AttestationCOSE(cborData).ParseAttestationDoc()
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse attestation: %w", err)
-	}
-
-	log.Printf("INFO: Successfully parsed key attestation document with module ID: %s", attestationDoc.ModuleID)
-
-	return &enclaveapi.KeyAttestationDoc{
-		AttestationDoc: attestationDoc,
-		UserData:       keyUserData,
-	}, nil
-}

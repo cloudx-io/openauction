@@ -91,17 +91,10 @@ func validateBidHash(input *AuctionValidationInput, attestation *enclaveapi.Auct
 		return false
 	}
 
-	// Compute hash based on whether bid was encrypted or not
-	var computedHash string
-	if input.EncryptedPayload != "" {
-		// Encrypted bid - hash the encrypted payload
-		computedHash = core.ComputeBidHashEncrypted(input.BidID, input.EncryptedPayload, bidHashNonce)
-		result.ValidationDetails = append(result.ValidationDetails, "Computing hash for encrypted bid")
-	} else {
-		// Unencrypted bid - hash the price
-		computedHash = core.ComputeBidHash(input.BidID, input.BidPrice, bidHashNonce)
-		result.ValidationDetails = append(result.ValidationDetails, "Computing hash for unencrypted bid")
-	}
+	// Compute hash using the decrypted price
+	// All bids (encrypted and unencrypted) are hashed using their decrypted price
+	computedHash := core.ComputeBidHash(input.BidID, input.BidPrice, bidHashNonce)
+	result.ValidationDetails = append(result.ValidationDetails, "Computing bid hash using decrypted price")
 
 	for _, attestedHash := range attestation.UserData.BidHashes {
 		if computedHash == attestedHash {

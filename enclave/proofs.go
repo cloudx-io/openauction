@@ -22,7 +22,7 @@ type EnclaveAttester interface {
 	Attest(options enclave.AttestationOptions) ([]byte, error)
 }
 
-func GenerateTEEProofs(attester EnclaveAttester, req enclaveapi.EnclaveAuctionRequest, _ []core.CoreBid, winner, runnerUp *core.CoreBid) (enclaveapi.AttestationCOSE, error) {
+func GenerateTEEProofs(attester EnclaveAttester, req enclaveapi.EnclaveAuctionRequest, unencryptedBids []core.CoreBid, winner, runnerUp *core.CoreBid) (enclaveapi.AttestationCOSE, error) {
 	bidHashNonce, err := generateNonce()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate bid hash nonce: %w", err)
@@ -38,17 +38,11 @@ func GenerateTEEProofs(attester EnclaveAttester, req enclaveapi.EnclaveAuctionRe
 		return nil, fmt.Errorf("failed to generate adjustment factors nonce: %w", err)
 	}
 
-	// Build list of bid hashes from original bids (use encrypted payload if encrypted, price if not)
-	bidHashes := make([]string, 0, len(req.Bids))
-	for _, bid := range req.Bids {
-		var hash string
-		if bid.EncryptedPrice != nil {
-			// For encrypted bids, hash the encrypted payload
-			hash = core.ComputeBidHashEncrypted(bid.ID, bid.EncryptedPrice.EncryptedPayload, bidHashNonce)
-		} else {
-			// For unencrypted bids, hash the price
-			hash = core.ComputeBidHash(bid.ID, bid.Price, bidHashNonce)
-		}
+	// Build list of bid hashes from decrypted bids
+	// All bids (encrypted and unencrypted) are hashed using their decrypted price
+	bidHashes := make([]string, 0, len(unencryptedBids))
+	for _, bid := range unencryptedBids {
+		hash := core.ComputeBidHash(bid.ID, bid.Price, bidHashNonce)
 		bidHashes = append(bidHashes, hash)
 	}
 

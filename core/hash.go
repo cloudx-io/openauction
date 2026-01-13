@@ -19,18 +19,6 @@ func ComputeBidHash(bidID string, price float64, nonce string) string {
 	return fmt.Sprintf("%x", hash)
 }
 
-// ComputeBidHashEncrypted computes the bid hash for encrypted bids using the TEE algorithm.
-// For encrypted bids, we hash the encrypted payload instead of the price since only the TEE
-// can decrypt the price. This allows bidders to verify their encrypted bid was included without
-// needing the TEE's private key.
-//
-// Formula: SHA256(bid_id + "|" + encrypted_payload + "|" + nonce)
-func ComputeBidHashEncrypted(bidID string, encryptedPayload string, nonce string) string {
-	data := fmt.Sprintf("%s|%s|%s", bidID, encryptedPayload, nonce)
-	hash := sha256.Sum256([]byte(data))
-	return fmt.Sprintf("%x", hash)
-}
-
 // ComputeRequestHash computes the auction request hash using the TEE algorithm.
 // This is used by both the enclave (to generate hashes) and validation (to verify hashes).
 //

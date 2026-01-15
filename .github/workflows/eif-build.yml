@@ -381,7 +381,7 @@ jobs:
     needs: build-eif
     if: github.ref == 'refs/heads/main'
     env:
-      GH_APP_ID: '2665158'
+      GH_APP_ID: '2665276'
 
     steps:
       - name: Generate GitHub App token

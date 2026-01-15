@@ -63,9 +63,10 @@ jobs:
     name: Build EIF on Nitro EC2
     runs-on: ubuntu-latest
     if: |
-      !contains(github.event.head_commit.message, '[skip-build]') &&
       (github.event_name == 'workflow_dispatch' ||
-       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main'))
+       (github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        !contains(github.event.workflow_run.head_commit.message, '[skip-build]')))
     permissions:
       id-token: write
       contents: read

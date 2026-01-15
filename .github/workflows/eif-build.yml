@@ -54,11 +54,18 @@ env:
   #  --region us-east-1
   AMI_ID: ami-08d7aabbb50c2c24e 
 
+concurrency:
+  group: eif-build
+  cancel-in-progress: false
+
 jobs:
   build-eif:
     name: Build EIF on Nitro EC2
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+    if: |
+      !contains(github.event.head_commit.message, '[skip-build]') &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main'))
     permissions:
       id-token: write
       contents: read
@@ -68,6 +75,7 @@ jobs:
       pcr1: ${{ steps.extract-pcrs.outputs.pcr1 }}
       pcr2: ${{ steps.extract-pcrs.outputs.pcr2 }}
       eif_sha256: ${{ steps.extract-pcrs.outputs.eif_sha256 }}
+      commit_sha: ${{ steps.set-sha.outputs.commit_sha }}
     
     steps:
       - name: Checkout repository
@@ -365,3 +373,49 @@ jobs:
               --key-name "${{ steps.create-key.outputs.key_name }}"
           fi
           rm -f /tmp/eif-builder-key.pem
+
+  update-pcrs:
+    name: Update PCR validation file
+    runs-on: ubuntu-latest
+    needs: build-eif
+    if: github.ref == 'refs/heads/main'
+    env:
+      GH_APP_ID: '2665158'
+
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ env.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Update pcrs.json
+        run: |
+          # Use jq to append new PCR set
+          jq --arg sha "${{ needs.build-eif.outputs.commit_sha }}" \
+             --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+             --arg pcr0 "${{ needs.build-eif.outputs.pcr0 }}" \
+             --arg pcr1 "${{ needs.build-eif.outputs.pcr1 }}" \
+             --arg pcr2 "${{ needs.build-eif.outputs.pcr2 }}" \
+             '.pcr_sets += [{
+               commit_sha: $sha,
+               timestamp: $ts,
+               pcr0: $pcr0,
+               pcr1: $pcr1,
+               pcr2: $pcr2
+             }]' validation/pcrs.json > pcrs.tmp.json
+          mv pcrs.tmp.json validation/pcrs.json
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add validation/pcrs.json
+          git commit -m "[skip-build] Update PCR measurements for ${{ needs.build-eif.outputs.commit_sha }}"
+          git push

@@ -42,7 +42,7 @@ func validateCommonAttestation(attestationCOSEBase64 enclaveapi.AttestationCOSEB
 		result.ValidationDetails = append(result.ValidationDetails, "PCR measurements valid")
 		if matchedSet >= 0 && matchedSet < len(knownPCRs) {
 			result.ValidationDetails = append(result.ValidationDetails, fmt.Sprintf("Matched PCR set: #%d (commit: %s)",
-				matchedSet, knownPCRs[matchedSet].CommitHash))
+				matchedSet, knownPCRs[matchedSet].CommitSHA))
 		}
 	}
 

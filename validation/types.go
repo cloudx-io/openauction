@@ -46,10 +46,11 @@ func (r *AuctionValidationResult) IsValid() bool {
 
 // PCRSet represents a known-good set of PCR measurements
 type PCRSet struct {
-	PCR0       string `json:"pcr0"`
-	PCR1       string `json:"pcr1"`
-	PCR2       string `json:"pcr2"`
-	CommitHash string `json:"commit_hash"` // openauction repo commit used to build the enclave image
+	PCR0      string `json:"pcr0"`
+	PCR1      string `json:"pcr1"`
+	PCR2      string `json:"pcr2"`
+	CommitSHA string `json:"commit_sha"` // openauction repo commit SHA used to build the enclave image
+	Timestamp string `json:"timestamp"`  // ISO 8601 timestamp when the EIF was built
 }
 
 // PCRConfig represents the PCR configuration file structure

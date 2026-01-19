@@ -102,7 +102,7 @@ type CoreBidWithoutBidder struct {
 // AuctionAttestationUserData represents the auction-specific data embedded in the attestation
 type AuctionAttestationUserData struct {
 	AuctionID              string                `json:"auction_id"`
-	RoundID                int                   `json:"round_id"`
+	RoundID                string                `json:"round_id"`
 	BidHashes              []string              `json:"bid_hashes"`
 	RequestHash            string                `json:"request_hash"`
 	AdjustmentFactorsHash  string                `json:"adjustment_factors_hash"`
@@ -138,7 +138,7 @@ type EncryptedCoreBid struct {
 type EnclaveAuctionRequest struct {
 	Type              string             `json:"type"`
 	AuctionID         string             `json:"auction_id"`
-	RoundID           int                `json:"round_id"`
+	RoundID           string             `json:"round_id"`
 	Bids              []EncryptedCoreBid `json:"bids"`
 	AdjustmentFactors map[string]float64 `json:"adjustment_factors"`
 	BidFloor          float64            `json:"bid_floor"`

@@ -135,7 +135,7 @@ func TestComputeBidHash_EdgeCases(t *testing.T) {
 
 func TestComputeRequestHash(t *testing.T) {
 	auctionID := "auction-123"
-	roundID := 1
+	roundID := "auction-123-1"
 	nonce := "test-nonce"
 
 	hash := ComputeRequestHash(auctionID, roundID, nonce)
@@ -159,7 +159,7 @@ func TestComputeRequestHash(t *testing.T) {
 	}
 
 	// Test that different inputs produce different hashes
-	hash3 := ComputeRequestHash(auctionID, roundID+1, nonce)
+	hash3 := ComputeRequestHash(auctionID, roundID+"1", nonce)
 	if hash == hash3 {
 		t.Errorf("Different round IDs should produce different hashes")
 	}
@@ -175,7 +175,7 @@ func TestComputeRequestHash(t *testing.T) {
 	}
 
 	// Verify exact hash calculation
-	expectedData := fmt.Sprintf("%s|%d|%s", auctionID, roundID, nonce)
+	expectedData := fmt.Sprintf("%s|%s|%s", auctionID, roundID, nonce)
 	expectedHash := fmt.Sprintf("%x", sha256.Sum256([]byte(expectedData)))
 	if hash != expectedHash {
 		t.Errorf("ComputeRequestHash() = %v, want %v", hash, expectedHash)

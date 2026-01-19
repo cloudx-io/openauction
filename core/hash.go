@@ -23,8 +23,8 @@ func ComputeBidHash(bidID string, price float64, nonce string) string {
 // This is used by both the enclave (to generate hashes) and validation (to verify hashes).
 //
 // Formula: SHA256(auction_id + "|" + round_id + "|" + nonce)
-func ComputeRequestHash(auctionID string, roundID int, nonce string) string {
-	data := fmt.Sprintf("%s|%d|%s", auctionID, roundID, nonce)
+func ComputeRequestHash(auctionID string, roundID string, nonce string) string {
+	data := fmt.Sprintf("%s|%s|%s", auctionID, roundID, nonce)
 	hash := sha256.Sum256([]byte(data))
 	return fmt.Sprintf("%x", hash)
 }

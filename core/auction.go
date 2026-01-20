@@ -42,10 +42,9 @@ func RunAuction(
 	validBids, priceRejectedBids := validateBidPrices(bids)
 
 	// Step 2: Apply bid adjustment factors
-	// Use conversion rate of 1.0 (no currency conversion in unified logic)
 	adjustedBids := validBids
 	if len(adjustmentFactors) > 0 {
-		adjustedBids = ApplyBidAdjustmentFactors(validBids, adjustmentFactors, 1.0)
+		adjustedBids = ApplyBidAdjustmentFactors(validBids, adjustmentFactors)
 	}
 
 	// Step 3: Enforce floor price

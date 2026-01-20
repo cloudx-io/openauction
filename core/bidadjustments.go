@@ -6,14 +6,8 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-func ApplyBidAdjustmentFactors(bids []CoreBid, adjustmentFactors map[string]float64, conversionRate float64) []CoreBid {
-	if conversionRate <= 0 {
-		return bids
-	}
-
+func ApplyBidAdjustmentFactors(bids []CoreBid, adjustmentFactors map[string]float64) []CoreBid {
 	result := make([]CoreBid, len(bids))
-
-	conversionRateDecimal := decimal.NewFromFloat(conversionRate)
 
 	for i, bid := range bids {
 		result[i] = bid
@@ -29,7 +23,7 @@ func ApplyBidAdjustmentFactors(bids []CoreBid, adjustmentFactors map[string]floa
 		bidPriceDecimal := decimal.NewFromFloat(bid.Price)
 		adjustmentFactorDecimal := decimal.NewFromFloat(adjustmentFactor)
 
-		finalPriceDecimal := bidPriceDecimal.Mul(adjustmentFactorDecimal).Mul(conversionRateDecimal)
+		finalPriceDecimal := bidPriceDecimal.Mul(adjustmentFactorDecimal)
 
 		// Convert back to float64
 		result[i].Price, _ = finalPriceDecimal.Float64()
@@ -38,11 +32,7 @@ func ApplyBidAdjustmentFactors(bids []CoreBid, adjustmentFactors map[string]floa
 	return result
 }
 
-func ApplySingleBidAdjustmentFactor(bidPrice float64, bidderName string, fallbackBidderName string, adjustmentFactors map[string]float64, conversionRate float64) float64 {
-	if conversionRate <= 0 {
-		return bidPrice
-	}
-
+func ApplySingleBidAdjustmentFactor(bidPrice float64, bidderName string, fallbackBidderName string, adjustmentFactors map[string]float64) float64 {
 	adjustmentFactor := 1.0
 	if len(adjustmentFactors) > 0 {
 		if givenAdjustment, ok := adjustmentFactors[strings.ToLower(bidderName)]; ok {
@@ -55,9 +45,8 @@ func ApplySingleBidAdjustmentFactor(bidPrice float64, bidderName string, fallbac
 	// Use decimal arithmetic for precise calculation
 	bidPriceDecimal := decimal.NewFromFloat(bidPrice)
 	adjustmentFactorDecimal := decimal.NewFromFloat(adjustmentFactor)
-	conversionRateDecimal := decimal.NewFromFloat(conversionRate)
 
-	finalPriceDecimal := bidPriceDecimal.Mul(adjustmentFactorDecimal).Mul(conversionRateDecimal)
+	finalPriceDecimal := bidPriceDecimal.Mul(adjustmentFactorDecimal)
 
 	// Convert back to float64
 	result, _ := finalPriceDecimal.Float64()

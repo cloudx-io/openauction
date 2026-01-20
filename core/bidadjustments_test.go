@@ -12,11 +12,10 @@ func TestApplyBidAdjustmentFactors(t *testing.T) {
 		name              string
 		bids              []CoreBid
 		adjustmentFactors map[string]float64
-		conversionRate    float64
 		expectedPrices    map[string]float64
 	}{
 		{
-			name: "Basic adjustment factors with conversion",
+			name: "Basic adjustment factors",
 			bids: []CoreBid{
 				{ID: "bid1", Bidder: "bidder_a", Price: 2.00, Currency: "USD"},
 				{ID: "bid2", Bidder: "bidder_b", Price: 1.50, Currency: "USD"},
@@ -27,7 +26,6 @@ func TestApplyBidAdjustmentFactors(t *testing.T) {
 				"bidder_b": 0.9,
 				"bidder_c": 1.1,
 			},
-			conversionRate: 1.0,
 			expectedPrices: map[string]float64{
 				"bidder_a": 2.00, // 2.00 (no adjustment)
 				"bidder_b": 1.35, // 1.50 * 0.9
@@ -44,21 +42,19 @@ func TestApplyBidAdjustmentFactors(t *testing.T) {
 				"bidder_a": 1.2,
 				"bidder_b": 0.8,
 			},
-			conversionRate: 1.0,
 			expectedPrices: map[string]float64{
 				"Bidder_A": 2.40, // 2.00 * 1.2
 				"BIDDER_B": 1.20, // 1.50 * 0.8
 			},
 		},
 		{
-			name: "No adjustment factors - only conversion rate",
+			name: "No adjustment factors",
 			bids: []CoreBid{
 				{ID: "bid1", Bidder: "bidder_a", Price: 2.00, Currency: "USD"},
 			},
 			adjustmentFactors: map[string]float64{},
-			conversionRate:    0.85, // EUR to USD
 			expectedPrices: map[string]float64{
-				"bidder_a": 1.70, // 2.00 * 0.85
+				"bidder_a": 2.00, // 2.00 (no adjustment)
 			},
 		},
 		{
@@ -73,7 +69,6 @@ func TestApplyBidAdjustmentFactors(t *testing.T) {
 				// bidder_b has no adjustment
 				"bidder_c": 0.9,
 			},
-			conversionRate: 1.0,
 			expectedPrices: map[string]float64{
 				"bidder_a": 2.40, // 2.00 * 1.2
 				"bidder_b": 1.50, // 1.50 (no adjustment)
@@ -84,7 +79,7 @@ func TestApplyBidAdjustmentFactors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			adjustedBids := ApplyBidAdjustmentFactors(tt.bids, tt.adjustmentFactors, tt.conversionRate)
+			adjustedBids := ApplyBidAdjustmentFactors(tt.bids, tt.adjustmentFactors)
 
 			assert.Equal(t, len(adjustedBids), len(tt.bids))
 
@@ -106,7 +101,6 @@ func TestApplyBidAdjustmentFactorsDecimalPrecision(t *testing.T) {
 		name              string
 		bids              []CoreBid
 		adjustmentFactors map[string]float64
-		conversionRate    float64
 		expectedPrices    map[string]float64
 	}{
 		{
@@ -121,7 +115,6 @@ func TestApplyBidAdjustmentFactorsDecimalPrecision(t *testing.T) {
 				"bidder_b": 0.33, // 3.3 * 0.33 = 1.089
 				"bidder_c": 1.5,  // 1.7 * 1.5 = 2.55
 			},
-			conversionRate: 1.0,
 			expectedPrices: map[string]float64{
 				"bidder_a": 2.31,  // Should be exact
 				"bidder_b": 1.089, // Should be exact
@@ -138,17 +131,16 @@ func TestApplyBidAdjustmentFactorsDecimalPrecision(t *testing.T) {
 				"bidder_x": 0.789, // 12.34 * 0.789 = 9.73626
 				"bidder_y": 1.234, // 5.67 * 1.234 = 6.99678
 			},
-			conversionRate: 0.85, // Additional conversion
 			expectedPrices: map[string]float64{
-				"bidder_x": 8.275821, // 12.34 * 0.789 * 0.85
-				"bidder_y": 5.947263, // 5.67 * 1.234 * 0.85
+				"bidder_x": 9.73626, // 12.34 * 0.789
+				"bidder_y": 6.99678, // 5.67 * 1.234
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			adjustedBids := ApplyBidAdjustmentFactors(tt.bids, tt.adjustmentFactors, tt.conversionRate)
+			adjustedBids := ApplyBidAdjustmentFactors(tt.bids, tt.adjustmentFactors)
 
 			assert.Equal(t, len(adjustedBids), len(tt.bids))
 

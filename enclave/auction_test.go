@@ -868,3 +868,64 @@ func TestProcessAuction_NegativeFloorRejected(t *testing.T) {
 	attestationDoc := parseAttestationFromResponse(t, response)
 	check.Nil(t, attestationDoc)
 }
+
+// TestProcessAuction_LegacyRoundID tests backward compatibility (RoundID as int only)
+func TestProcessAuction_LegacyRoundID(t *testing.T) {
+	mockAttester := CreateMockEnclave(t)
+
+	req := enclaveapi.EnclaveAuctionRequest{
+		Type:      "auction_request",
+		AuctionID: "test_legacy_round_id",
+		RoundID:   123, // Set int only, no String ID
+		// RoundIDString omitted
+		Bids: []enclaveapi.EncryptedCoreBid{
+			{CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder_a", Price: 1.00, Currency: "USD"}},
+		},
+		Timestamp: time.Now(),
+	}
+
+	tokenManager := NewTokenManager()
+	response := ProcessAuction(mockAttester, req, nil, tokenManager)
+
+	// Validate successful response
+	assert.True(t, response.Success)
+	attestationDoc := parseAttestationFromResponse(t, response)
+	assert.NotNil(t, attestationDoc)
+
+	// Verify RoundID is present
+	check.Equal(t, 123, attestationDoc.UserData.RoundID)
+	// RoundIDString should be empty
+	check.Equal(t, "", attestationDoc.UserData.RoundIDString)
+	// Hashes should still be valid (will use "123" for calculation)
+	check.NotEqual(t, "", attestationDoc.UserData.RequestHash)
+}
+
+// TestProcessAuction_StringRoundID tests new functionality (RoundIDString only)
+func TestProcessAuction_StringRoundID(t *testing.T) {
+	mockAttester := CreateMockEnclave(t)
+
+	req := enclaveapi.EnclaveAuctionRequest{
+		Type:          "auction_request",
+		AuctionID:     "test_string_round_id",
+		RoundID:       0, // Zero value for int
+		RoundIDString: "unique-round-id-xyz",
+		Bids: []enclaveapi.EncryptedCoreBid{
+			{CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder_a", Price: 1.00, Currency: "USD"}},
+		},
+		Timestamp: time.Now(),
+	}
+
+	tokenManager := NewTokenManager()
+	response := ProcessAuction(mockAttester, req, nil, tokenManager)
+
+	// Validate successful response
+	assert.True(t, response.Success)
+	attestationDoc := parseAttestationFromResponse(t, response)
+	assert.NotNil(t, attestationDoc)
+
+	// Verify RoundIDString is present
+	check.Equal(t, "unique-round-id-xyz", attestationDoc.UserData.RoundIDString)
+	check.Equal(t, 0, attestationDoc.UserData.RoundID)
+	// Hashes should still be valid (will use "unique-round-id-xyz" for calculation)
+	check.NotEqual(t, "", attestationDoc.UserData.RequestHash)
+}

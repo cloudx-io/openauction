@@ -65,8 +65,8 @@ func TestGenerateNonce(t *testing.T) {
 
 func TestCalculateRequestHash(t *testing.T) {
 	req := enclaveapi.EnclaveAuctionRequest{
-		AuctionID: "auction_123",
-		RoundIDString:   "auction_123-2",
+		AuctionID:     "auction_123",
+		RoundIDString: "auction_123-2",
 	}
 	nonce := "test_nonce"
 
@@ -101,8 +101,8 @@ func TestCalculateAdjustmentFactorsHash(t *testing.T) {
 
 func TestGenerateAttestation(t *testing.T) {
 	req := enclaveapi.EnclaveAuctionRequest{
-		AuctionID: "test_auction",
-		RoundIDString:   "test_auction-1",
+		AuctionID:     "test_auction",
+		RoundIDString: "test_auction-1",
 		Bids: []enclaveapi.EncryptedCoreBid{
 			{CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder_a", Price: 2.50}},
 		},
@@ -124,9 +124,9 @@ func TestGenerateAttestation(t *testing.T) {
 
 func TestGenerateAttestationWithMock(t *testing.T) {
 	req := enclaveapi.EnclaveAuctionRequest{
-		Type:      "auction_request",
-		AuctionID: "test_auction_mock",
-		RoundIDString:   "test_auction_mock-1",
+		Type:          "auction_request",
+		AuctionID:     "test_auction_mock",
+		RoundIDString: "test_auction_mock-1",
 		Bids: []enclaveapi.EncryptedCoreBid{
 			{CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder_a", Price: 2.50, Currency: "USD"}},
 		},
@@ -172,9 +172,9 @@ func TestGenerateAttestationWithMock(t *testing.T) {
 
 func TestGenerateAttestationWithEncryptedBids(t *testing.T) {
 	req := enclaveapi.EnclaveAuctionRequest{
-		Type:      "auction_request",
-		AuctionID: "test_auction_encrypted_bids",
-		RoundIDString:   "test_auction_encrypted_bids-1",
+		Type:          "auction_request",
+		AuctionID:     "test_auction_encrypted_bids",
+		RoundIDString: "test_auction_encrypted_bids-1",
 		Bids: []enclaveapi.EncryptedCoreBid{
 			// Encrypted bid with EncryptedPrice populated
 			{
@@ -426,9 +426,9 @@ func TestHandleKeyRequest_PEMRoundTrip(t *testing.T) {
 
 func TestGenerateAttestationWithMixedBidTypes(t *testing.T) {
 	req := enclaveapi.EnclaveAuctionRequest{
-		Type:      "auction_request",
-		AuctionID: "test_auction_mixed_scenario",
-		RoundIDString:   "test_auction_mixed_scenario-1",
+		Type:          "auction_request",
+		AuctionID:     "test_auction_mixed_scenario",
+		RoundIDString: "test_auction_mixed_scenario-1",
 		Bids: []enclaveapi.EncryptedCoreBid{
 			// Unencrypted bid 1 - Lower price, should lose
 			{CoreBid: core.CoreBid{ID: "unencrypted_bid_1", Bidder: "plaintext_bidder_a", Price: 2.25, Currency: "USD"}},

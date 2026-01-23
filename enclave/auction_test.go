@@ -34,7 +34,7 @@ func TestProcessAuction_ZeroBids(t *testing.T) {
 	req := enclaveapi.EnclaveAuctionRequest{
 		Type:      "auction_request",
 		AuctionID: "test_auction_zero_bids",
-		RoundID:   "test_auction_zero_bids-1",
+		RoundIDString:   "test_auction_zero_bids-1",
 		Bids:      []enclaveapi.EncryptedCoreBid{}, // No bids
 		Timestamp: time.Now(),
 	}
@@ -59,7 +59,7 @@ func TestProcessAuction_OneBid(t *testing.T) {
 	req := enclaveapi.EnclaveAuctionRequest{
 		Type:      "auction_request",
 		AuctionID: "test_auction_one_bid",
-		RoundID:   "test_auction_one_bid-1",
+		RoundIDString:   "test_auction_one_bid-1",
 		Bids: []enclaveapi.EncryptedCoreBid{
 			{CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder_a", Price: 2.50, Currency: "USD"}},
 		},
@@ -95,7 +95,7 @@ func TestProcessAuction_TwoBids(t *testing.T) {
 	req := enclaveapi.EnclaveAuctionRequest{
 		Type:      "auction_request",
 		AuctionID: "test_auction_two_bids",
-		RoundID:   "test_auction_two_bids-1",
+		RoundIDString:   "test_auction_two_bids-1",
 		Bids: []enclaveapi.EncryptedCoreBid{
 			{CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder_a", Price: 2.50, Currency: "USD"}},
 			{CoreBid: core.CoreBid{ID: "bid2", Bidder: "bidder_b", Price: 3.00, Currency: "USD"}},
@@ -141,7 +141,7 @@ func TestProcessAuction_ThreeBids(t *testing.T) {
 	req := enclaveapi.EnclaveAuctionRequest{
 		Type:      "auction_request",
 		AuctionID: "test_auction_three_bids",
-		RoundID:   "test_auction_three_bids-1",
+		RoundIDString:   "test_auction_three_bids-1",
 		Bids: []enclaveapi.EncryptedCoreBid{
 			{CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder_a", Price: 2.50, Currency: "USD"}},
 			{CoreBid: core.CoreBid{ID: "bid2", Bidder: "bidder_b", Price: 3.00, Currency: "USD"}},
@@ -236,6 +236,7 @@ func validateSuccessfulResponse(t *testing.T, response enclaveapi.EnclaveAuction
 	// User data core fields validation
 	check.Equal(t, attestationDoc.UserData.AuctionID, req.AuctionID)
 	check.Equal(t, attestationDoc.UserData.RoundID, req.RoundID)
+	check.Equal(t, attestationDoc.UserData.RoundIDString, req.RoundIDString)
 
 	// User data hashes and nonces validation
 	check.NotEqual(t, "", attestationDoc.UserData.RequestHash)
@@ -256,7 +257,7 @@ func TestProcessAuction_BidFloorEnforcement(t *testing.T) {
 	req := enclaveapi.EnclaveAuctionRequest{
 		Type:      "auction_request",
 		AuctionID: "test_auction_floor_enforcement",
-		RoundID:   "test_auction_floor_enforcement-1",
+		RoundIDString:   "test_auction_floor_enforcement-1",
 		Bids: []enclaveapi.EncryptedCoreBid{
 			{CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder_a", Price: 3.00, Currency: "USD"}}, // Above floor
 			{CoreBid: core.CoreBid{ID: "bid2", Bidder: "bidder_b", Price: 2.50, Currency: "USD"}}, // At floor
@@ -301,7 +302,7 @@ func TestProcessAuction_BidFloorAllRejected(t *testing.T) {
 	req := enclaveapi.EnclaveAuctionRequest{
 		Type:      "auction_request",
 		AuctionID: "test_auction_floor_all_rejected",
-		RoundID:   "test_auction_floor_all_rejected-1",
+		RoundIDString:   "test_auction_floor_all_rejected-1",
 		Bids: []enclaveapi.EncryptedCoreBid{
 			{CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder_a", Price: 2.00, Currency: "USD"}},
 			{CoreBid: core.CoreBid{ID: "bid2", Bidder: "bidder_b", Price: 1.50, Currency: "USD"}},
@@ -350,7 +351,7 @@ func TestAuctionTokenValidation_WithValidToken(t *testing.T) {
 	req := enclaveapi.EnclaveAuctionRequest{
 		Type:      "auction_request",
 		AuctionID: "test_auction_valid_token",
-		RoundID:   "test_auction_valid_token-1",
+		RoundIDString:   "test_auction_valid_token-1",
 		Bids: []enclaveapi.EncryptedCoreBid{
 			{
 				CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder1", Price: 0.0, Currency: "USD"},
@@ -391,7 +392,7 @@ func TestAuctionTokenValidation_WithInvalidToken(t *testing.T) {
 	req := enclaveapi.EnclaveAuctionRequest{
 		Type:      "auction_request",
 		AuctionID: "test_auction_invalid_token",
-		RoundID:   "test_auction_invalid_token-1",
+		RoundIDString:   "test_auction_invalid_token-1",
 		Bids: []enclaveapi.EncryptedCoreBid{
 			{
 				CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder1", Price: 0.0, Currency: "USD"},
@@ -432,7 +433,7 @@ func TestAuctionTokenValidation_WithConsumedToken(t *testing.T) {
 	req := enclaveapi.EnclaveAuctionRequest{
 		Type:      "auction_request",
 		AuctionID: "test_auction_consumed_token",
-		RoundID:   "test_auction_consumed_token-1",
+		RoundIDString:   "test_auction_consumed_token-1",
 		Bids: []enclaveapi.EncryptedCoreBid{
 			{
 				CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder1", Price: 0.0, Currency: "USD"},
@@ -468,7 +469,7 @@ func TestAuctionTokenValidation_WithoutToken(t *testing.T) {
 	req := enclaveapi.EnclaveAuctionRequest{
 		Type:      "auction_request",
 		AuctionID: "test_auction_no_token",
-		RoundID:   "test_auction_no_token-1",
+		RoundIDString:   "test_auction_no_token-1",
 		Bids: []enclaveapi.EncryptedCoreBid{
 			{
 				CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder1", Price: 0.0, Currency: "USD"},
@@ -512,7 +513,7 @@ func TestAuctionTokenValidation_MultipleBidsWithTokens(t *testing.T) {
 	req := enclaveapi.EnclaveAuctionRequest{
 		Type:      "auction_request",
 		AuctionID: "test_auction_multiple_tokens",
-		RoundID:   "test_auction_multiple_tokens-1",
+		RoundIDString:   "test_auction_multiple_tokens-1",
 		Bids: []enclaveapi.EncryptedCoreBid{
 			{
 				CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder1", Price: 0.0, Currency: "USD"},
@@ -581,7 +582,7 @@ func TestAuctionTokenValidation_MixedValidInvalidTokens(t *testing.T) {
 	req := enclaveapi.EnclaveAuctionRequest{
 		Type:      "auction_request",
 		AuctionID: "test_auction_mixed_tokens",
-		RoundID:   "test_auction_mixed_tokens-1",
+		RoundIDString:   "test_auction_mixed_tokens-1",
 		Bids: []enclaveapi.EncryptedCoreBid{
 			{
 				CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder1", Price: 0.0, Currency: "USD"},
@@ -648,7 +649,7 @@ func TestEndToEndTokenFlow(t *testing.T) {
 	req := enclaveapi.EnclaveAuctionRequest{
 		Type:      "auction_request",
 		AuctionID: "test_end_to_end",
-		RoundID:   "test_end_to_end-1",
+		RoundIDString:   "test_end_to_end-1",
 		Bids: []enclaveapi.EncryptedCoreBid{
 			{
 				CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder1", Price: 0.0, Currency: "USD"},
@@ -675,7 +676,7 @@ func TestEndToEndTokenFlow(t *testing.T) {
 	req2 := enclaveapi.EnclaveAuctionRequest{
 		Type:      "auction_request",
 		AuctionID: "test_replay_attack",
-		RoundID:   "test_replay_attack-1",
+		RoundIDString:   "test_replay_attack-1",
 		Bids: []enclaveapi.EncryptedCoreBid{
 			{
 				CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder1", Price: 0.0, Currency: "USD"},
@@ -719,7 +720,7 @@ func TestAuctionTokenValidation_MultipleBidsSameToken(t *testing.T) {
 	req := enclaveapi.EnclaveAuctionRequest{
 		Type:      "auction_request",
 		AuctionID: "test_auction_shared_token",
-		RoundID:   "test_auction_shared_token-1",
+		RoundIDString:   "test_auction_shared_token-1",
 		Bids: []enclaveapi.EncryptedCoreBid{
 			{
 				CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder1", Price: 0.0, Currency: "USD"},
@@ -773,7 +774,7 @@ func TestProcessAuction_BidFloorZero(t *testing.T) {
 	req := enclaveapi.EnclaveAuctionRequest{
 		Type:      "auction_request",
 		AuctionID: "test_auction_floor_zero",
-		RoundID:   "test_auction_floor_zero-1",
+		RoundIDString:   "test_auction_floor_zero-1",
 		Bids: []enclaveapi.EncryptedCoreBid{
 			{CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder_a", Price: 3.00, Currency: "USD"}},
 			{CoreBid: core.CoreBid{ID: "bid2", Bidder: "bidder_b", Price: 0.50, Currency: "USD"}},
@@ -805,7 +806,7 @@ func TestProcessAuction_BidFloorWithAdjustments(t *testing.T) {
 	req := enclaveapi.EnclaveAuctionRequest{
 		Type:      "auction_request",
 		AuctionID: "test_auction_floor_with_adjustments",
-		RoundID:   "test_auction_floor_with_adjustments-1",
+		RoundIDString:   "test_auction_floor_with_adjustments-1",
 		Bids: []enclaveapi.EncryptedCoreBid{
 			{CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder_a", Price: 3.00, Currency: "USD"}},
 			{CoreBid: core.CoreBid{ID: "bid2", Bidder: "bidder_b", Price: 2.00, Currency: "USD"}}, // Below floor before adjustment
@@ -849,7 +850,7 @@ func TestProcessAuction_NegativeFloorRejected(t *testing.T) {
 	req := enclaveapi.EnclaveAuctionRequest{
 		Type:      "auction_request",
 		AuctionID: "test_auction_negative_floor",
-		RoundID:   "test_auction_negative_floor-1",
+		RoundIDString:   "test_auction_negative_floor-1",
 		Bids: []enclaveapi.EncryptedCoreBid{
 			{CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder_a", Price: 3.00, Currency: "USD"}},
 		},

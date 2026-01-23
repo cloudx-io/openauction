@@ -75,7 +75,11 @@ func generateNonce() (string, error) {
 }
 
 func calculateRequestHash(req enclaveapi.EnclaveAuctionRequest, nonce string) string {
-	return core.ComputeRequestHash(req.AuctionID, req.RoundID, nonce)
+	roundID := req.RoundIDString
+	if roundID == "" {
+		roundID = fmt.Sprintf("%d", req.RoundID)
+	}
+	return core.ComputeRequestHash(req.AuctionID, roundID, nonce)
 }
 
 func calculateAdjustmentFactorsHash(adjustmentFactors map[string]float64, nonce string) string {
@@ -114,6 +118,7 @@ func GenerateAttestation(
 	userData := &enclaveapi.AuctionAttestationUserData{
 		AuctionID:              req.AuctionID,
 		RoundID:                req.RoundID,
+		RoundIDString:          req.RoundIDString,
 		BidHashes:              bidHashes,
 		RequestHash:            requestHash,
 		AdjustmentFactorsHash:  adjustmentFactorsHash,

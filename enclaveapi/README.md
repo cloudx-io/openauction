@@ -42,8 +42,10 @@ The `hash_algorithm` field specifies which hash function to use for RSA-OAEP dec
 // Send auction to enclave
 request := &enclaveapi.EnclaveAuctionRequest{
     Type:      "auction_request",
-    AuctionID: "auction-123", // OpenRTB BidRequest.ID
-    RoundID:   1,             // Round number within auction
+    AuctionID: "auction-123",       // OpenRTB BidRequest.ID
+    RoundID:   1,                   // Round number (int)
+    RoundIDString: "auction-123-1", // Optional: String round ID for uniqueness
+
     // ...
 }
 ```

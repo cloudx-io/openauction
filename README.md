@@ -2,6 +2,8 @@
 
 Core auction logic and TEE (Trusted Execution Environment) enclave implementation for CloudX auctions.
 
+https://www.cloudx.ai/
+
 ## Overview
 
 This repository contains the core auction functionality that has been extracted from the main CloudX platform for independent versioning and reusability. It includes:

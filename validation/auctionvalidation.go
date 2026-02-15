@@ -3,10 +3,19 @@ package validation
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 
 	"github.com/cloudx-io/openauction/core"
 	enclaveapi "github.com/cloudx-io/openauction/enclaveapi"
 )
+
+// floatTolerance is used for comparing monetary values (e.g. clearing price, bid floor)
+// to avoid false negatives from float64 representation after decimal math.
+const floatTolerance = 1e-9
+
+func floatsEqual(a, b float64) bool {
+	return math.Abs(a-b) <= floatTolerance
+}
 
 // AuctionValidationInput contains all inputs needed for auction attestation validation
 type AuctionValidationInput struct {
@@ -125,7 +134,7 @@ func validateClearingPrice(input *AuctionValidationInput, attestation *enclaveap
 		return false
 	}
 
-	if *input.ClearingPrice == attestation.UserData.Winner.Price {
+	if floatsEqual(*input.ClearingPrice, attestation.UserData.Winner.Price) {
 		result.ValidationDetails = append(result.ValidationDetails, fmt.Sprintf("Clearing price validation passed: %.6f", *input.ClearingPrice))
 		return true
 	}
@@ -135,7 +144,7 @@ func validateClearingPrice(input *AuctionValidationInput, attestation *enclaveap
 }
 
 func validateBidFloor(input *AuctionValidationInput, attestation *enclaveapi.AuctionAttestationDoc, result *AuctionValidationResult) bool {
-	if input.BidFloor == attestation.UserData.BidFloor {
+	if floatsEqual(input.BidFloor, attestation.UserData.BidFloor) {
 		result.ValidationDetails = append(result.ValidationDetails, fmt.Sprintf("Bid floor validation passed: %.6f", input.BidFloor))
 		return true
 	}

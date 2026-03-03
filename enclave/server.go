@@ -130,6 +130,7 @@ func (s *EnclaveServer) handleConnection(conn net.Conn) {
 			"type":      "pong",
 			"message":   "TEE server is healthy",
 			"timestamp": time.Now().Unix(),
+			"system":    getSystemInfoOrNil(),
 		}
 		log.Printf("INFO: Responding to ping with pong")
 

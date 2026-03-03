@@ -163,20 +163,28 @@ func readCPUTicks(path string) (*cpuTicks, error) {
 
 // parseCPULine parses the aggregate "cpu  ..." line from /proc/stat.
 // Fields: user nice system idle iowait irq softirq steal [guest guest_nice]
+//
+// guest and guest_nice are already accounted for in user and nice, so we
+// only sum the first 8 fields to avoid double-counting.
 func parseCPULine(line string) (*cpuTicks, error) {
 	fields := strings.Fields(line)
 	if len(fields) < 5 {
 		return nil, fmt.Errorf("unexpected cpu line format: %q", line)
 	}
 
+	numFields := len(fields) - 1 // exclude "cpu" label
+	if numFields > 8 {
+		numFields = 8
+	}
+
 	var total, idle uint64
-	for i, f := range fields[1:] {
+	for i, f := range fields[1 : 1+numFields] {
 		v, err := strconv.ParseUint(f, 10, 64)
 		if err != nil {
 			return nil, fmt.Errorf("parsing field %d of cpu line: %w", i, err)
 		}
 		total += v
-		if i == 3 { // idle is the 4th value (0-indexed field 3)
+		if i == 3 {
 			idle = v
 		}
 	}

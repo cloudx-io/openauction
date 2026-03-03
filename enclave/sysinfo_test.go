@@ -106,12 +106,14 @@ func TestParseCPULine(t *testing.T) {
 }
 
 func TestParseCPULine_WithGuestFields(t *testing.T) {
+	// guest and guest_nice (50, 25) are already included in user and nice,
+	// so they must be excluded to avoid double-counting.
 	line := "cpu  100 20 30 500 10 5 3 2 50 25"
 	ticks, err := parseCPULine(line)
 	assert.NoError(t, err)
 
-	// total = 100+20+30+500+10+5+3+2+50+25 = 745
-	assert.Equal(t, uint64(745), ticks.total)
+	// total = 100+20+30+500+10+5+3+2 = 670 (guest fields excluded)
+	assert.Equal(t, uint64(670), ticks.total)
 	assert.Equal(t, uint64(500), ticks.idle)
 }
 

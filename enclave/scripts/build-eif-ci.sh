@@ -12,8 +12,8 @@ set -euo pipefail
 #   OUTPUT_EIF_PATH: Path where the EIF file should be written
 #   AWS_REGION: (Optional) AWS region, defaults to us-east-1
 #
-# Environment Variables:
-#   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN: AWS credentials
+# AWS credentials are provided by the EC2 instance profile (eif-builder-instance)
+# via the instance metadata service (IMDS).
 #
 # Outputs:
 #   - EIF file at OUTPUT_EIF_PATH
@@ -71,8 +71,7 @@ validate_prerequisites() {
     log "✓ Nitro CLI available: $(nitro-cli --version 2>&1 | head -n1 || echo 'version unknown')"
 
     if ! aws sts get-caller-identity &> /dev/null; then
-        log_error "AWS credentials not configured"
-        log_error "Set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY or attach IAM instance profile"
+        log_error "AWS credentials not configured — verify the EC2 instance profile is attached"
         return 1
     fi
     log "✓ AWS credentials configured"

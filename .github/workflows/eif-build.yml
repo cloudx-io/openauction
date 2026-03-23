@@ -244,10 +244,7 @@ jobs:
           ssh -i /tmp/eif-builder-key.pem \
               -o StrictHostKeyChecking=no \
               ec2-user@${{ steps.launch-instance.outputs.public_ip }} \
-              "sudo AWS_ACCESS_KEY_ID='${AWS_ACCESS_KEY_ID}' \
-                    AWS_SECRET_ACCESS_KEY='${AWS_SECRET_ACCESS_KEY}' \
-                    AWS_SESSION_TOKEN='${AWS_SESSION_TOKEN}' \
-                    bash ~/scripts/build-eif-ci.sh \
+              "sudo bash ~/scripts/build-eif-ci.sh \
                     '${{ steps.image-uri.outputs.image_uri }}' \
                     '/tmp/auction.eif' \
                     '${{ env.AWS_REGION }}'"

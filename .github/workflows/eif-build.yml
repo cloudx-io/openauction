@@ -80,7 +80,7 @@ jobs:
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       
@@ -97,7 +97,7 @@ jobs:
           echo "Building EIF for commit: ${COMMIT_SHA}"
       
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           # OIDC role for EIF building workflow (needs EC2 + ECR permissions)
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/eif-builder-workflow
@@ -312,7 +312,7 @@ jobs:
           oras tag "${REGISTRY}/${REPO}:${COMMIT_SHA}" "${COMMIT_SHORT}"
       
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: eif-${{ steps.set-sha.outputs.commit_short }}
           path: |
@@ -383,13 +383,13 @@ jobs:
     steps:
       - name: Generate GitHub App token
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ env.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           token: ${{ steps.app-token.outputs.token }}
 

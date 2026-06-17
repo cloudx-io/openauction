@@ -34,9 +34,9 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: 'Docker image tag to use (e.g., sha-abc1234, latest). Image must exist in ECR.'
-        required: true
-        default: 'latest'
+        description: 'Optional Docker image tag to use. Leave blank to use the checked-out commit SHA.'
+        required: false
+        default: ''
         type: string
       architecture:
         description: CPU architecture for the Docker image and EIF builder.

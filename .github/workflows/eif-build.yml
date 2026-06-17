@@ -87,8 +87,8 @@ jobs:
           else
             COMMIT_SHA="${{ github.sha }}"
           fi
-          echo "commit_sha=${COMMIT_SHA}" >> $GITHUB_OUTPUT
-          echo "commit_short=${COMMIT_SHA:0:7}" >> $GITHUB_OUTPUT
+          echo "commit_sha=${COMMIT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "commit_short=${COMMIT_SHA:0:7}" >> "$GITHUB_OUTPUT"
           echo "Building EIF for commit: ${COMMIT_SHA}"
       
       - name: Configure AWS credentials
@@ -124,9 +124,9 @@ jobs:
             exit 1
           fi
 
-          echo "architecture=${ARCHITECTURE}" >> $GITHUB_OUTPUT
-          echo "ami_id=${AMI_ID}" >> $GITHUB_OUTPUT
-          echo "instance_type=${INSTANCE_TYPE}" >> $GITHUB_OUTPUT
+          echo "architecture=${ARCHITECTURE}" >> "$GITHUB_OUTPUT"
+          echo "ami_id=${AMI_ID}" >> "$GITHUB_OUTPUT"
+          echo "instance_type=${INSTANCE_TYPE}" >> "$GITHUB_OUTPUT"
           echo "Using ${ARCHITECTURE} builder ${INSTANCE_TYPE} with AMI ${AMI_ID}"
       
       - name: Construct Docker image URI
@@ -150,7 +150,7 @@ jobs:
           fi
 
           IMAGE_URI="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/cloudx-io/openauction/enclave:${IMAGE_TAG}"
-          echo "image_uri=${IMAGE_URI}" >> $GITHUB_OUTPUT
+          echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
           echo "Docker image: ${IMAGE_URI}"
       
       - name: Create EC2 key pair
@@ -162,7 +162,7 @@ jobs:
             --query 'KeyMaterial' \
             --output text > /tmp/eif-builder-key.pem
           chmod 400 /tmp/eif-builder-key.pem
-          echo "key_name=${KEY_NAME}" >> $GITHUB_OUTPUT
+          echo "key_name=${KEY_NAME}" >> "$GITHUB_OUTPUT"
           echo "Created key pair: ${KEY_NAME}"
       
       - name: Get default VPC and subnet
@@ -180,8 +180,8 @@ jobs:
             --query 'Subnets[0].SubnetId' \
             --output text)
           
-          echo "vpc_id=${VPC_ID}" >> $GITHUB_OUTPUT
-          echo "subnet_id=${SUBNET_ID}" >> $GITHUB_OUTPUT
+          echo "vpc_id=${VPC_ID}" >> "$GITHUB_OUTPUT"
+          echo "subnet_id=${SUBNET_ID}" >> "$GITHUB_OUTPUT"
           echo "Using VPC: ${VPC_ID}, Subnet: ${SUBNET_ID} (us-east-1a)"
       
       - name: Create security group
@@ -201,7 +201,7 @@ jobs:
             --port 22 \
             --cidr 0.0.0.0/0
           
-          echo "security_group_id=${SG_ID}" >> $GITHUB_OUTPUT
+          echo "security_group_id=${SG_ID}" >> "$GITHUB_OUTPUT"
           echo "Created security group: ${SG_ID}"
       
       - name: Launch Nitro EC2 instance
@@ -224,7 +224,7 @@ jobs:
             --query 'Instances[0].InstanceId' \
             --output text)
           
-          echo "instance_id=${INSTANCE_ID}" >> $GITHUB_OUTPUT
+          echo "instance_id=${INSTANCE_ID}" >> "$GITHUB_OUTPUT"
           echo "Launched instance: ${INSTANCE_ID}"
           
           echo "Waiting for instance to be running..."
@@ -238,7 +238,7 @@ jobs:
             --query 'Reservations[0].Instances[0].PublicIpAddress' \
             --output text)
           
-          echo "public_ip=${PUBLIC_IP}" >> $GITHUB_OUTPUT
+          echo "public_ip=${PUBLIC_IP}" >> "$GITHUB_OUTPUT"
           echo "Instance ready at: ${PUBLIC_IP}"
       
       - name: Wait for SSH
@@ -301,10 +301,10 @@ jobs:
           PCR2=$(jq -r '.Measurements.PCR2' measurements.json)
           EIF_SHA256=$(sha256sum auction.eif | cut -d' ' -f1)
           
-          echo "pcr0=${PCR0}" >> $GITHUB_OUTPUT
-          echo "pcr1=${PCR1}" >> $GITHUB_OUTPUT
-          echo "pcr2=${PCR2}" >> $GITHUB_OUTPUT
-          echo "eif_sha256=${EIF_SHA256}" >> $GITHUB_OUTPUT
+          echo "pcr0=${PCR0}" >> "$GITHUB_OUTPUT"
+          echo "pcr1=${PCR1}" >> "$GITHUB_OUTPUT"
+          echo "pcr2=${PCR2}" >> "$GITHUB_OUTPUT"
+          echo "eif_sha256=${EIF_SHA256}" >> "$GITHUB_OUTPUT"
       
       - name: Install ORAS
         run: |

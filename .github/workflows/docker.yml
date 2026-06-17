@@ -30,11 +30,11 @@ jobs:
       - name: docker set architecture env vars
         run: |
           ARCHITECTURE="${{ github.event.inputs.architecture || 'amd64' }}"
-          echo "ARCHITECTURE=${ARCHITECTURE}" >> $GITHUB_ENV
+          echo "ARCHITECTURE=${ARCHITECTURE}" >> "$GITHUB_ENV"
           if [ "${ARCHITECTURE}" = "arm64" ]; then
-            echo "IMAGE_TAG_SUFFIX=-arm64" >> $GITHUB_ENV
+            echo "IMAGE_TAG_SUFFIX=-arm64" >> "$GITHUB_ENV"
           else
-            echo "IMAGE_TAG_SUFFIX=" >> $GITHUB_ENV
+            echo "IMAGE_TAG_SUFFIX=" >> "$GITHUB_ENV"
           fi
 
           PUBLISH_IMAGE=false
@@ -45,7 +45,7 @@ jobs:
               PUBLISH_IMAGE=true
             fi
           fi
-          echo "PUBLISH_IMAGE=${PUBLISH_IMAGE}" >> $GITHUB_ENV
+          echo "PUBLISH_IMAGE=${PUBLISH_IMAGE}" >> "$GITHUB_ENV"
       - name: Configure AWS credentials
         if: env.PUBLISH_IMAGE == 'true'
         uses: aws-actions/configure-aws-credentials@v6
@@ -64,8 +64,8 @@ jobs:
           SHA="$(git rev-parse --short HEAD || echo 'unknown')"
           DIRTY="$(git diff --no-ext-diff --quiet --exit-code HEAD || echo '.dirty')"
           COMMIT="${SHA}${DIRTY}"
-          echo "CLOUDX_VERSION=${VERSION}" >> $GITHUB_ENV
-          echo "CLOUDX_COMMIT=${COMMIT}" >> $GITHUB_ENV
+          echo "CLOUDX_VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "CLOUDX_COMMIT=${COMMIT}" >> "$GITHUB_ENV"
       - name: docker set metadata
         id: dockermetadata
         # https://github.com/docker/metadata-action

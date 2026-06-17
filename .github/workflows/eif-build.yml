@@ -119,6 +119,11 @@ jobs:
             --query 'sort_by(Images, &CreationDate)[-1].ImageId' \
             --output text)
 
+          if [ -z "${AMI_ID}" ] || [ "${AMI_ID}" = "None" ]; then
+            echo "::error::Failed to resolve AL2023 ${AMI_ARCH} builder AMI"
+            exit 1
+          fi
+
           echo "architecture=${ARCHITECTURE}" >> $GITHUB_OUTPUT
           echo "ami_id=${AMI_ID}" >> $GITHUB_OUTPUT
           echo "instance_type=${INSTANCE_TYPE}" >> $GITHUB_OUTPUT

@@ -143,6 +143,12 @@ jobs:
             echo "Using commit-based image tag: ${IMAGE_TAG}"
           fi
 
+          ARCHITECTURE="${{ steps.builder-arch.outputs.architecture }}"
+          if [ "${ARCHITECTURE}" = "arm64" ] && [[ "${IMAGE_TAG}" != *-arm64 ]]; then
+            IMAGE_TAG="${IMAGE_TAG}-arm64"
+            echo "Using arm64 image tag: ${IMAGE_TAG}"
+          fi
+
           IMAGE_URI="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/cloudx-io/openauction/enclave:${IMAGE_TAG}"
           echo "image_uri=${IMAGE_URI}" >> $GITHUB_OUTPUT
           echo "Docker image: ${IMAGE_URI}"

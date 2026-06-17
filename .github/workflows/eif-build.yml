@@ -67,6 +67,7 @@ jobs:
       contents: read
     
     outputs:
+      architecture: ${{ steps.builder-arch.outputs.architecture }}
       pcr0: ${{ steps.extract-pcrs.outputs.pcr0 }}
       pcr1: ${{ steps.extract-pcrs.outputs.pcr1 }}
       pcr2: ${{ steps.extract-pcrs.outputs.pcr2 }}
@@ -415,7 +416,7 @@ jobs:
     name: Update PCR validation file
     runs-on: ubuntu-latest
     needs: build-eif
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && needs.build-eif.outputs.architecture == 'amd64'
     env:
       GH_APP_ID: '2665276'
 

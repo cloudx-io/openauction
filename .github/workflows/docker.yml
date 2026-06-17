@@ -3,33 +3,51 @@ on:
   workflow_run:
     workflows: ["Go"]
     types: [completed]
+  workflow_dispatch:
+    inputs:
+      architecture:
+        description: CPU architecture to build.
+        type: choice
+        default: amd64
+        options:
+          - amd64
+          - arm64
 
 jobs:
   enclave:
     # Only run if the Go workflow succeeded
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     permissions:
       id-token: write # for AWS OIDC authentication
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: actions/setup-go@v6
         with:
           go-version: "1.25.1"
       - name: Configure AWS credentials
-        if: github.event.workflow_run.head_branch == 'main'
+        if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.head_branch == 'main'
         uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-ecr-push
           aws-region: us-east-1
       - name: Login to Amazon ECR
-        if: github.event.workflow_run.head_branch == 'main'
+        if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.head_branch == 'main'
         uses: aws-actions/amazon-ecr-login@v2
-      - name: go build bin/enclave-linux-amd64
+      - name: docker set architecture env vars
         run: |
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -ldflags '-extldflags "-static"' -tags netgo -o ./bin/tee-auction-enclave ./enclave
+          ARCHITECTURE="${{ github.event.inputs.architecture || 'amd64' }}"
+          echo "ARCHITECTURE=${ARCHITECTURE}" >> $GITHUB_ENV
+          if [ "${ARCHITECTURE}" = "arm64" ]; then
+            echo "IMAGE_TAG_SUFFIX=-arm64" >> $GITHUB_ENV
+          else
+            echo "IMAGE_TAG_SUFFIX=" >> $GITHUB_ENV
+          fi
+      - name: go build enclave binary
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=${{ env.ARCHITECTURE }} go build -a -ldflags '-extldflags "-static"' -tags netgo -o ./bin/tee-auction-enclave ./enclave
       - name: docker set build tag env vars
         run: |
           VERSION="0.0.0"
@@ -52,23 +70,23 @@ jobs:
             org.opencontainers.image.source=https://github.com/cloudx-io/openauction
           tags: |
             # short sha of the commit
-            type=sha,prefix=,suffix=,format=short
+            type=sha,prefix=,suffix=${{ env.IMAGE_TAG_SUFFIX }},format=short
             # long sha of the commit
-            type=sha,prefix=,suffix=,format=long
+            type=sha,prefix=,suffix=${{ env.IMAGE_TAG_SUFFIX }},format=long
             # our version tag, like "0.0.0-commit.ABCDEF01"
-            type=raw,value=${{ env.CLOUDX_VERSION }}-commit.${{ env.CLOUDX_COMMIT }}
+            type=raw,value=${{ env.CLOUDX_VERSION }}-commit.${{ env.CLOUDX_COMMIT }}${{ env.IMAGE_TAG_SUFFIX }}
             # "latest"
-            type=raw,value=latest
+            type=raw,value=latest${{ env.IMAGE_TAG_SUFFIX }}
       - uses: docker/setup-buildx-action@v4
         with:
-          platforms: linux/amd64
+          platforms: linux/${{ env.ARCHITECTURE }}
       - uses: docker/build-push-action@v7
         with:
           context: .
           file: enclave/Dockerfile
-          platforms: linux/amd64
-          # Only push on main branch, not on PR branches
-          push: ${{ github.event.workflow_run.head_branch == 'main' }}
+          platforms: linux/${{ env.ARCHITECTURE }}
+          # Only push automated builds on main; manual dispatches are explicit.
+          push: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.head_branch == 'main' }}
           sbom: true
           provenance: mode=max
           tags: ${{ steps.dockermetadata.outputs.tags }}

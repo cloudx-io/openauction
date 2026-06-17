@@ -38,21 +38,16 @@ on:
         required: true
         default: 'latest'
         type: string
+      architecture:
+        description: CPU architecture for the Docker image and EIF builder.
+        type: choice
+        default: amd64
+        options:
+          - amd64
+          - arm64
 
 env:
   AWS_REGION: us-east-1
-  INSTANCE_TYPE: c5.xlarge
-  # Amazon Linux 2023 AMI
-  # Update periodically to latest AMI
-  #
-  # % aws ec2 describe-images \
-  #  --owners amazon \
-  #  --filters "Name=name,Values=al2023-ami-2023.*-x86_64" \
-  #  --filters "Name=state,Values=available" \
-  #  --query 'sort_by(Images, &CreationDate)[-1].[ImageId,Name,CreationDate]' \
-  #  --output table \
-  #  --region us-east-1
-  AMI_ID: ami-08d7aabbb50c2c24e 
 
 concurrency:
   group: eif-build
@@ -102,6 +97,32 @@ jobs:
           # OIDC role for EIF building workflow (needs EC2 + ECR permissions)
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/eif-builder-workflow
           aws-region: ${{ env.AWS_REGION }}
+
+      - name: Resolve builder architecture
+        id: builder-arch
+        run: |
+          ARCHITECTURE="${{ github.event.inputs.architecture || 'amd64' }}"
+          if [ "${ARCHITECTURE}" = "arm64" ]; then
+            AMI_ARCH="arm64"
+            INSTANCE_TYPE="c7g.xlarge"
+          else
+            AMI_ARCH="x86_64"
+            INSTANCE_TYPE="c5.xlarge"
+          fi
+
+          AMI_ID=$(aws ec2 describe-images \
+            --owners amazon \
+            --filters "Name=name,Values=al2023-ami-2023.*-${AMI_ARCH}" \
+                      "Name=state,Values=available" \
+                      "Name=root-device-type,Values=ebs" \
+                      "Name=virtualization-type,Values=hvm" \
+            --query 'sort_by(Images, &CreationDate)[-1].ImageId' \
+            --output text)
+
+          echo "architecture=${ARCHITECTURE}" >> $GITHUB_OUTPUT
+          echo "ami_id=${AMI_ID}" >> $GITHUB_OUTPUT
+          echo "instance_type=${INSTANCE_TYPE}" >> $GITHUB_OUTPUT
+          echo "Using ${ARCHITECTURE} builder ${INSTANCE_TYPE} with AMI ${AMI_ID}"
       
       - name: Construct Docker image URI
         id: image-uri
@@ -181,8 +202,8 @@ jobs:
           # - Access EC2 instance metadata
 
           INSTANCE_ID=$(aws ec2 run-instances \
-            --image-id ${{ env.AMI_ID }} \
-            --instance-type ${{ env.INSTANCE_TYPE }} \
+            --image-id ${{ steps.builder-arch.outputs.ami_id }} \
+            --instance-type ${{ steps.builder-arch.outputs.instance_type }} \
             --key-name "${{ steps.create-key.outputs.key_name }}" \
             --security-group-ids "${{ steps.security-group.outputs.security_group_id }}" \
             --subnet-id "${{ steps.vpc-info.outputs.subnet_id }}" \

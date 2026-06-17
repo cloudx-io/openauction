@@ -313,10 +313,17 @@ jobs:
         run: |
           COMMIT_SHA="${{ steps.set-sha.outputs.commit_sha }}"
           COMMIT_SHORT="${{ steps.set-sha.outputs.commit_short }}"
+          ARCHITECTURE="${{ steps.builder-arch.outputs.architecture }}"
           REGISTRY="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com"
           REPO="cloudx-io/openauction/enclave-eif"
+
+          if [ "${ARCHITECTURE}" = "arm64" ]; then
+            TAG_SUFFIX="-arm64"
+          else
+            TAG_SUFFIX=""
+          fi
           
-          oras push "${REGISTRY}/${REPO}:${COMMIT_SHA}" \
+          oras push "${REGISTRY}/${REPO}:${COMMIT_SHA}${TAG_SUFFIX}" \
             --artifact-type application/vnd.aws.nitro.eif \
             --annotation "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --annotation "org.opencontainers.image.revision=${COMMIT_SHA}" \
@@ -326,11 +333,11 @@ jobs:
             auction.eif:application/octet-stream \
             measurements.json:application/json
           
-          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            oras tag "${REGISTRY}/${REPO}:${COMMIT_SHA}" latest
+          if [ "${{ github.ref }}" = "refs/heads/main" ] && [ -z "${TAG_SUFFIX}" ]; then
+            oras tag "${REGISTRY}/${REPO}:${COMMIT_SHA}${TAG_SUFFIX}" latest
           fi
           
-          oras tag "${REGISTRY}/${REPO}:${COMMIT_SHA}" "${COMMIT_SHORT}"
+          oras tag "${REGISTRY}/${REPO}:${COMMIT_SHA}${TAG_SUFFIX}" "${COMMIT_SHORT}${TAG_SUFFIX}"
       
       - name: Upload artifacts
         uses: actions/upload-artifact@v6

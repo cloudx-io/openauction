@@ -3,41 +3,71 @@ on:
   workflow_run:
     workflows: ["Go"]
     types: [completed]
+  workflow_dispatch:
+    inputs:
+      architecture:
+        description: CPU architecture to build.
+        type: choice
+        default: arm64
+        options:
+          - arm64
+          - amd64
 
 jobs:
   enclave:
     # Only run if the Go workflow succeeded
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     permissions:
       id-token: write # for AWS OIDC authentication
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: actions/setup-go@v6
         with:
           go-version: "1.25.1"
+      - name: docker set architecture env vars
+        run: |
+          # arm64 is the default: automated workflow_run builds (no input) produce
+          # the arm64 image. amd64 is opt-in via workflow_dispatch.
+          ARCHITECTURE="${{ github.event.inputs.architecture || 'arm64' }}"
+          echo "ARCHITECTURE=${ARCHITECTURE}" >> "$GITHUB_ENV"
+          if [ "${ARCHITECTURE}" = "arm64" ]; then
+            echo "IMAGE_TAG_SUFFIX=-arm64" >> "$GITHUB_ENV"
+          else
+            echo "IMAGE_TAG_SUFFIX=" >> "$GITHUB_ENV"
+          fi
+
+          PUBLISH_IMAGE=false
+          if [ "${{ github.event_name }}" = "workflow_run" ] && [ "${{ github.event.workflow_run.head_branch }}" = "main" ]; then
+            PUBLISH_IMAGE=true
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "${{ github.ref }}" = "refs/heads/main" ] || [ "${ARCHITECTURE}" = "arm64" ]; then
+              PUBLISH_IMAGE=true
+            fi
+          fi
+          echo "PUBLISH_IMAGE=${PUBLISH_IMAGE}" >> "$GITHUB_ENV"
       - name: Configure AWS credentials
-        if: github.event.workflow_run.head_branch == 'main'
+        if: env.PUBLISH_IMAGE == 'true'
         uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-ecr-push
           aws-region: us-east-1
       - name: Login to Amazon ECR
-        if: github.event.workflow_run.head_branch == 'main'
+        if: env.PUBLISH_IMAGE == 'true'
         uses: aws-actions/amazon-ecr-login@v2
-      - name: go build bin/enclave-linux-amd64
+      - name: go build enclave binary
         run: |
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -ldflags '-extldflags "-static"' -tags netgo -o ./bin/tee-auction-enclave ./enclave
+          CGO_ENABLED=0 GOOS=linux GOARCH=${{ env.ARCHITECTURE }} go build -a -ldflags '-extldflags "-static"' -tags netgo -o ./bin/tee-auction-enclave ./enclave
       - name: docker set build tag env vars
         run: |
           VERSION="0.0.0"
           SHA="$(git rev-parse --short HEAD || echo 'unknown')"
           DIRTY="$(git diff --no-ext-diff --quiet --exit-code HEAD || echo '.dirty')"
           COMMIT="${SHA}${DIRTY}"
-          echo "CLOUDX_VERSION=${VERSION}" >> $GITHUB_ENV
-          echo "CLOUDX_COMMIT=${COMMIT}" >> $GITHUB_ENV
+          echo "CLOUDX_VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "CLOUDX_COMMIT=${COMMIT}" >> "$GITHUB_ENV"
       - name: docker set metadata
         id: dockermetadata
         # https://github.com/docker/metadata-action
@@ -52,23 +82,25 @@ jobs:
             org.opencontainers.image.source=https://github.com/cloudx-io/openauction
           tags: |
             # short sha of the commit
-            type=sha,prefix=,suffix=,format=short
+            type=sha,prefix=,suffix=${{ env.IMAGE_TAG_SUFFIX }},format=short
             # long sha of the commit
-            type=sha,prefix=,suffix=,format=long
+            type=sha,prefix=,suffix=${{ env.IMAGE_TAG_SUFFIX }},format=long
             # our version tag, like "0.0.0-commit.ABCDEF01"
-            type=raw,value=${{ env.CLOUDX_VERSION }}-commit.${{ env.CLOUDX_COMMIT }}
+            type=raw,value=${{ env.CLOUDX_VERSION }}-commit.${{ env.CLOUDX_COMMIT }}${{ env.IMAGE_TAG_SUFFIX }}
             # "latest"
-            type=raw,value=latest
+            type=raw,value=latest${{ env.IMAGE_TAG_SUFFIX }},enable=${{ github.event.workflow_run.head_branch == 'main' || github.ref == 'refs/heads/main' }}
+      - uses: docker/setup-qemu-action@v3
+        if: env.ARCHITECTURE == 'arm64'
       - uses: docker/setup-buildx-action@v4
         with:
-          platforms: linux/amd64
+          platforms: linux/${{ env.ARCHITECTURE }}
       - uses: docker/build-push-action@v7
         with:
           context: .
           file: enclave/Dockerfile
-          platforms: linux/amd64
-          # Only push on main branch, not on PR branches
-          push: ${{ github.event.workflow_run.head_branch == 'main' }}
+          platforms: linux/${{ env.ARCHITECTURE }}
+          # Non-main arm64 dispatches publish only commit/version-specific tags for EIF validation.
+          push: ${{ env.PUBLISH_IMAGE == 'true' }}
           sbom: true
           provenance: mode=max
           tags: ${{ steps.dockermetadata.outputs.tags }}

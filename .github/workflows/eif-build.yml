@@ -34,25 +34,20 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: 'Docker image tag to use (e.g., sha-abc1234, latest). Image must exist in ECR.'
-        required: true
-        default: 'latest'
+        description: 'Optional Docker image tag to use. Leave blank to use the checked-out commit SHA.'
+        required: false
+        default: ''
         type: string
+      architecture:
+        description: CPU architecture for the Docker image and EIF builder.
+        type: choice
+        default: arm64
+        options:
+          - arm64
+          - amd64
 
 env:
   AWS_REGION: us-east-1
-  INSTANCE_TYPE: c5.xlarge
-  # Amazon Linux 2023 AMI
-  # Update periodically to latest AMI
-  #
-  # % aws ec2 describe-images \
-  #  --owners amazon \
-  #  --filters "Name=name,Values=al2023-ami-2023.*-x86_64" \
-  #  --filters "Name=state,Values=available" \
-  #  --query 'sort_by(Images, &CreationDate)[-1].[ImageId,Name,CreationDate]' \
-  #  --output table \
-  #  --region us-east-1
-  AMI_ID: ami-08d7aabbb50c2c24e 
 
 concurrency:
   group: eif-build
@@ -72,6 +67,7 @@ jobs:
       contents: read
     
     outputs:
+      architecture: ${{ steps.builder-arch.outputs.architecture }}
       pcr0: ${{ steps.extract-pcrs.outputs.pcr0 }}
       pcr1: ${{ steps.extract-pcrs.outputs.pcr1 }}
       pcr2: ${{ steps.extract-pcrs.outputs.pcr2 }}
@@ -92,8 +88,8 @@ jobs:
           else
             COMMIT_SHA="${{ github.sha }}"
           fi
-          echo "commit_sha=${COMMIT_SHA}" >> $GITHUB_OUTPUT
-          echo "commit_short=${COMMIT_SHA:0:7}" >> $GITHUB_OUTPUT
+          echo "commit_sha=${COMMIT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "commit_short=${COMMIT_SHA:0:7}" >> "$GITHUB_OUTPUT"
           echo "Building EIF for commit: ${COMMIT_SHA}"
       
       - name: Configure AWS credentials
@@ -102,6 +98,39 @@ jobs:
           # OIDC role for EIF building workflow (needs EC2 + ECR permissions)
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/eif-builder-workflow
           aws-region: ${{ env.AWS_REGION }}
+
+      - name: Resolve builder architecture
+        id: builder-arch
+        run: |
+          # arm64 is the default: the automated Docker Build -> Build EIF chain
+          # on main (no input) builds the arm64 EIF. amd64 is opt-in via dispatch.
+          ARCHITECTURE="${{ github.event.inputs.architecture || 'arm64' }}"
+          if [ "${ARCHITECTURE}" = "arm64" ]; then
+            AMI_ARCH="arm64"
+            INSTANCE_TYPE="c7g.xlarge"
+          else
+            AMI_ARCH="x86_64"
+            INSTANCE_TYPE="c5.xlarge"
+          fi
+
+          AMI_ID=$(aws ec2 describe-images \
+            --owners amazon \
+            --filters "Name=name,Values=al2023-ami-2023.*-${AMI_ARCH}" \
+                      "Name=state,Values=available" \
+                      "Name=root-device-type,Values=ebs" \
+                      "Name=virtualization-type,Values=hvm" \
+            --query 'sort_by(Images, &CreationDate)[-1].ImageId' \
+            --output text)
+
+          if [ -z "${AMI_ID}" ] || [ "${AMI_ID}" = "None" ]; then
+            echo "::error::Failed to resolve AL2023 ${AMI_ARCH} builder AMI"
+            exit 1
+          fi
+
+          echo "architecture=${ARCHITECTURE}" >> "$GITHUB_OUTPUT"
+          echo "ami_id=${AMI_ID}" >> "$GITHUB_OUTPUT"
+          echo "instance_type=${INSTANCE_TYPE}" >> "$GITHUB_OUTPUT"
+          echo "Using ${ARCHITECTURE} builder ${INSTANCE_TYPE} with AMI ${AMI_ID}"
       
       - name: Construct Docker image URI
         id: image-uri
@@ -117,8 +146,14 @@ jobs:
             echo "Using commit-based image tag: ${IMAGE_TAG}"
           fi
 
+          ARCHITECTURE="${{ steps.builder-arch.outputs.architecture }}"
+          if [ "${ARCHITECTURE}" = "arm64" ] && [[ "${IMAGE_TAG}" != *-arm64 ]]; then
+            IMAGE_TAG="${IMAGE_TAG}-arm64"
+            echo "Using arm64 image tag: ${IMAGE_TAG}"
+          fi
+
           IMAGE_URI="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/cloudx-io/openauction/enclave:${IMAGE_TAG}"
-          echo "image_uri=${IMAGE_URI}" >> $GITHUB_OUTPUT
+          echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
           echo "Docker image: ${IMAGE_URI}"
       
       - name: Create EC2 key pair
@@ -130,7 +165,7 @@ jobs:
             --query 'KeyMaterial' \
             --output text > /tmp/eif-builder-key.pem
           chmod 400 /tmp/eif-builder-key.pem
-          echo "key_name=${KEY_NAME}" >> $GITHUB_OUTPUT
+          echo "key_name=${KEY_NAME}" >> "$GITHUB_OUTPUT"
           echo "Created key pair: ${KEY_NAME}"
       
       - name: Get default VPC and subnet
@@ -148,8 +183,8 @@ jobs:
             --query 'Subnets[0].SubnetId' \
             --output text)
           
-          echo "vpc_id=${VPC_ID}" >> $GITHUB_OUTPUT
-          echo "subnet_id=${SUBNET_ID}" >> $GITHUB_OUTPUT
+          echo "vpc_id=${VPC_ID}" >> "$GITHUB_OUTPUT"
+          echo "subnet_id=${SUBNET_ID}" >> "$GITHUB_OUTPUT"
           echo "Using VPC: ${VPC_ID}, Subnet: ${SUBNET_ID} (us-east-1a)"
       
       - name: Create security group
@@ -169,7 +204,7 @@ jobs:
             --port 22 \
             --cidr 0.0.0.0/0
           
-          echo "security_group_id=${SG_ID}" >> $GITHUB_OUTPUT
+          echo "security_group_id=${SG_ID}" >> "$GITHUB_OUTPUT"
           echo "Created security group: ${SG_ID}"
       
       - name: Launch Nitro EC2 instance
@@ -181,8 +216,8 @@ jobs:
           # - Access EC2 instance metadata
 
           INSTANCE_ID=$(aws ec2 run-instances \
-            --image-id ${{ env.AMI_ID }} \
-            --instance-type ${{ env.INSTANCE_TYPE }} \
+            --image-id ${{ steps.builder-arch.outputs.ami_id }} \
+            --instance-type ${{ steps.builder-arch.outputs.instance_type }} \
             --key-name "${{ steps.create-key.outputs.key_name }}" \
             --security-group-ids "${{ steps.security-group.outputs.security_group_id }}" \
             --subnet-id "${{ steps.vpc-info.outputs.subnet_id }}" \
@@ -192,7 +227,7 @@ jobs:
             --query 'Instances[0].InstanceId' \
             --output text)
           
-          echo "instance_id=${INSTANCE_ID}" >> $GITHUB_OUTPUT
+          echo "instance_id=${INSTANCE_ID}" >> "$GITHUB_OUTPUT"
           echo "Launched instance: ${INSTANCE_ID}"
           
           echo "Waiting for instance to be running..."
@@ -206,7 +241,7 @@ jobs:
             --query 'Reservations[0].Instances[0].PublicIpAddress' \
             --output text)
           
-          echo "public_ip=${PUBLIC_IP}" >> $GITHUB_OUTPUT
+          echo "public_ip=${PUBLIC_IP}" >> "$GITHUB_OUTPUT"
           echo "Instance ready at: ${PUBLIC_IP}"
       
       - name: Wait for SSH
@@ -269,13 +304,17 @@ jobs:
           PCR2=$(jq -r '.Measurements.PCR2' measurements.json)
           EIF_SHA256=$(sha256sum auction.eif | cut -d' ' -f1)
           
-          echo "pcr0=${PCR0}" >> $GITHUB_OUTPUT
-          echo "pcr1=${PCR1}" >> $GITHUB_OUTPUT
-          echo "pcr2=${PCR2}" >> $GITHUB_OUTPUT
-          echo "eif_sha256=${EIF_SHA256}" >> $GITHUB_OUTPUT
+          echo "pcr0=${PCR0}" >> "$GITHUB_OUTPUT"
+          echo "pcr1=${PCR1}" >> "$GITHUB_OUTPUT"
+          echo "pcr2=${PCR2}" >> "$GITHUB_OUTPUT"
+          echo "eif_sha256=${EIF_SHA256}" >> "$GITHUB_OUTPUT"
       
       - name: Install ORAS
         run: |
+          # This ORAS runs on the GitHub runner (ubuntu-latest = amd64) to push the
+          # already-built EIF artifact to ECR. It is the runner's architecture, not
+          # the target EIF's, so it stays amd64 even for arm64 EIF builds (which are
+          # built on the remote Nitro instance). Do not switch this to arm64.
           VERSION="1.1.0"
           curl -LO "https://github.com/oras-project/oras/releases/download/v${VERSION}/oras_${VERSION}_linux_amd64.tar.gz"
           tar -zxf oras_${VERSION}_*.tar.gz
@@ -292,10 +331,17 @@ jobs:
         run: |
           COMMIT_SHA="${{ steps.set-sha.outputs.commit_sha }}"
           COMMIT_SHORT="${{ steps.set-sha.outputs.commit_short }}"
+          ARCHITECTURE="${{ steps.builder-arch.outputs.architecture }}"
           REGISTRY="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com"
           REPO="cloudx-io/openauction/enclave-eif"
+
+          if [ "${ARCHITECTURE}" = "arm64" ]; then
+            TAG_SUFFIX="-arm64"
+          else
+            TAG_SUFFIX=""
+          fi
           
-          oras push "${REGISTRY}/${REPO}:${COMMIT_SHA}" \
+          oras push "${REGISTRY}/${REPO}:${COMMIT_SHA}${TAG_SUFFIX}" \
             --artifact-type application/vnd.aws.nitro.eif \
             --annotation "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --annotation "org.opencontainers.image.revision=${COMMIT_SHA}" \
@@ -305,16 +351,18 @@ jobs:
             auction.eif:application/octet-stream \
             measurements.json:application/json
           
-          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            oras tag "${REGISTRY}/${REPO}:${COMMIT_SHA}" latest
+          if [ "${{ github.ref }}" = "refs/heads/main" ] && [ -z "${TAG_SUFFIX}" ]; then
+            oras tag "${REGISTRY}/${REPO}:${COMMIT_SHA}${TAG_SUFFIX}" latest
           fi
           
-          oras tag "${REGISTRY}/${REPO}:${COMMIT_SHA}" "${COMMIT_SHORT}"
+          oras tag "${REGISTRY}/${REPO}:${COMMIT_SHA}${TAG_SUFFIX}" "${COMMIT_SHORT}${TAG_SUFFIX}"
       
       - name: Upload artifacts
         uses: actions/upload-artifact@v6
         with:
-          name: eif-${{ steps.set-sha.outputs.commit_short }}
+          # Include the architecture so an amd64 and arm64 build of the same
+          # commit don't collide on the artifact name.
+          name: eif-${{ steps.set-sha.outputs.commit_short }}-${{ steps.builder-arch.outputs.architecture }}
           path: |
             auction.eif
             measurements.json
@@ -376,7 +424,9 @@ jobs:
     name: Update PCR validation file
     runs-on: ubuntu-latest
     needs: build-eif
-    if: github.ref == 'refs/heads/main'
+    # arm64 is the canonical fleet, so validation/pcrs.json tracks arm64 PCRs.
+    # amd64 dispatches (now opt-in) don't touch the file to avoid arch-mismatched entries.
+    if: github.ref == 'refs/heads/main' && needs.build-eif.outputs.architecture == 'arm64'
     env:
       GH_APP_ID: '2665276'
 

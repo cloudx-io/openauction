@@ -8,10 +8,10 @@ on:
       architecture:
         description: CPU architecture to build.
         type: choice
-        default: amd64
+        default: arm64
         options:
-          - amd64
           - arm64
+          - amd64
 
 jobs:
   enclave:
@@ -29,7 +29,9 @@ jobs:
           go-version: "1.25.1"
       - name: docker set architecture env vars
         run: |
-          ARCHITECTURE="${{ github.event.inputs.architecture || 'amd64' }}"
+          # arm64 is the default: automated workflow_run builds (no input) produce
+          # the arm64 image. amd64 is opt-in via workflow_dispatch.
+          ARCHITECTURE="${{ github.event.inputs.architecture || 'arm64' }}"
           echo "ARCHITECTURE=${ARCHITECTURE}" >> "$GITHUB_ENV"
           if [ "${ARCHITECTURE}" = "arm64" ]; then
             echo "IMAGE_TAG_SUFFIX=-arm64" >> "$GITHUB_ENV"

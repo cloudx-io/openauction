@@ -41,10 +41,10 @@ on:
       architecture:
         description: CPU architecture for the Docker image and EIF builder.
         type: choice
-        default: amd64
+        default: arm64
         options:
-          - amd64
           - arm64
+          - amd64
 
 env:
   AWS_REGION: us-east-1
@@ -102,7 +102,9 @@ jobs:
       - name: Resolve builder architecture
         id: builder-arch
         run: |
-          ARCHITECTURE="${{ github.event.inputs.architecture || 'amd64' }}"
+          # arm64 is the default: the automated Docker Build -> Build EIF chain
+          # on main (no input) builds the arm64 EIF. amd64 is opt-in via dispatch.
+          ARCHITECTURE="${{ github.event.inputs.architecture || 'arm64' }}"
           if [ "${ARCHITECTURE}" = "arm64" ]; then
             AMI_ARCH="arm64"
             INSTANCE_TYPE="c7g.xlarge"
@@ -309,6 +311,10 @@ jobs:
       
       - name: Install ORAS
         run: |
+          # This ORAS runs on the GitHub runner (ubuntu-latest = amd64) to push the
+          # already-built EIF artifact to ECR. It is the runner's architecture, not
+          # the target EIF's, so it stays amd64 even for arm64 EIF builds (which are
+          # built on the remote Nitro instance). Do not switch this to arm64.
           VERSION="1.1.0"
           curl -LO "https://github.com/oras-project/oras/releases/download/v${VERSION}/oras_${VERSION}_linux_amd64.tar.gz"
           tar -zxf oras_${VERSION}_*.tar.gz
@@ -354,7 +360,9 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v6
         with:
-          name: eif-${{ steps.set-sha.outputs.commit_short }}
+          # Include the architecture so an amd64 and arm64 build of the same
+          # commit don't collide on the artifact name.
+          name: eif-${{ steps.set-sha.outputs.commit_short }}-${{ steps.builder-arch.outputs.architecture }}
           path: |
             auction.eif
             measurements.json
@@ -416,7 +424,9 @@ jobs:
     name: Update PCR validation file
     runs-on: ubuntu-latest
     needs: build-eif
-    if: github.ref == 'refs/heads/main' && needs.build-eif.outputs.architecture == 'amd64'
+    # arm64 is the canonical fleet, so validation/pcrs.json tracks arm64 PCRs.
+    # amd64 dispatches (now opt-in) don't touch the file to avoid arch-mismatched entries.
+    if: github.ref == 'refs/heads/main' && needs.build-eif.outputs.architecture == 'arm64'
     env:
       GH_APP_ID: '2665276'
 

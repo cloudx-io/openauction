@@ -82,7 +82,7 @@ func ProcessAuction(attester EnclaveAttester, req enclaveapi.EnclaveAuctionReque
 		ExcludedBids:          excludedBids,
 		FloorRejectedBidIDs:   floorRejectedBidIDs,
 		ProcessingTime:        processingTime,
-		AttestationUs:         &attestationUs,
+		AttestationUs:         attestationUs,
 	}
 }
 

@@ -150,8 +150,9 @@ func TestGenerateAttestationWithMock(t *testing.T) {
 	check.NoError(t, err)
 	check.NotNil(t, coseBytes)
 	check.True(t, len(coseBytes) > 0)
-	// Attestation timing is measured and reported in microseconds.
-	check.True(t, attestationUs >= 0)
+	// Attestation timing is measured (non-nil) and reported in microseconds.
+	check.NotNil(t, attestationUs)
+	check.True(t, *attestationUs > 0)
 
 	attestationDoc := parseAuctionAttestationFromCOSE(t, coseBytes)
 	check.Equal(t, "test-enclave-12345", attestationDoc.ModuleID)
@@ -228,7 +229,8 @@ func TestGenerateAttestationWithEncryptedBids(t *testing.T) {
 	check.NoError(t, err)
 	check.NotNil(t, coseBytes)
 	check.True(t, len(coseBytes) > 0)
-	check.True(t, attestationUs >= 0)
+	check.NotNil(t, attestationUs)
+	check.True(t, *attestationUs > 0)
 
 	attestationDoc := parseAuctionAttestationFromCOSE(t, coseBytes)
 	check.Equal(t, "test-enclave-12345", attestationDoc.ModuleID)
@@ -296,7 +298,8 @@ func TestGenerateKeyAttestationWithMock(t *testing.T) {
 	check.NoError(t, err)
 	check.NotNil(t, coseBytes)
 	check.True(t, len(coseBytes) > 0)
-	check.True(t, attestationUs >= 0)
+	check.NotNil(t, attestationUs)
+	check.True(t, *attestationUs > 0)
 
 	// Verify COSE bytes can be parsed
 	attestationDoc, userData, err := enclaveapi.AttestationCOSE(coseBytes).ParseAttestationDoc()

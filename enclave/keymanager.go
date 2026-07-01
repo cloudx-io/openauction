@@ -72,6 +72,6 @@ func HandleKeyRequest(attester EnclaveAttester, keyManager *KeyManager, tokenMan
 			AuctionToken: auctionToken,
 		},
 		Type:          "key_response",
-		AttestationUs: &attestationUs,
+		AttestationUs: attestationUs,
 	}, nil
 }

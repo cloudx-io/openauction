@@ -156,12 +156,23 @@ type EnclaveAuctionResponse struct {
 	ExcludedBids          []core.ExcludedBid    `json:"excluded_bids,omitempty"`           // Decryption failures, validation errors
 	FloorRejectedBidIDs   []string              `json:"floor_rejected_bid_ids,omitempty"`  // Bid IDs that were below floor
 	ProcessingTime        int64                 `json:"processing_time_ms"`
+	// AttestationUs is the wall-clock time spent in the attestation call, in
+	// microseconds. Reported in us (not ms) because the value is often
+	// sub-millisecond and integer-ms rounding would hide it. A pointer so that
+	// "not measured" (attestation failed or was not reached) is nil rather than
+	// an ambiguous 0. Operational timing only; not part of the attested payload.
+	AttestationUs *float64 `json:"attestation_us,omitempty"`
 }
 
 // KeyResponse represents the response from a key request to the TEE enclave
 type KeyResponse struct {
 	KeyWithAttestation
 	Type string `json:"type"`
+	// AttestationUs is the wall-clock time spent in the attestation call, in
+	// microseconds (see EnclaveAuctionResponse.AttestationUs). Pointer so "not
+	// measured" is nil rather than an ambiguous 0. Operational timing only; not
+	// part of the attested payload.
+	AttestationUs *float64 `json:"attestation_us,omitempty"`
 }
 
 // KeyWithAttestation represents a public key with its TEE attestation

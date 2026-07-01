@@ -113,7 +113,7 @@ func TestGenerateAttestation(t *testing.T) {
 
 	// Test with nil enclave handle (error case)
 	bidHashes := []string{"hash1", "hash2"}
-	coseBytes, err := GenerateAttestation(nil, req, bidHashes, "test_request_hash", "test_adj_hash",
+	coseBytes, _, err := GenerateAttestation(nil, req, bidHashes, "test_request_hash", "test_adj_hash",
 		"test_bid_nonce", "test_req_nonce", "test_adj_nonce", winner, runnerUp)
 
 	// Should fail with nil enclave handle
@@ -143,13 +143,16 @@ func TestGenerateAttestationWithMock(t *testing.T) {
 	bidHash := core.ComputeBidHash("bid1", 2.50, bidHashNonce)
 
 	// Test successful attestation generation with mock
-	coseBytes, err := GenerateAttestation(mockEnclave, req, []string{bidHash}, "test_request_hash", "test_adj_hash",
+	coseBytes, attestationUs, err := GenerateAttestation(mockEnclave, req, []string{bidHash}, "test_request_hash", "test_adj_hash",
 		bidHashNonce, "test_req_nonce", "test_adj_nonce", winner, nil)
 
 	// Should succeed with mock enclave
 	check.NoError(t, err)
 	check.NotNil(t, coseBytes)
 	check.True(t, len(coseBytes) > 0)
+	// Attestation timing is measured (non-nil) and reported in microseconds.
+	check.NotNil(t, attestationUs)
+	check.True(t, *attestationUs > 0)
 
 	attestationDoc := parseAuctionAttestationFromCOSE(t, coseBytes)
 	check.Equal(t, "test-enclave-12345", attestationDoc.ModuleID)
@@ -219,13 +222,15 @@ func TestGenerateAttestationWithEncryptedBids(t *testing.T) {
 	bidHashes := []string{hash2, hash3}
 
 	// Test successful attestation generation with encrypted bids
-	coseBytes, err := GenerateAttestation(mockEnclave, req, bidHashes, "test_request_hash", "test_adj_hash",
+	coseBytes, attestationUs, err := GenerateAttestation(mockEnclave, req, bidHashes, "test_request_hash", "test_adj_hash",
 		bidHashNonce, "test_req_nonce", "test_adj_nonce", winner, runnerUp)
 
 	// Should succeed with mock enclave
 	check.NoError(t, err)
 	check.NotNil(t, coseBytes)
 	check.True(t, len(coseBytes) > 0)
+	check.NotNil(t, attestationUs)
+	check.True(t, *attestationUs > 0)
 
 	attestationDoc := parseAuctionAttestationFromCOSE(t, coseBytes)
 	check.Equal(t, "test-enclave-12345", attestationDoc.ModuleID)
@@ -267,7 +272,7 @@ func TestGenerateKeyAttestation(t *testing.T) {
 	check.NoError(t, err)
 
 	testToken := "550e8400-e29b-41d4-a716-446655440000"
-	coseBytes, err := GenerateKeyAttestation(nil, &privateKey.PublicKey, testToken)
+	coseBytes, _, err := GenerateKeyAttestation(nil, &privateKey.PublicKey, testToken)
 
 	// Should fail with nil enclave handle
 	check.Error(t, err)
@@ -287,12 +292,14 @@ func TestGenerateKeyAttestationWithMock(t *testing.T) {
 	testToken := "550e8400-e29b-41d4-a716-446655440000"
 
 	// Test successful key attestation generation with mock
-	coseBytes, err := GenerateKeyAttestation(mockEnclave, &privateKey.PublicKey, testToken)
+	coseBytes, attestationUs, err := GenerateKeyAttestation(mockEnclave, &privateKey.PublicKey, testToken)
 
 	// Should succeed with mock enclave
 	check.NoError(t, err)
 	check.NotNil(t, coseBytes)
 	check.True(t, len(coseBytes) > 0)
+	check.NotNil(t, attestationUs)
+	check.True(t, *attestationUs > 0)
 
 	// Verify COSE bytes can be parsed
 	attestationDoc, userData, err := enclaveapi.AttestationCOSE(coseBytes).ParseAttestationDoc()
@@ -495,7 +502,7 @@ func TestGenerateAttestationWithMixedBidTypes(t *testing.T) {
 	bidHashes := []string{hashU1, hashE1, hashU2, hashE2, hashU3}
 
 	// Generate attestation for mixed bid scenario
-	coseBytes, err := GenerateAttestation(mockEnclave, req, bidHashes, "mixed_request_hash", "mixed_adj_hash",
+	coseBytes, _, err := GenerateAttestation(mockEnclave, req, bidHashes, "mixed_request_hash", "mixed_adj_hash",
 		bidHashNonce, "mixed_req_nonce", "mixed_adj_nonce", winner, runnerUp)
 
 	// Verify successful attestation generation

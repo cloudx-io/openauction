@@ -22,20 +22,20 @@ type EnclaveAttester interface {
 	Attest(options enclave.AttestationOptions) ([]byte, error)
 }
 
-func GenerateTEEProofs(attester EnclaveAttester, req enclaveapi.EnclaveAuctionRequest, unencryptedBids []core.CoreBid, winner, runnerUp *core.CoreBid) (enclaveapi.AttestationCOSE, error) {
+func GenerateTEEProofs(attester EnclaveAttester, req enclaveapi.EnclaveAuctionRequest, unencryptedBids []core.CoreBid, winner, runnerUp *core.CoreBid) (enclaveapi.AttestationCOSE, *float64, error) {
 	bidHashNonce, err := generateNonce()
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate bid hash nonce: %w", err)
+		return nil, nil, fmt.Errorf("failed to generate bid hash nonce: %w", err)
 	}
 
 	requestNonce, err := generateNonce()
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate request nonce: %w", err)
+		return nil, nil, fmt.Errorf("failed to generate request nonce: %w", err)
 	}
 
 	adjustmentFactorsNonce, err := generateNonce()
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate adjustment factors nonce: %w", err)
+		return nil, nil, fmt.Errorf("failed to generate adjustment factors nonce: %w", err)
 	}
 
 	// Build list of bid hashes from decrypted bids
@@ -111,7 +111,7 @@ func GenerateAttestation(
 	adjustmentFactorsNonce string,
 	winner *core.CoreBid,
 	runnerUp *core.CoreBid,
-) (enclaveapi.AttestationCOSE, error) {
+) (enclaveapi.AttestationCOSE, *float64, error) {
 	now := time.Now()
 
 	// Create the user data that will be embedded in the attestation
@@ -132,31 +132,33 @@ func GenerateAttestation(
 	}
 
 	if attester == nil {
-		return nil, fmt.Errorf("enclave attester is nil")
+		return nil, nil, fmt.Errorf("enclave attester is nil")
 	}
 
 	// Marshal user data for the real attestation
 	userDataBytes, err := json.Marshal(userData)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal user data: %w", err)
+		return nil, nil, fmt.Errorf("failed to marshal user data: %w", err)
 	}
 	randomNonce, err := generateNonce()
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate attestation nonce: %w", err)
+		return nil, nil, fmt.Errorf("failed to generate attestation nonce: %w", err)
 	}
 
+	attestStart := time.Now()
 	attestationCBOR, err := attester.Attest(enclave.AttestationOptions{
 		UserData: userDataBytes,
 		Nonce:    []byte(randomNonce),
 	})
 	if err != nil {
 		log.Printf("ERROR: NSM attestation failed: %v", err)
-		return nil, fmt.Errorf("NSM attestation failed: %w", err)
+		return nil, nil, fmt.Errorf("NSM attestation failed: %w", err)
 	}
+	attestationUs := float64(time.Since(attestStart).Nanoseconds()) / 1000.0
 
 	log.Printf("INFO: Real NSM attestation generated: %d bytes", len(attestationCBOR))
 
-	return enclaveapi.AttestationCOSE(attestationCBOR), nil
+	return enclaveapi.AttestationCOSE(attestationCBOR), &attestationUs, nil
 }
 
 // publicKeyToPEM converts an RSA public key to PEM format
@@ -175,15 +177,15 @@ func publicKeyToPEM(publicKey *rsa.PublicKey) (string, error) {
 }
 
 // GenerateKeyAttestation generates raw COSE bytes for E2EE public keys
-func GenerateKeyAttestation(attester EnclaveAttester, publicKey *rsa.PublicKey, auctionToken string) (enclaveapi.AttestationCOSE, error) {
+func GenerateKeyAttestation(attester EnclaveAttester, publicKey *rsa.PublicKey, auctionToken string) (enclaveapi.AttestationCOSE, *float64, error) {
 	if attester == nil {
-		return nil, fmt.Errorf("enclave attester is nil")
+		return nil, nil, fmt.Errorf("enclave attester is nil")
 	}
 
 	// Convert public key to PEM format for inclusion in attestation
 	publicKeyPEM, err := publicKeyToPEM(publicKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to convert public key to PEM: %w", err)
+		return nil, nil, fmt.Errorf("failed to convert public key to PEM: %w", err)
 	}
 
 	keyUserData := &enclaveapi.KeyAttestationUserData{
@@ -194,24 +196,26 @@ func GenerateKeyAttestation(attester EnclaveAttester, publicKey *rsa.PublicKey, 
 
 	userDataBytes, err := json.Marshal(keyUserData)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal key user data: %w", err)
+		return nil, nil, fmt.Errorf("failed to marshal key user data: %w", err)
 	}
 
 	randomNonce, err := generateNonce()
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate attestation nonce: %w", err)
+		return nil, nil, fmt.Errorf("failed to generate attestation nonce: %w", err)
 	}
 
+	attestStart := time.Now()
 	attestationCBOR, err := attester.Attest(enclave.AttestationOptions{
 		UserData: userDataBytes,
 		Nonce:    []byte(randomNonce),
 	})
 	if err != nil {
 		log.Printf("ERROR: NSM key attestation failed: %v", err)
-		return nil, fmt.Errorf("NSM key attestation failed: %w", err)
+		return nil, nil, fmt.Errorf("NSM key attestation failed: %w", err)
 	}
+	attestationUs := float64(time.Since(attestStart).Nanoseconds()) / 1000.0
 
 	log.Printf("Key attestation generated: %d bytes", len(attestationCBOR))
 
-	return enclaveapi.AttestationCOSE(attestationCBOR), nil
+	return enclaveapi.AttestationCOSE(attestationCBOR), &attestationUs, nil
 }

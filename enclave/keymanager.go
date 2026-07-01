@@ -55,7 +55,7 @@ func HandleKeyRequest(attester EnclaveAttester, keyManager *KeyManager, tokenMan
 
 	auctionToken := tokenManager.GenerateToken()
 
-	coseAttestation, err := GenerateKeyAttestation(attester, keyManager.PublicKey, auctionToken)
+	coseAttestation, attestationUs, err := GenerateKeyAttestation(attester, keyManager.PublicKey, auctionToken)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate key attestation: %w", err)
 	}
@@ -71,6 +71,7 @@ func HandleKeyRequest(attester EnclaveAttester, keyManager *KeyManager, tokenMan
 			Attestation:  attestationGzip,
 			AuctionToken: auctionToken,
 		},
-		Type: "key_response",
+		Type:          "key_response",
+		AttestationUs: attestationUs,
 	}, nil
 }

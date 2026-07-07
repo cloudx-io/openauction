@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Run the Go test suite"
+# https://mise.jdx.dev/tasks/file-tasks.html
+set -euo pipefail
+
+go test ./... "$@"

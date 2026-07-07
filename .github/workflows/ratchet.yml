@@ -1,0 +1,21 @@
+name: Ratchet
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    name: Ratchet Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v7
+      - name: Install mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # ratchet:jdx/mise-action@v4
+      - name: Lint GitHub Actions refs
+        run: mise run //:ratchet:lint
+      - name: Verify pinning leaves no diff
+        run: |
+          mise run //:ratchet:pin
+          git diff --exit-code

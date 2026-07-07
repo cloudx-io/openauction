@@ -1,0 +1,14 @@
+experimental_monorepo_root = true
+
+[monorepo]
+config_roots = ["."]
+
+[settings]
+experimental = true
+locked = true
+install_before = "7d"
+
+[tools]
+go = "1.25.1"
+golangci-lint = "2.5.0"
+"go:github.com/sethvargo/ratchet" = "0.11.4"

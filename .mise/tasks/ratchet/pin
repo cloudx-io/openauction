@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+#MISE description="Pin GitHub Actions refs with ratchet in workflow and composite action files"
+# https://mise.jdx.dev/tasks/file-tasks.html
+set -euo pipefail
+
+if [ "$#" -gt 0 ]; then
+  files=("$@")
+else
+  files=()
+  while IFS= read -r file; do
+    files+=("$file")
+  done < <(git ls-files '.github/**/*.yml' '.github/**/*.yaml')
+fi
+
+if [ "${#files[@]}" -eq 0 ]; then
+  echo "no GitHub Actions files found to pin" >&2
+  exit 1
+fi
+
+ratchet pin "${files[@]}"

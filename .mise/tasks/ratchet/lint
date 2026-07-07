@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+#MISE description="Lint GitHub Actions files to ensure external refs are pinned with ratchet"
+# https://mise.jdx.dev/tasks/file-tasks.html
+set -euo pipefail
+
+if [ "$#" -gt 0 ]; then
+  files=("$@")
+else
+  files=()
+  while IFS= read -r file; do
+    files+=("$file")
+  done < <(git ls-files '.github/**/*.yml' '.github/**/*.yaml')
+fi
+
+if [ "${#files[@]}" -eq 0 ]; then
+  echo "no GitHub Actions files found to lint" >&2
+  exit 1
+fi
+
+ratchet lint "${files[@]}"

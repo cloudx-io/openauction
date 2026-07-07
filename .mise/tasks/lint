@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Lint Go code with golangci-lint"
+# https://mise.jdx.dev/tasks/file-tasks.html
+set -euo pipefail
+
+golangci-lint run "$@"

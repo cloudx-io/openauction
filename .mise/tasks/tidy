@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+#MISE description="Run go mod tidy and verify go.mod/go.sum are unchanged"
+# https://mise.jdx.dev/tasks/file-tasks.html
+set -euo pipefail
+
+go mod tidy
+git diff --exit-code go.mod go.sum \
+  || (echo "go.mod or go.sum needs updating. Run 'mise run //:tidy' locally." && exit 1)

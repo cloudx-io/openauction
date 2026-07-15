@@ -10,7 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/peterldowns/testy/check"
 
 	"github.com/cloudx-io/openauction/core"
@@ -271,8 +270,7 @@ func TestGenerateKeyAttestation(t *testing.T) {
 	privateKey, err := GenerateRSAKeyPair()
 	check.NoError(t, err)
 
-	testToken := "550e8400-e29b-41d4-a716-446655440000"
-	coseBytes, _, err := GenerateKeyAttestation(nil, &privateKey.PublicKey, testToken)
+	coseBytes, _, err := GenerateKeyAttestation(nil, &privateKey.PublicKey)
 
 	// Should fail with nil enclave handle
 	check.Error(t, err)
@@ -288,11 +286,8 @@ func TestGenerateKeyAttestationWithMock(t *testing.T) {
 	// Create a mock enclave that returns properly formatted CBOR
 	mockEnclave := CreateMockEnclave(t)
 
-	// Generate a test token
-	testToken := "550e8400-e29b-41d4-a716-446655440000"
-
 	// Test successful key attestation generation with mock
-	coseBytes, attestationUs, err := GenerateKeyAttestation(mockEnclave, &privateKey.PublicKey, testToken)
+	coseBytes, attestationUs, err := GenerateKeyAttestation(mockEnclave, &privateKey.PublicKey)
 
 	// Should succeed with mock enclave
 	check.NoError(t, err)
@@ -314,7 +309,9 @@ func TestGenerateKeyAttestationWithMock(t *testing.T) {
 	check.NoError(t, err)
 	check.Equal(t, "RSA-2048", keyUserData.KeyAlgorithm)
 	check.NotEqual(t, "", keyUserData.PublicKey)
-	check.Equal(t, testToken, keyUserData.AuctionToken)
+	// The key attestation no longer carries a per-request token.
+	//nolint:staticcheck // intentionally asserting the deprecated field is unset
+	check.Equal(t, "", keyUserData.AuctionToken)
 
 	// Verify public key is in PEM format
 	check.True(t, strings.Contains(keyUserData.PublicKey, "-----BEGIN PUBLIC KEY-----"))
@@ -334,33 +331,26 @@ func TestGenerateKeyAttestationWithMock(t *testing.T) {
 	check.NotEqual(t, "", attestationDoc.Nonce)
 }
 
-func TestHandleKeyRequest(t *testing.T) {
-	// Test with nil attester (error case)
-	keyManager, err := NewKeyManager()
-	check.NoError(t, err)
+func TestNewKeyManager_NilAttester(t *testing.T) {
+	// With the epoch ring, the current epoch's attestation is generated up front,
+	// so a nil attester fails at manager construction time.
+	keyManager, err := NewKeyManager(nil)
 
-	tokenManager := NewTokenManager()
-
-	keyResponse, err := HandleKeyRequest(nil, keyManager, tokenManager)
-
-	// Should fail with nil attester
 	check.Error(t, err)
-	check.Nil(t, keyResponse)
+	check.Nil(t, keyManager)
 	check.True(t, strings.Contains(err.Error(), "failed to generate key attestation"))
 }
 
 func TestHandleKeyRequestWithMock(t *testing.T) {
-	// Create a real key manager
-	keyManager, err := NewKeyManager()
-	check.NoError(t, err)
-
-	tokenManager := NewTokenManager()
-
 	// Create a mock enclave that returns properly formatted CBOR
 	mockEnclave := CreateMockEnclave(t)
 
-	// Test successful key request handling with mock
-	keyResponse, err := HandleKeyRequest(mockEnclave, keyManager, tokenManager)
+	// Create a real key manager
+	keyManager, err := NewKeyManager(mockEnclave)
+	check.NoError(t, err)
+
+	// Test successful key request handling; served from the cached attestation.
+	keyResponse, err := HandleKeyRequest(keyManager)
 
 	// Should succeed
 	check.NoError(t, err)
@@ -370,13 +360,9 @@ func TestHandleKeyRequestWithMock(t *testing.T) {
 	check.Equal(t, "key_response", keyResponse.Type)
 	check.NotEqual(t, "", keyResponse.PublicKey)
 
-	// Verify auction token
-	check.NotEqual(t, "", keyResponse.AuctionToken)
-
-	// Verify auction token is a valid UUID v4
-	parsedToken, err := uuid.Parse(keyResponse.AuctionToken)
-	check.NoError(t, err)
-	check.Equal(t, uuid.Version(4), parsedToken.Version())
+	// No per-request token is minted anymore.
+	//nolint:staticcheck // intentionally asserting the deprecated field is unset
+	check.Equal(t, "", keyResponse.AuctionToken)
 
 	// Verify public key is in proper PEM format
 	check.True(t, strings.HasPrefix(keyResponse.PublicKey, "-----BEGIN PUBLIC KEY-----"))
@@ -402,17 +388,15 @@ func TestHandleKeyRequestWithMock(t *testing.T) {
 }
 
 func TestHandleKeyRequest_PEMRoundTrip(t *testing.T) {
-	// Create key manager
-	keyManager, err := NewKeyManager()
-	check.NoError(t, err)
-
-	tokenManager := NewTokenManager()
-
 	// Create mock enclave
 	mockEnclave := CreateMockEnclave(t)
 
+	// Create key manager
+	keyManager, err := NewKeyManager(mockEnclave)
+	check.NoError(t, err)
+
 	// Handle key request
-	keyResponse, err := HandleKeyRequest(mockEnclave, keyManager, tokenManager)
+	keyResponse, err := HandleKeyRequest(keyManager)
 	check.NoError(t, err)
 
 	// Parse the returned PEM
@@ -426,9 +410,10 @@ func TestHandleKeyRequest_PEMRoundTrip(t *testing.T) {
 	rsaKey, ok := parsedKey.(*rsa.PublicKey)
 	check.True(t, ok)
 
-	// Verify the parsed key matches the original
-	check.Equal(t, 0, rsaKey.N.Cmp(keyManager.PublicKey.N))
-	check.Equal(t, rsaKey.E, keyManager.PublicKey.E)
+	// Verify the parsed key matches the current epoch's key
+	currentKey := keyManager.currentEpoch().PublicKey
+	check.Equal(t, 0, rsaKey.N.Cmp(currentKey.N))
+	check.Equal(t, rsaKey.E, currentKey.E)
 }
 
 func TestGenerateAttestationWithMixedBidTypes(t *testing.T) {

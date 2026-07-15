@@ -176,8 +176,13 @@ func publicKeyToPEM(publicKey *rsa.PublicKey) (string, error) {
 	return string(pem.EncodeToMemory(pemBlock)), nil
 }
 
-// GenerateKeyAttestation generates raw COSE bytes for E2EE public keys
-func GenerateKeyAttestation(attester EnclaveAttester, publicKey *rsa.PublicKey, auctionToken string) (enclaveapi.AttestationCOSE, *float64, error) {
+// GenerateKeyAttestation generates raw COSE bytes for E2EE public keys.
+//
+// This is called once per key epoch, at epoch creation, and the result is cached
+// and served on every subsequent key request for that epoch. The attestation
+// binds the enclave measurements to the public key so clients can verify the key
+// originated inside the enclave.
+func GenerateKeyAttestation(attester EnclaveAttester, publicKey *rsa.PublicKey) (enclaveapi.AttestationCOSE, *float64, error) {
 	if attester == nil {
 		return nil, nil, fmt.Errorf("enclave attester is nil")
 	}
@@ -191,7 +196,6 @@ func GenerateKeyAttestation(attester EnclaveAttester, publicKey *rsa.PublicKey, 
 	keyUserData := &enclaveapi.KeyAttestationUserData{
 		KeyAlgorithm: "RSA-2048",
 		PublicKey:    publicKeyPEM,
-		AuctionToken: auctionToken,
 	}
 
 	userDataBytes, err := json.Marshal(keyUserData)

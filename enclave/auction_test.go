@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
 	"slices"
 	"testing"
@@ -28,6 +29,27 @@ func parseAttestationFromResponse(t *testing.T, response enclaveapi.EnclaveAucti
 	return parseAuctionAttestationFromCOSE(t, coseBytes)
 }
 
+// newTestKeyManager builds a KeyManager backed by the mock attester for tests
+// that exercise encryption/decryption and dedup.
+func newTestKeyManager(t *testing.T) *KeyManager {
+	t.Helper()
+	km, err := NewKeyManager(CreateMockEnclave(t))
+	assert.NoError(t, err)
+	return km
+}
+
+// encryptPriceBid encrypts a price payload to the key manager's current epoch and
+// returns a bid carrying the resulting ciphertext.
+func encryptPriceBid(t *testing.T, km *KeyManager, id, bidder, payload string) enclaveapi.EncryptedCoreBid {
+	t.Helper()
+	result, err := EncryptHybridWithHash([]byte(payload), km.currentEpoch().PublicKey, HashAlgorithmSHA256)
+	assert.NoError(t, err)
+	return enclaveapi.EncryptedCoreBid{
+		CoreBid:        core.CoreBid{ID: id, Bidder: bidder, Price: 0.0, Currency: "USD"},
+		EncryptedPrice: encryptedPriceFromResult(result),
+	}
+}
+
 func TestProcessAuction_ZeroBids(t *testing.T) {
 	mockAttester := CreateMockEnclave(t)
 
@@ -39,8 +61,7 @@ func TestProcessAuction_ZeroBids(t *testing.T) {
 		Timestamp:     time.Now(),
 	}
 
-	tokenManager := NewTokenManager()
-	response := ProcessAuction(mockAttester, req, nil, tokenManager)
+	response := ProcessAuction(mockAttester, req, nil)
 
 	// Validate successful response and attestation structure
 	attestationDoc := validateSuccessfulResponse(t, response, req, 0)
@@ -67,8 +88,7 @@ func TestProcessAuction_OneBid(t *testing.T) {
 		Timestamp:         time.Now(),
 	}
 
-	tokenManager := NewTokenManager()
-	response := ProcessAuction(mockAttester, req, nil, tokenManager)
+	response := ProcessAuction(mockAttester, req, nil)
 
 	// Validate successful response and attestation structure
 	attestationDoc := validateSuccessfulResponse(t, response, req, 1)
@@ -107,8 +127,7 @@ func TestProcessAuction_TwoBids(t *testing.T) {
 		Timestamp: time.Now(),
 	}
 
-	tokenManager := NewTokenManager()
-	response := ProcessAuction(mockAttester, req, nil, tokenManager)
+	response := ProcessAuction(mockAttester, req, nil)
 
 	// Validate successful response and attestation structure
 	attestationDoc := validateSuccessfulResponse(t, response, req, 2)
@@ -155,8 +174,7 @@ func TestProcessAuction_ThreeBids(t *testing.T) {
 		Timestamp: time.Now(),
 	}
 
-	tokenManager := NewTokenManager()
-	response := ProcessAuction(mockAttester, req, nil, tokenManager)
+	response := ProcessAuction(mockAttester, req, nil)
 
 	// Validate successful response and attestation structure
 	attestationDoc := validateSuccessfulResponse(t, response, req, 3)
@@ -268,8 +286,7 @@ func TestProcessAuction_BidFloorEnforcement(t *testing.T) {
 		Timestamp:         time.Now(),
 	}
 
-	tokenManager := NewTokenManager()
-	response := ProcessAuction(mockAttester, req, nil, tokenManager)
+	response := ProcessAuction(mockAttester, req, nil)
 
 	// Validate successful response
 	assert.True(t, response.Success)
@@ -312,8 +329,7 @@ func TestProcessAuction_BidFloorAllRejected(t *testing.T) {
 		Timestamp:         time.Now(),
 	}
 
-	tokenManager := NewTokenManager()
-	response := ProcessAuction(mockAttester, req, nil, tokenManager)
+	response := ProcessAuction(mockAttester, req, nil)
 
 	// Validate successful response
 	assert.True(t, response.Success)
@@ -332,439 +348,325 @@ func TestProcessAuction_BidFloorAllRejected(t *testing.T) {
 	check.Nil(t, attestationDoc.UserData.RunnerUp)
 }
 
-// Token validation tests
+// Ciphertext dedup replay-protection tests
 
-func TestAuctionTokenValidation_WithValidToken(t *testing.T) {
+// TestCiphertextDedup_FirstSubmissionAccepted verifies a fresh encrypted bid is
+// accepted (not treated as a replay).
+func TestCiphertextDedup_FirstSubmissionAccepted(t *testing.T) {
 	mockAttester := CreateMockEnclave(t)
-	keyManager, _ := NewKeyManager()
-	tokenManager := NewTokenManager()
+	keyManager := newTestKeyManager(t)
 
-	// Generate a token
-	token := tokenManager.GenerateToken()
-	check.True(t, tokenManager.ValidateToken(token))
-
-	// Create encrypted bid with valid token
-	payload := fmt.Sprintf(`{"price": 5.50, "auction_token": "%s"}`, token)
-	result, err := EncryptHybridWithHash([]byte(payload), keyManager.PublicKey, HashAlgorithmSHA256)
-	check.NoError(t, err)
+	bid := encryptPriceBid(t, keyManager, "bid1", "bidder1", `{"price": 5.50}`)
 
 	req := enclaveapi.EnclaveAuctionRequest{
 		Type:          "auction_request",
-		AuctionID:     "test_auction_valid_token",
-		RoundIDString: "test_auction_valid_token-1",
-		Bids: []enclaveapi.EncryptedCoreBid{
-			{
-				CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder1", Price: 0.0, Currency: "USD"},
-				EncryptedPrice: &enclaveapi.EncryptedBidPrice{
-					AESKeyEncrypted:  result.EncryptedAESKey,
-					EncryptedPayload: result.EncryptedPayload,
-					Nonce:            result.Nonce,
-				},
-			},
-		},
-		Timestamp: time.Now(),
+		AuctionID:     "test_dedup_first",
+		RoundIDString: "test_dedup_first-1",
+		Bids:          []enclaveapi.EncryptedCoreBid{bid},
+		Timestamp:     time.Now(),
 	}
 
-	response := ProcessAuction(mockAttester, req, keyManager, tokenManager)
+	response := ProcessAuction(mockAttester, req, keyManager)
 
-	// Should succeed
-	check.True(t, response.Success)
-	check.Equal(t, []core.ExcludedBid{}, response.ExcludedBids)
-
-	// Token should be consumed
-	check.False(t, tokenManager.ValidateToken(token))
-}
-
-func TestAuctionTokenValidation_WithInvalidToken(t *testing.T) {
-	mockAttester := CreateMockEnclave(t)
-	keyManager, _ := NewKeyManager()
-	tokenManager := NewTokenManager()
-
-	// Use a token that was never generated
-	fakeToken := "00000000-0000-0000-0000-000000000000"
-	check.False(t, tokenManager.ValidateToken(fakeToken))
-
-	// Create encrypted bid with invalid token
-	payload := fmt.Sprintf(`{"price": 5.50, "auction_token": "%s"}`, fakeToken)
-	result, err := EncryptHybridWithHash([]byte(payload), keyManager.PublicKey, HashAlgorithmSHA256)
-	check.NoError(t, err)
-
-	req := enclaveapi.EnclaveAuctionRequest{
-		Type:          "auction_request",
-		AuctionID:     "test_auction_invalid_token",
-		RoundIDString: "test_auction_invalid_token-1",
-		Bids: []enclaveapi.EncryptedCoreBid{
-			{
-				CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder1", Price: 0.0, Currency: "USD"},
-				EncryptedPrice: &enclaveapi.EncryptedBidPrice{
-					AESKeyEncrypted:  result.EncryptedAESKey,
-					EncryptedPayload: result.EncryptedPayload,
-					Nonce:            result.Nonce,
-				},
-			},
-		},
-		Timestamp: time.Now(),
-	}
-
-	response := ProcessAuction(mockAttester, req, keyManager, tokenManager)
-
-	// Should succeed but exclude the bid
-	check.True(t, response.Success)
-	check.Equal(t, 1, len(response.ExcludedBids))
-	check.Equal(t, "bid1", response.ExcludedBids[0].BidID)
-	check.Equal(t, "invalid_or_consumed_auction_token", response.ExcludedBids[0].Reason)
-}
-
-func TestAuctionTokenValidation_WithConsumedToken(t *testing.T) {
-	mockAttester := CreateMockEnclave(t)
-	keyManager, _ := NewKeyManager()
-	tokenManager := NewTokenManager()
-
-	// Generate and consume a token
-	token := tokenManager.GenerateToken()
-	tokenManager.ConsumeToken(token)
-	check.False(t, tokenManager.ValidateToken(token))
-
-	// Try to use the consumed token
-	payload := fmt.Sprintf(`{"price": 5.50, "auction_token": "%s"}`, token)
-	result, err := EncryptHybridWithHash([]byte(payload), keyManager.PublicKey, HashAlgorithmSHA256)
-	check.NoError(t, err)
-
-	req := enclaveapi.EnclaveAuctionRequest{
-		Type:          "auction_request",
-		AuctionID:     "test_auction_consumed_token",
-		RoundIDString: "test_auction_consumed_token-1",
-		Bids: []enclaveapi.EncryptedCoreBid{
-			{
-				CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder1", Price: 0.0, Currency: "USD"},
-				EncryptedPrice: &enclaveapi.EncryptedBidPrice{
-					AESKeyEncrypted:  result.EncryptedAESKey,
-					EncryptedPayload: result.EncryptedPayload,
-					Nonce:            result.Nonce,
-				},
-			},
-		},
-		Timestamp: time.Now(),
-	}
-
-	response := ProcessAuction(mockAttester, req, keyManager, tokenManager)
-
-	// Should succeed but exclude the bid
-	check.True(t, response.Success)
-	check.Equal(t, 1, len(response.ExcludedBids))
-	check.Equal(t, "bid1", response.ExcludedBids[0].BidID)
-	check.Equal(t, "invalid_or_consumed_auction_token", response.ExcludedBids[0].Reason)
-}
-
-func TestAuctionTokenValidation_WithoutToken(t *testing.T) {
-	mockAttester := CreateMockEnclave(t)
-	keyManager, _ := NewKeyManager()
-	tokenManager := NewTokenManager()
-
-	// Create encrypted bid WITHOUT token (backward compatible)
-	payload := `{"price": 5.50}`
-	result, err := EncryptHybridWithHash([]byte(payload), keyManager.PublicKey, HashAlgorithmSHA256)
-	check.NoError(t, err)
-
-	req := enclaveapi.EnclaveAuctionRequest{
-		Type:          "auction_request",
-		AuctionID:     "test_auction_no_token",
-		RoundIDString: "test_auction_no_token-1",
-		Bids: []enclaveapi.EncryptedCoreBid{
-			{
-				CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder1", Price: 0.0, Currency: "USD"},
-				EncryptedPrice: &enclaveapi.EncryptedBidPrice{
-					AESKeyEncrypted:  result.EncryptedAESKey,
-					EncryptedPayload: result.EncryptedPayload,
-					Nonce:            result.Nonce,
-				},
-			},
-		},
-		Timestamp: time.Now(),
-	}
-
-	response := ProcessAuction(mockAttester, req, keyManager, tokenManager)
-
-	// Should succeed (backward compatible)
 	check.True(t, response.Success)
 	check.Equal(t, []core.ExcludedBid{}, response.ExcludedBids)
 }
 
-func TestAuctionTokenValidation_MultipleBidsWithTokens(t *testing.T) {
+// TestCiphertextDedup_ByteIdenticalReplayExcluded verifies that resubmitting the
+// exact same ciphertext in a later auction is excluded as duplicate_ciphertext.
+func TestCiphertextDedup_ByteIdenticalReplayExcluded(t *testing.T) {
 	mockAttester := CreateMockEnclave(t)
-	keyManager, _ := NewKeyManager()
-	tokenManager := NewTokenManager()
+	keyManager := newTestKeyManager(t)
 
-	// Generate three tokens
-	token1 := tokenManager.GenerateToken()
-	token2 := tokenManager.GenerateToken()
-	token3 := tokenManager.GenerateToken()
+	bid := encryptPriceBid(t, keyManager, "bid1", "bidder1", `{"price": 6.75}`)
 
-	// Create three bids with different tokens
-	payload1 := fmt.Sprintf(`{"price": 3.00, "auction_token": "%s"}`, token1)
-	result1, _ := EncryptHybridWithHash([]byte(payload1), keyManager.PublicKey, HashAlgorithmSHA256)
-
-	payload2 := fmt.Sprintf(`{"price": 4.50, "auction_token": "%s"}`, token2)
-	result2, _ := EncryptHybridWithHash([]byte(payload2), keyManager.PublicKey, HashAlgorithmSHA256)
-
-	payload3 := fmt.Sprintf(`{"price": 2.75, "auction_token": "%s"}`, token3)
-	result3, _ := EncryptHybridWithHash([]byte(payload3), keyManager.PublicKey, HashAlgorithmSHA256)
-
-	req := enclaveapi.EnclaveAuctionRequest{
+	req1 := enclaveapi.EnclaveAuctionRequest{
 		Type:          "auction_request",
-		AuctionID:     "test_auction_multiple_tokens",
-		RoundIDString: "test_auction_multiple_tokens-1",
-		Bids: []enclaveapi.EncryptedCoreBid{
-			{
-				CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder1", Price: 0.0, Currency: "USD"},
-				EncryptedPrice: &enclaveapi.EncryptedBidPrice{
-					AESKeyEncrypted:  result1.EncryptedAESKey,
-					EncryptedPayload: result1.EncryptedPayload,
-					Nonce:            result1.Nonce,
-				},
-			},
-			{
-				CoreBid: core.CoreBid{ID: "bid2", Bidder: "bidder2", Price: 0.0, Currency: "USD"},
-				EncryptedPrice: &enclaveapi.EncryptedBidPrice{
-					AESKeyEncrypted:  result2.EncryptedAESKey,
-					EncryptedPayload: result2.EncryptedPayload,
-					Nonce:            result2.Nonce,
-				},
-			},
-			{
-				CoreBid: core.CoreBid{ID: "bid3", Bidder: "bidder3", Price: 0.0, Currency: "USD"},
-				EncryptedPrice: &enclaveapi.EncryptedBidPrice{
-					AESKeyEncrypted:  result3.EncryptedAESKey,
-					EncryptedPayload: result3.EncryptedPayload,
-					Nonce:            result3.Nonce,
-				},
-			},
-		},
-		Timestamp: time.Now(),
+		AuctionID:     "test_dedup_replay_1",
+		RoundIDString: "test_dedup_replay_1-1",
+		Bids:          []enclaveapi.EncryptedCoreBid{bid},
+		Timestamp:     time.Now(),
 	}
+	response1 := ProcessAuction(mockAttester, req1, keyManager)
+	check.True(t, response1.Success)
+	check.Equal(t, []core.ExcludedBid{}, response1.ExcludedBids)
 
-	response := ProcessAuction(mockAttester, req, keyManager, tokenManager)
-
-	// Should succeed
-	check.True(t, response.Success)
-	check.Equal(t, []core.ExcludedBid{}, response.ExcludedBids)
-
-	// All tokens should be consumed
-	check.False(t, tokenManager.ValidateToken(token1))
-	check.False(t, tokenManager.ValidateToken(token2))
-	check.False(t, tokenManager.ValidateToken(token3))
-
-	attestationDoc := parseAttestationFromResponse(t, response)
-
-	// Winner should be bid2 (highest price)
-	check.NotNil(t, attestationDoc.UserData.Winner)
-	check.Equal(t, "bid2", attestationDoc.UserData.Winner.ID)
-	check.Equal(t, 4.50, attestationDoc.UserData.Winner.Price)
-}
-
-func TestAuctionTokenValidation_MixedValidInvalidTokens(t *testing.T) {
-	mockAttester := CreateMockEnclave(t)
-	keyManager, _ := NewKeyManager()
-	tokenManager := NewTokenManager()
-
-	// Generate one valid token
-	validToken := tokenManager.GenerateToken()
-	invalidToken := "11111111-1111-1111-1111-111111111111"
-
-	// Bid 1: valid token
-	payload1 := fmt.Sprintf(`{"price": 3.00, "auction_token": "%s"}`, validToken)
-	result1, _ := EncryptHybridWithHash([]byte(payload1), keyManager.PublicKey, HashAlgorithmSHA256)
-
-	// Bid 2: invalid token (should be excluded)
-	payload2 := fmt.Sprintf(`{"price": 4.50, "auction_token": "%s"}`, invalidToken)
-	result2, _ := EncryptHybridWithHash([]byte(payload2), keyManager.PublicKey, HashAlgorithmSHA256)
-
-	req := enclaveapi.EnclaveAuctionRequest{
-		Type:          "auction_request",
-		AuctionID:     "test_auction_mixed_tokens",
-		RoundIDString: "test_auction_mixed_tokens-1",
-		Bids: []enclaveapi.EncryptedCoreBid{
-			{
-				CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder1", Price: 0.0, Currency: "USD"},
-				EncryptedPrice: &enclaveapi.EncryptedBidPrice{
-					AESKeyEncrypted:  result1.EncryptedAESKey,
-					EncryptedPayload: result1.EncryptedPayload,
-					Nonce:            result1.Nonce,
-				},
-			},
-			{
-				CoreBid: core.CoreBid{ID: "bid2", Bidder: "bidder2", Price: 0.0, Currency: "USD"},
-				EncryptedPrice: &enclaveapi.EncryptedBidPrice{
-					AESKeyEncrypted:  result2.EncryptedAESKey,
-					EncryptedPayload: result2.EncryptedPayload,
-					Nonce:            result2.Nonce,
-				},
-			},
-		},
-		Timestamp: time.Now(),
-	}
-
-	response := ProcessAuction(mockAttester, req, keyManager, tokenManager)
-
-	// Should succeed
-	check.True(t, response.Success)
-
-	// bid2 should be excluded
-	check.Equal(t, 1, len(response.ExcludedBids))
-	check.Equal(t, "bid2", response.ExcludedBids[0].BidID)
-	check.Equal(t, "invalid_or_consumed_auction_token", response.ExcludedBids[0].Reason)
-
-	// Valid token should be consumed
-	check.False(t, tokenManager.ValidateToken(validToken))
-
-	attestationDoc := parseAttestationFromResponse(t, response)
-
-	// Winner should be bid1
-	check.NotNil(t, attestationDoc.UserData.Winner)
-	check.Equal(t, "bid1", attestationDoc.UserData.Winner.ID)
-}
-
-// End-to-end token flow test
-func TestEndToEndTokenFlow(t *testing.T) {
-	mockAttester := CreateMockEnclave(t)
-	keyManager, _ := NewKeyManager()
-	tokenManager := NewTokenManager()
-
-	// Request key and auction token
-	keyResp, err := HandleKeyRequest(mockAttester, keyManager, tokenManager)
-	check.NoError(t, err)
-	check.NotEqual(t, "", keyResp.PublicKey)
-	check.NotEqual(t, "", keyResp.AuctionToken)
-	token := keyResp.AuctionToken
-
-	// Token should be valid
-	check.True(t, tokenManager.ValidateToken(token))
-
-	// Create encrypted bid with token
-	payload := fmt.Sprintf(`{"price": 6.75, "auction_token": "%s"}`, token)
-	result, err := EncryptHybridWithHash([]byte(payload), keyManager.PublicKey, HashAlgorithmSHA256)
-	check.NoError(t, err)
-
-	// Run auction
-	req := enclaveapi.EnclaveAuctionRequest{
-		Type:          "auction_request",
-		AuctionID:     "test_end_to_end",
-		RoundIDString: "test_end_to_end-1",
-		Bids: []enclaveapi.EncryptedCoreBid{
-			{
-				CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder1", Price: 0.0, Currency: "USD"},
-				EncryptedPrice: &enclaveapi.EncryptedBidPrice{
-					AESKeyEncrypted:  result.EncryptedAESKey,
-					EncryptedPayload: result.EncryptedPayload,
-					Nonce:            result.Nonce,
-				},
-			},
-		},
-		Timestamp: time.Now(),
-	}
-
-	response := ProcessAuction(mockAttester, req, keyManager, tokenManager)
-
-	// Auction should succeed
-	check.True(t, response.Success)
-	check.Equal(t, []core.ExcludedBid{}, response.ExcludedBids)
-
-	// Token should be consumed
-	check.False(t, tokenManager.ValidateToken(token))
-
-	// Step 4: Try to replay same bid in second auction (should fail)
+	// Replay the exact same ciphertext in a second auction.
 	req2 := enclaveapi.EnclaveAuctionRequest{
 		Type:          "auction_request",
-		AuctionID:     "test_replay_attack",
-		RoundIDString: "test_replay_attack-1",
-		Bids: []enclaveapi.EncryptedCoreBid{
-			{
-				CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder1", Price: 0.0, Currency: "USD"},
-				EncryptedPrice: &enclaveapi.EncryptedBidPrice{
-					AESKeyEncrypted:  result.EncryptedAESKey,
-					EncryptedPayload: result.EncryptedPayload,
-					Nonce:            result.Nonce,
-				},
-			},
-		},
-		Timestamp: time.Now(),
+		AuctionID:     "test_dedup_replay_2",
+		RoundIDString: "test_dedup_replay_2-1",
+		Bids:          []enclaveapi.EncryptedCoreBid{bid},
+		Timestamp:     time.Now(),
 	}
+	response2 := ProcessAuction(mockAttester, req2, keyManager)
 
-	response2 := ProcessAuction(mockAttester, req2, keyManager, tokenManager)
-
-	// Auction should succeed but exclude the replayed bid
 	check.True(t, response2.Success)
 	check.Equal(t, 1, len(response2.ExcludedBids))
 	check.Equal(t, "bid1", response2.ExcludedBids[0].BidID)
-	check.Equal(t, "invalid_or_consumed_auction_token", response2.ExcludedBids[0].Reason)
+	check.Equal(t, "duplicate_ciphertext", response2.ExcludedBids[0].Reason)
 }
 
-func TestAuctionTokenValidation_MultipleBidsSameToken(t *testing.T) {
+// TestCiphertextDedup_DuplicateWithinSameAuctionExcluded verifies dedup applies
+// within a single auction as well: two copies of the same ciphertext keep one.
+func TestCiphertextDedup_DuplicateWithinSameAuctionExcluded(t *testing.T) {
 	mockAttester := CreateMockEnclave(t)
-	keyManager, _ := NewKeyManager()
-	tokenManager := NewTokenManager()
+	keyManager := newTestKeyManager(t)
 
-	// Generate ONE token for the entire auction
-	sharedToken := tokenManager.GenerateToken()
-
-	// Create THREE bids all using the SAME token (realistic scenario)
-	payload1 := fmt.Sprintf(`{"price": 3.00, "auction_token": "%s"}`, sharedToken)
-	result1, _ := EncryptHybridWithHash([]byte(payload1), keyManager.PublicKey, HashAlgorithmSHA256)
-
-	payload2 := fmt.Sprintf(`{"price": 4.50, "auction_token": "%s"}`, sharedToken)
-	result2, _ := EncryptHybridWithHash([]byte(payload2), keyManager.PublicKey, HashAlgorithmSHA256)
-
-	payload3 := fmt.Sprintf(`{"price": 2.75, "auction_token": "%s"}`, sharedToken)
-	result3, _ := EncryptHybridWithHash([]byte(payload3), keyManager.PublicKey, HashAlgorithmSHA256)
+	bidA := encryptPriceBid(t, keyManager, "bid1", "bidder1", `{"price": 4.00}`)
+	// bid2 carries the identical ciphertext bytes as bid1.
+	bidB := bidA
+	bidB.ID = "bid2"
 
 	req := enclaveapi.EnclaveAuctionRequest{
 		Type:          "auction_request",
-		AuctionID:     "test_auction_shared_token",
-		RoundIDString: "test_auction_shared_token-1",
+		AuctionID:     "test_dedup_same_auction",
+		RoundIDString: "test_dedup_same_auction-1",
+		Bids:          []enclaveapi.EncryptedCoreBid{bidA, bidB},
+		Timestamp:     time.Now(),
+	}
+
+	response := ProcessAuction(mockAttester, req, keyManager)
+
+	check.True(t, response.Success)
+	check.Equal(t, 1, len(response.ExcludedBids))
+	check.Equal(t, "bid2", response.ExcludedBids[0].BidID)
+	check.Equal(t, "duplicate_ciphertext", response.ExcludedBids[0].Reason)
+}
+
+// TestCiphertextDedup_ReEncryptedNotExcluded verifies that the same price
+// re-encrypted with fresh randomness produces a different ciphertext and is NOT
+// treated as a replay.
+func TestCiphertextDedup_ReEncryptedNotExcluded(t *testing.T) {
+	mockAttester := CreateMockEnclave(t)
+	keyManager := newTestKeyManager(t)
+
+	// Two independent encryptions of the identical plaintext price.
+	bid1 := encryptPriceBid(t, keyManager, "bid1", "bidder1", `{"price": 5.00}`)
+	bid2 := encryptPriceBid(t, keyManager, "bid2", "bidder2", `{"price": 5.00}`)
+
+	// Sanity: fresh randomness => different ciphertext bytes.
+	check.NotEqual(t, bid1.EncryptedPrice.EncryptedPayload, bid2.EncryptedPrice.EncryptedPayload)
+
+	req := enclaveapi.EnclaveAuctionRequest{
+		Type:          "auction_request",
+		AuctionID:     "test_dedup_reencrypt",
+		RoundIDString: "test_dedup_reencrypt-1",
+		Bids:          []enclaveapi.EncryptedCoreBid{bid1, bid2},
+		Timestamp:     time.Now(),
+	}
+
+	response := ProcessAuction(mockAttester, req, keyManager)
+
+	// Both bids are accepted; neither is treated as a replay.
+	check.True(t, response.Success)
+	check.Equal(t, []core.ExcludedBid{}, response.ExcludedBids)
+
+	attestationDoc := parseAttestationFromResponse(t, response)
+	check.Equal(t, 2, len(attestationDoc.UserData.BidHashes))
+}
+
+// TestCiphertextDedup_ReEncodedBase64StillExcluded verifies the fingerprint is
+// keyed on the decoded ciphertext bytes rather than the exact base64 string
+// object: a replay whose base64 fields are re-encoded (decode then re-encode to
+// identical bytes, the form the enclave accepts) still collides and is excluded.
+func TestCiphertextDedup_ReEncodedBase64StillExcluded(t *testing.T) {
+	mockAttester := CreateMockEnclave(t)
+	keyManager := newTestKeyManager(t)
+
+	bid := encryptPriceBid(t, keyManager, "bid1", "bidder1", `{"price": 7.25}`)
+
+	// A re-encode that preserves the decoded bytes yields the identical
+	// fingerprint, confirming dedup keys on content, not the string object.
+	reencoded := roundTripStdEncodedPrice(t, bid.EncryptedPrice)
+	fpOriginal, err := ciphertextFingerprint(bid.EncryptedPrice)
+	check.NoError(t, err)
+	fpReencoded, err := ciphertextFingerprint(reencoded)
+	check.NoError(t, err)
+	check.Equal(t, fpOriginal, fpReencoded)
+
+	req1 := enclaveapi.EnclaveAuctionRequest{
+		Type:          "auction_request",
+		AuctionID:     "test_dedup_reencode_1",
+		RoundIDString: "test_dedup_reencode_1-1",
+		Bids:          []enclaveapi.EncryptedCoreBid{bid},
+		Timestamp:     time.Now(),
+	}
+	response1 := ProcessAuction(mockAttester, req1, keyManager)
+	check.True(t, response1.Success)
+	check.Equal(t, []core.ExcludedBid{}, response1.ExcludedBids)
+
+	// Replay carrying the re-encoded (but byte-identical) ciphertext.
+	replay := enclaveapi.EncryptedCoreBid{
+		CoreBid:        core.CoreBid{ID: "bid1", Bidder: "bidder1", Price: 0.0, Currency: "USD"},
+		EncryptedPrice: reencoded,
+	}
+	req2 := enclaveapi.EnclaveAuctionRequest{
+		Type:          "auction_request",
+		AuctionID:     "test_dedup_reencode_2",
+		RoundIDString: "test_dedup_reencode_2-1",
+		Bids:          []enclaveapi.EncryptedCoreBid{replay},
+		Timestamp:     time.Now(),
+	}
+	response2 := ProcessAuction(mockAttester, req2, keyManager)
+
+	check.True(t, response2.Success)
+	check.Equal(t, 1, len(response2.ExcludedBids))
+	check.Equal(t, "bid1", response2.ExcludedBids[0].BidID)
+	check.Equal(t, "duplicate_ciphertext", response2.ExcludedBids[0].Reason)
+}
+
+// TestCiphertextDedup_PriorEpochReplayExcluded verifies that a bid sealed to a
+// prior epoch still decrypts after rotation and is deduped under that prior
+// epoch's set.
+func TestCiphertextDedup_PriorEpochReplayExcluded(t *testing.T) {
+	mockAttester := CreateMockEnclave(t)
+	keyManager := newTestKeyManager(t)
+
+	// Seal a bid to the current (soon-to-be-prior) epoch.
+	bid := encryptPriceBid(t, keyManager, "bid1", "bidder1", `{"price": 3.33}`)
+
+	req1 := enclaveapi.EnclaveAuctionRequest{
+		Type:          "auction_request",
+		AuctionID:     "test_dedup_prior_epoch_1",
+		RoundIDString: "test_dedup_prior_epoch_1-1",
+		Bids:          []enclaveapi.EncryptedCoreBid{bid},
+		Timestamp:     time.Now(),
+	}
+	response1 := ProcessAuction(mockAttester, req1, keyManager)
+	check.True(t, response1.Success)
+	check.Equal(t, []core.ExcludedBid{}, response1.ExcludedBids)
+
+	// Rotate to a new current epoch; the prior epoch remains live.
+	_, err := keyManager.addEpoch(mockAttester)
+	check.NoError(t, err)
+	check.Equal(t, 2, keyManager.epochCount())
+
+	// Replay the prior-epoch bid: it still decrypts (under the prior epoch) and
+	// its fingerprint is recognized as a duplicate for that epoch.
+	req2 := enclaveapi.EnclaveAuctionRequest{
+		Type:          "auction_request",
+		AuctionID:     "test_dedup_prior_epoch_2",
+		RoundIDString: "test_dedup_prior_epoch_2-1",
+		Bids:          []enclaveapi.EncryptedCoreBid{bid},
+		Timestamp:     time.Now(),
+	}
+	response2 := ProcessAuction(mockAttester, req2, keyManager)
+
+	check.True(t, response2.Success)
+	check.Equal(t, 1, len(response2.ExcludedBids))
+	check.Equal(t, "bid1", response2.ExcludedBids[0].BidID)
+	check.Equal(t, "duplicate_ciphertext", response2.ExcludedBids[0].Reason)
+}
+
+// TestCiphertextDedup_PriorEpochBidStillWins verifies a bid sealed to a prior
+// epoch still decrypts and participates in the auction after rotation.
+func TestCiphertextDedup_PriorEpochBidStillWins(t *testing.T) {
+	mockAttester := CreateMockEnclave(t)
+	keyManager := newTestKeyManager(t)
+
+	// Seal a bid to the current epoch, then rotate before running the auction.
+	bid := encryptPriceBid(t, keyManager, "bid1", "bidder1", `{"price": 8.88}`)
+	_, err := keyManager.addEpoch(mockAttester)
+	check.NoError(t, err)
+
+	req := enclaveapi.EnclaveAuctionRequest{
+		Type:          "auction_request",
+		AuctionID:     "test_dedup_prior_epoch_win",
+		RoundIDString: "test_dedup_prior_epoch_win-1",
+		Bids:          []enclaveapi.EncryptedCoreBid{bid},
+		Timestamp:     time.Now(),
+	}
+	response := ProcessAuction(mockAttester, req, keyManager)
+
+	check.True(t, response.Success)
+	check.Equal(t, []core.ExcludedBid{}, response.ExcludedBids)
+
+	attestationDoc := parseAttestationFromResponse(t, response)
+	check.NotNil(t, attestationDoc.UserData.Winner)
+	check.Equal(t, "bid1", attestationDoc.UserData.Winner.ID)
+	check.Equal(t, 8.88, attestationDoc.UserData.Winner.Price)
+}
+
+// TestCiphertextDedup_LegacyTokenIgnored verifies that a payload carrying a
+// legacy auction_token is accepted (token ignored) and still deduped by
+// ciphertext on replay.
+func TestCiphertextDedup_LegacyTokenIgnored(t *testing.T) {
+	mockAttester := CreateMockEnclave(t)
+	keyManager := newTestKeyManager(t)
+
+	// Payload includes a legacy token field; it must be ignored, not validated.
+	payload := `{"price": 5.50, "auction_token": "550e8400-e29b-41d4-a716-446655440000"}`
+	bid := encryptPriceBid(t, keyManager, "bid1", "bidder1", payload)
+
+	req1 := enclaveapi.EnclaveAuctionRequest{
+		Type:          "auction_request",
+		AuctionID:     "test_dedup_legacy_token_1",
+		RoundIDString: "test_dedup_legacy_token_1-1",
+		Bids:          []enclaveapi.EncryptedCoreBid{bid},
+		Timestamp:     time.Now(),
+	}
+	response1 := ProcessAuction(mockAttester, req1, keyManager)
+
+	// Accepted despite carrying a token.
+	check.True(t, response1.Success)
+	check.Equal(t, []core.ExcludedBid{}, response1.ExcludedBids)
+
+	// Byte-identical replay of the token-carrying bid is still deduped.
+	req2 := enclaveapi.EnclaveAuctionRequest{
+		Type:          "auction_request",
+		AuctionID:     "test_dedup_legacy_token_2",
+		RoundIDString: "test_dedup_legacy_token_2-1",
+		Bids:          []enclaveapi.EncryptedCoreBid{bid},
+		Timestamp:     time.Now(),
+	}
+	response2 := ProcessAuction(mockAttester, req2, keyManager)
+
+	check.True(t, response2.Success)
+	check.Equal(t, 1, len(response2.ExcludedBids))
+	check.Equal(t, "bid1", response2.ExcludedBids[0].BidID)
+	check.Equal(t, "duplicate_ciphertext", response2.ExcludedBids[0].Reason)
+}
+
+// TestProcessAuction_UnencryptedNotDeduped verifies plaintext bids are never
+// subject to ciphertext dedup (no encrypted price to fingerprint).
+func TestProcessAuction_UnencryptedNotDeduped(t *testing.T) {
+	mockAttester := CreateMockEnclave(t)
+	keyManager := newTestKeyManager(t)
+
+	req := enclaveapi.EnclaveAuctionRequest{
+		Type:          "auction_request",
+		AuctionID:     "test_unencrypted_no_dedup",
+		RoundIDString: "test_unencrypted_no_dedup-1",
 		Bids: []enclaveapi.EncryptedCoreBid{
-			{
-				CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder1", Price: 0.0, Currency: "USD"},
-				EncryptedPrice: &enclaveapi.EncryptedBidPrice{
-					AESKeyEncrypted:  result1.EncryptedAESKey,
-					EncryptedPayload: result1.EncryptedPayload,
-					Nonce:            result1.Nonce,
-				},
-			},
-			{
-				CoreBid: core.CoreBid{ID: "bid2", Bidder: "bidder2", Price: 0.0, Currency: "USD"},
-				EncryptedPrice: &enclaveapi.EncryptedBidPrice{
-					AESKeyEncrypted:  result2.EncryptedAESKey,
-					EncryptedPayload: result2.EncryptedPayload,
-					Nonce:            result2.Nonce,
-				},
-			},
-			{
-				CoreBid: core.CoreBid{ID: "bid3", Bidder: "bidder3", Price: 0.0, Currency: "USD"},
-				EncryptedPrice: &enclaveapi.EncryptedBidPrice{
-					AESKeyEncrypted:  result3.EncryptedAESKey,
-					EncryptedPayload: result3.EncryptedPayload,
-					Nonce:            result3.Nonce,
-				},
-			},
+			{CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder1", Price: 2.50, Currency: "USD"}},
+			{CoreBid: core.CoreBid{ID: "bid2", Bidder: "bidder2", Price: 2.50, Currency: "USD"}},
 		},
 		Timestamp: time.Now(),
 	}
 
-	response := ProcessAuction(mockAttester, req, keyManager, tokenManager)
+	response := ProcessAuction(mockAttester, req, keyManager)
 
-	// Should succeed - all three bids with same token are valid
 	check.True(t, response.Success)
 	check.Equal(t, []core.ExcludedBid{}, response.ExcludedBids)
+}
 
-	// Shared token should be consumed (only once)
-	check.False(t, tokenManager.ValidateToken(sharedToken))
-
-	attestationDoc := parseAttestationFromResponse(t, response)
-
-	// Winner should be bid2 (highest price)
-	check.NotNil(t, attestationDoc.UserData.Winner)
-	check.Equal(t, "bid2", attestationDoc.UserData.Winner.ID)
-	check.Equal(t, 4.50, attestationDoc.UserData.Winner.Price)
+// roundTripStdEncodedPrice decodes each field and re-encodes it with standard
+// base64, yielding a fresh string that still decodes to identical bytes and
+// remains decryptable by the enclave. Test-only helper.
+func roundTripStdEncodedPrice(t *testing.T, enc *enclaveapi.EncryptedBidPrice) *enclaveapi.EncryptedBidPrice {
+	t.Helper()
+	roundTrip := func(std string) string {
+		raw, err := base64.StdEncoding.DecodeString(std)
+		assert.NoError(t, err)
+		return base64.StdEncoding.EncodeToString(raw)
+	}
+	return &enclaveapi.EncryptedBidPrice{
+		AESKeyEncrypted:  roundTrip(enc.AESKeyEncrypted),
+		EncryptedPayload: roundTrip(enc.EncryptedPayload),
+		Nonce:            roundTrip(enc.Nonce),
+		HashAlgorithm:    enc.HashAlgorithm,
+	}
 }
 
 // TestProcessAuction_BidFloorZero tests that zero floor means no enforcement
@@ -784,8 +686,7 @@ func TestProcessAuction_BidFloorZero(t *testing.T) {
 		Timestamp:         time.Now(),
 	}
 
-	tokenManager := NewTokenManager()
-	response := ProcessAuction(mockAttester, req, nil, tokenManager)
+	response := ProcessAuction(mockAttester, req, nil)
 
 	// Validate successful response
 	assert.True(t, response.Success)
@@ -818,8 +719,7 @@ func TestProcessAuction_BidFloorWithAdjustments(t *testing.T) {
 		Timestamp: time.Now(),
 	}
 
-	tokenManager := NewTokenManager()
-	response := ProcessAuction(mockAttester, req, nil, tokenManager)
+	response := ProcessAuction(mockAttester, req, nil)
 
 	// Validate successful response
 	assert.True(t, response.Success)
@@ -859,8 +759,7 @@ func TestProcessAuction_NegativeFloorRejected(t *testing.T) {
 		Timestamp:         time.Now(),
 	}
 
-	tokenManager := NewTokenManager()
-	response := ProcessAuction(mockAttester, req, nil, tokenManager)
+	response := ProcessAuction(mockAttester, req, nil)
 
 	// Verify TEE rejected the request
 	check.False(t, response.Success)
@@ -884,8 +783,7 @@ func TestProcessAuction_LegacyRoundID(t *testing.T) {
 		Timestamp: time.Now(),
 	}
 
-	tokenManager := NewTokenManager()
-	response := ProcessAuction(mockAttester, req, nil, tokenManager)
+	response := ProcessAuction(mockAttester, req, nil)
 
 	// Validate successful response
 	assert.True(t, response.Success)
@@ -915,8 +813,7 @@ func TestProcessAuction_StringRoundID(t *testing.T) {
 		Timestamp: time.Now(),
 	}
 
-	tokenManager := NewTokenManager()
-	response := ProcessAuction(mockAttester, req, nil, tokenManager)
+	response := ProcessAuction(mockAttester, req, nil)
 
 	// Validate successful response
 	assert.True(t, response.Success)

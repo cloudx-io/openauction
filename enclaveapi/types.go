@@ -178,16 +178,23 @@ type KeyResponse struct {
 // KeyWithAttestation represents a public key with its TEE attestation
 // Used in bid requests and key validation tools
 type KeyWithAttestation struct {
-	PublicKey    string              `json:"public_key"`                   // PEM-encoded RSA public key
-	Attestation  AttestationCOSEGzip `json:"attestation_cose_gzip_base64"` // Gzipped and base64-encoded COSE_Sign1 attestation
-	AuctionToken string              `json:"auction_token"`                // Single-use token for bid replay protection
+	PublicKey   string              `json:"public_key"`                   // PEM-encoded RSA public key
+	Attestation AttestationCOSEGzip `json:"attestation_cose_gzip_base64"` // Gzipped and base64-encoded COSE_Sign1 attestation
+	// Deprecated: AuctionToken is retained for backward compatibility with older
+	// clients that expect a per-request token. Replay protection no longer relies
+	// on it; the enclave deduplicates by ciphertext fingerprint instead. New
+	// clients should ignore this field. Emitted omitempty so it can be dropped.
+	AuctionToken string `json:"auction_token,omitempty"`
 }
 
 // KeyAttestationUserData represents the key-specific data embedded in key attestation
 type KeyAttestationUserData struct {
 	KeyAlgorithm string `json:"key_algorithm"` // e.g., "RSA-2048"
 	PublicKey    string `json:"public_key"`    // PEM-encoded public key
-	AuctionToken string `json:"auction_token"` // Single-use token for bid replay protection
+	// Deprecated: AuctionToken is retained for backward compatibility. It is no
+	// longer populated or validated; replay protection is enforced by ciphertext
+	// fingerprint deduplication. Emitted omitempty so it can be dropped.
+	AuctionToken string `json:"auction_token,omitempty"`
 }
 
 // AttestationCOSE represents raw COSE_Sign1 bytes from AWS Nitro Enclaves

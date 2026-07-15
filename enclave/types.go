@@ -1,9 +1,8 @@
 package main
 
 type EnclaveServer struct {
-	port         uint32
-	keyManager   *KeyManager
-	tokenManager *TokenManager
+	port       uint32
+	keyManager *KeyManager
 }
 
 func NewEnclaveServer(port uint32) *EnclaveServer {

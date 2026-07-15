@@ -651,6 +651,83 @@ func TestProcessAuction_UnencryptedNotDeduped(t *testing.T) {
 	check.Equal(t, []core.ExcludedBid{}, response.ExcludedBids)
 }
 
+// TestDedupAndBuildBids_DecryptedButEpochlessExcluded verifies fail-closed
+// behavior: a bid that carries an EncryptedPrice (so it was decrypted) but
+// resolves to no epoch is excluded rather than passed through un-fingerprinted,
+// which would silently drop replay protection. It is reported as
+// fingerprint_failed since decryption itself succeeded.
+func TestDedupAndBuildBids_DecryptedButEpochlessExcluded(t *testing.T) {
+	// A decrypted bid (non-nil payload, non-nil EncryptedPrice) with no epoch.
+	decrypted := []decryptedBidData{
+		{
+			encBid: enclaveapi.EncryptedCoreBid{
+				CoreBid:        core.CoreBid{ID: "bid1", Bidder: "bidder1", Currency: "USD"},
+				EncryptedPrice: encPrice([]byte("aeskey"), []byte("payload"), []byte("nonce123")),
+			},
+			payload: &decryptedBidPayload{Price: 5.50},
+			epoch:   nil,
+		},
+	}
+
+	unencrypted, excluded := dedupAndBuildBids(decrypted)
+
+	check.Equal(t, 0, len(unencrypted))
+	check.Equal(t, 1, len(excluded))
+	check.Equal(t, "bid1", excluded[0].BidID)
+	check.Equal(t, "fingerprint_failed", excluded[0].Reason)
+}
+
+// TestDedupAndBuildBids_FingerprintFailureExcluded verifies that when a
+// decrypted bid's ciphertext cannot be fingerprinted (invalid base64 in the
+// encrypted fields), it is excluded with the distinct fingerprint_failed reason
+// rather than decryption_failed — decryption had already succeeded.
+func TestDedupAndBuildBids_FingerprintFailureExcluded(t *testing.T) {
+	decrypted := []decryptedBidData{
+		{
+			encBid: enclaveapi.EncryptedCoreBid{
+				CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder1", Currency: "USD"},
+				EncryptedPrice: &enclaveapi.EncryptedBidPrice{
+					AESKeyEncrypted:  "not valid base64 !!!",
+					EncryptedPayload: "dGVzdA==",
+					Nonce:            "dGVzdA==",
+				},
+			},
+			payload: &decryptedBidPayload{Price: 5.50},
+			epoch:   &keyEpoch{},
+		},
+	}
+
+	unencrypted, excluded := dedupAndBuildBids(decrypted)
+
+	check.Equal(t, 0, len(unencrypted))
+	check.Equal(t, 1, len(excluded))
+	check.Equal(t, "bid1", excluded[0].BidID)
+	check.Equal(t, "fingerprint_failed", excluded[0].Reason)
+}
+
+// TestDedupAndBuildBids_PlaintextEpochlessPassesThrough verifies the fail-closed
+// change does not affect genuine plaintext bids: a bid with no EncryptedPrice
+// (and thus no epoch) is still passed through un-fingerprinted.
+func TestDedupAndBuildBids_PlaintextEpochlessPassesThrough(t *testing.T) {
+	decrypted := []decryptedBidData{
+		{
+			encBid: enclaveapi.EncryptedCoreBid{
+				CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder1", Price: 2.50, Currency: "USD"},
+				// No EncryptedPrice: a real plaintext bid.
+			},
+			payload: nil,
+			epoch:   nil,
+		},
+	}
+
+	unencrypted, excluded := dedupAndBuildBids(decrypted)
+
+	check.Equal(t, 0, len(excluded))
+	check.Equal(t, 1, len(unencrypted))
+	check.Equal(t, "bid1", unencrypted[0].ID)
+	check.Equal(t, 2.50, unencrypted[0].Price)
+}
+
 // roundTripStdEncodedPrice decodes each field and re-encodes it with standard
 // base64, yielding a fresh string that still decodes to identical bytes and
 // remains decryptable by the enclave. Test-only helper.

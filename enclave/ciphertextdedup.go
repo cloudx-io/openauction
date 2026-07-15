@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"sync"
 
 	"github.com/cloudx-io/openauction/enclaveapi"
@@ -76,7 +77,7 @@ func ciphertextFingerprint(enc *enclaveapi.EncryptedBidPrice) ([32]byte, error) 
 
 // writeLengthPrefixed writes an 8-byte big-endian length followed by the field
 // bytes, giving each field an unambiguous boundary in the hash input.
-func writeLengthPrefixed(h interface{ Write([]byte) (int, error) }, field []byte) {
+func writeLengthPrefixed(h io.Writer, field []byte) {
 	var lengthPrefix [8]byte
 	binary.BigEndian.PutUint64(lengthPrefix[:], uint64(len(field)))
 	// hash.Hash.Write never returns an error.

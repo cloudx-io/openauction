@@ -10,6 +10,26 @@ import (
 	"github.com/cloudx-io/openauction/enclaveapi"
 )
 
+// Exclusion reasons reported for bids dropped before the auction. These are
+// surfaced on the wire in ExcludedBid.Reason, so they double as a stable
+// vocabulary for callers inspecting why a bid did not participate.
+const (
+	// reasonDecryptionFailed is used when an encrypted bid could not be
+	// decrypted (no key manager, or no live epoch's key resolved it).
+	reasonDecryptionFailed = "decryption_failed"
+	// reasonInvalidPayloadFormat is used when a decrypted payload did not parse
+	// as the expected JSON structure.
+	reasonInvalidPayloadFormat = "invalid_payload_format"
+	// reasonDuplicateCiphertext is used when a bid's ciphertext fingerprint was
+	// already seen for the epoch that decrypted it (a byte-identical replay).
+	reasonDuplicateCiphertext = "duplicate_ciphertext"
+	// reasonFingerprintFailed is used when a bid decrypted successfully but its
+	// ciphertext fingerprint could not be computed, or a decrypted bid resolved
+	// to no epoch. Both cases fail closed rather than skip replay protection.
+	// Distinct from reasonDecryptionFailed because decryption already succeeded.
+	reasonFingerprintFailed = "fingerprint_failed"
+)
+
 // decryptedBidPayload represents the decrypted bid payload structure.
 type decryptedBidPayload struct {
 	Price float64 `json:"price"` // Bid price in USD
@@ -132,7 +152,7 @@ func decryptAllBids(encryptedBids []enclaveapi.EncryptedCoreBid, keyManager *Key
 			err := fmt.Errorf("no key manager available")
 			excludedBids = append(excludedBids, core.ExcludedBid{
 				BidID:  encBid.ID,
-				Reason: "decryption_failed",
+				Reason: reasonDecryptionFailed,
 			})
 			errors = append(errors, fmt.Errorf("decryption failed for bid %s: %w", encBid.ID, err))
 			continue
@@ -151,7 +171,7 @@ func decryptAllBids(encryptedBids []enclaveapi.EncryptedCoreBid, keyManager *Key
 			log.Printf("INFO: Failed to decrypt bid %s: %v", encBid.ID, err)
 			excludedBids = append(excludedBids, core.ExcludedBid{
 				BidID:  encBid.ID,
-				Reason: "decryption_failed",
+				Reason: reasonDecryptionFailed,
 			})
 			errors = append(errors, fmt.Errorf("decryption failed for bid %s: %w", encBid.ID, err))
 			continue
@@ -162,7 +182,7 @@ func decryptAllBids(encryptedBids []enclaveapi.EncryptedCoreBid, keyManager *Key
 			log.Printf("INFO: Failed to parse decrypted payload for bid %s: %v", encBid.ID, err)
 			excludedBids = append(excludedBids, core.ExcludedBid{
 				BidID:  encBid.ID,
-				Reason: "invalid_payload_format",
+				Reason: reasonInvalidPayloadFormat,
 			})
 			errors = append(errors, fmt.Errorf("invalid payload format for bid %s: %w", encBid.ID, err))
 			continue
@@ -193,39 +213,51 @@ func dedupAndBuildBids(decryptedBids []decryptedBidData) ([]core.CoreBid, []core
 	excludedBids := make([]core.ExcludedBid, 0)
 
 	for _, decBid := range decryptedBids {
-		// If bid doesn't have encrypted price, use as-is
+		// If bid doesn't have encrypted price, use as-is. Plaintext bids carry
+		// no ciphertext to fingerprint and are never subject to dedup.
 		if decBid.encBid.EncryptedPrice == nil {
 			unencryptedBids = append(unencryptedBids, decBid.encBid.CoreBid)
 			continue
 		}
 
-		// A successfully decrypted bid always has a resolving epoch; guard
-		// defensively in case a caller constructs data without one.
-		if decBid.epoch != nil {
-			fingerprint, err := ciphertextFingerprint(decBid.encBid.EncryptedPrice)
-			if err != nil {
-				// Bytes that decrypted successfully must be valid base64, so this
-				// should not happen; exclude the bid rather than risk skipping
-				// replay protection.
-				log.Printf("WARNING: Failed to fingerprint bid %s: %v", decBid.encBid.ID, err)
-				excludedBids = append(excludedBids, core.ExcludedBid{
-					BidID:  decBid.encBid.ID,
-					Reason: "decryption_failed",
-				})
-				continue
-			}
-
-			if decBid.epoch.dedup.recordAndCheckDuplicate(fingerprint) {
-				log.Printf("WARNING: Bid %s excluded as duplicate ciphertext (replay)", decBid.encBid.ID)
-				excludedBids = append(excludedBids, core.ExcludedBid{
-					BidID:  decBid.encBid.ID,
-					Reason: "duplicate_ciphertext",
-				})
-				continue
-			}
+		// This bid carried an EncryptedPrice and reached here, so it decrypted
+		// successfully and must have a resolving epoch. If it somehow does not
+		// (e.g. a future refactor produces a decrypted-but-epochless bid), fail
+		// closed: without an epoch there is no dedup set to fingerprint against,
+		// and passing it through would silently drop replay protection.
+		if decBid.epoch == nil {
+			log.Printf("WARNING: Bid %s decrypted but resolved to no epoch; excluding to preserve replay protection", decBid.encBid.ID)
+			excludedBids = append(excludedBids, core.ExcludedBid{
+				BidID:  decBid.encBid.ID,
+				Reason: reasonFingerprintFailed,
+			})
+			continue
 		}
 
-		// Create CoreBid with decrypted price
+		fingerprint, err := ciphertextFingerprint(decBid.encBid.EncryptedPrice)
+		if err != nil {
+			// Bytes that decrypted successfully must be valid base64, so this
+			// should not happen; exclude the bid rather than risk skipping
+			// replay protection. Decryption already succeeded, so this is a
+			// fingerprint failure, not a decryption failure.
+			log.Printf("WARNING: Failed to fingerprint bid %s: %v", decBid.encBid.ID, err)
+			excludedBids = append(excludedBids, core.ExcludedBid{
+				BidID:  decBid.encBid.ID,
+				Reason: reasonFingerprintFailed,
+			})
+			continue
+		}
+
+		if decBid.epoch.dedup.recordAndCheckDuplicate(fingerprint) {
+			log.Printf("WARNING: Bid %s excluded as duplicate ciphertext (replay)", decBid.encBid.ID)
+			excludedBids = append(excludedBids, core.ExcludedBid{
+				BidID:  decBid.encBid.ID,
+				Reason: reasonDuplicateCiphertext,
+			})
+			continue
+		}
+
+		// Create CoreBid with decrypted price.
 		unencryptedBid := decBid.encBid.CoreBid
 		unencryptedBid.Price = decBid.payload.Price
 

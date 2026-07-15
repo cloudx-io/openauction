@@ -5,6 +5,7 @@ import (
 	"encoding/pem"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/peterldowns/testy/assert"
 )
@@ -128,4 +129,63 @@ func TestKeyManager_DecryptBid_NoMatchingEpoch(t *testing.T) {
 	enc := encryptedPriceFromResult(result)
 	_, _, err = km.DecryptBid(enc, HashAlgorithmSHA256)
 	assert.Error(t, err)
+}
+
+// TestKeyManager_DecryptBid_EvictedEpoch verifies the retention boundary: a bid
+// sealed to an epoch that has since aged out and been evicted no longer
+// decrypts. This is the aged-out counterpart to
+// TestKeyManager_DecryptBid_NoMatchingEpoch (which covers a never-held key).
+func TestKeyManager_DecryptBid_EvictedEpoch(t *testing.T) {
+	attester := CreateMockEnclave(t)
+	km, err := NewKeyManager(attester)
+	assert.NoError(t, err)
+
+	// Seal a bid to the current epoch's key.
+	priorEpoch := km.currentEpoch()
+	result, err := EncryptHybridWithHash([]byte(`{"price": 1.23}`), priorEpoch.PublicKey, HashAlgorithmSHA256)
+	assert.NoError(t, err)
+	enc := encryptedPriceFromResult(result)
+
+	// Sanity: it decrypts while the sealing epoch is live.
+	_, resolved, err := km.DecryptBid(enc, HashAlgorithmSHA256)
+	assert.NoError(t, err)
+	assert.True(t, resolved == priorEpoch)
+
+	// Backdate the epoch past the retention window, then rotate. The now-aged
+	// prior epoch is no longer current, so eviction drops it and its private
+	// key along with it.
+	priorEpoch.createdAt = time.Now().Add(-2 * keyRetention)
+	_, err = km.addEpoch(attester)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, km.epochCount())
+	assert.True(t, km.currentEpoch() != priorEpoch)
+
+	// With the sealing epoch's key dropped, the bid can no longer be decrypted.
+	_, _, err = km.DecryptBid(enc, HashAlgorithmSHA256)
+	assert.Error(t, err)
+}
+
+// TestKeyManager_EvictExpiredDuringOutage verifies that eviction honors the
+// retention window on its own, without minting a new epoch. This is the path
+// StartRotation takes when minting fails: an aged-out non-current epoch is
+// released even though no fresh epoch was added.
+func TestKeyManager_EvictExpiredDuringOutage(t *testing.T) {
+	attester := CreateMockEnclave(t)
+	km, err := NewKeyManager(attester)
+	assert.NoError(t, err)
+
+	// Add a second epoch so there is a non-current epoch eligible for eviction;
+	// the newest epoch is always retained regardless of age.
+	priorEpoch := km.currentEpoch()
+	_, err = km.addEpoch(attester)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, km.epochCount())
+
+	// Age the prior (non-current) epoch out and evict directly — no mint.
+	priorEpoch.createdAt = time.Now().Add(-2 * keyRetention)
+	km.evictExpired(time.Now())
+
+	// The aged-out prior epoch is gone; only the current epoch remains.
+	assert.Equal(t, 1, km.epochCount())
+	assert.True(t, km.currentEpoch() != priorEpoch)
 }

@@ -25,6 +25,17 @@ const (
 	// set) is kept alive after the epoch stops being the current one. A bid
 	// sealed to a slightly-older public key still decrypts within this window;
 	// once an epoch ages out, its key material and dedup set are dropped.
+	//
+	// Joint constraint with the host-side key cache: a host bridge co-located
+	// with the enclave fetches the current public key and caches it, serving it
+	// to bidders without re-fetching on every request. On a refresh failure it
+	// may keep serving the last-known-good key past its normal freshness
+	// horizon. keyRetention must stay comfortably GREATER THAN the host's
+	// maximum key-cache staleness: if a key can still be handed out after the
+	// enclave has already evicted its matching private key, bids sealed to that
+	// key fail to decrypt — a silent, full-inventory drop for that host until
+	// the cache heals. This is the enclave-side half of the invariant; the host
+	// bridge carries the matching bound on its cache staleness.
 	keyRetention = 5 * time.Minute
 )
 
@@ -120,6 +131,15 @@ func (km *KeyManager) addEpoch(attester EnclaveAttester) (*keyEpoch, error) {
 	return epoch, nil
 }
 
+// evictExpired takes the write lock and drops epochs older than keyRetention.
+// It exists so eviction can run on every rotation tick, independent of whether
+// minting a new epoch succeeded — see StartRotation.
+func (km *KeyManager) evictExpired(now time.Time) {
+	km.mu.Lock()
+	defer km.mu.Unlock()
+	km.evictExpiredLocked(now)
+}
+
 // evictExpiredLocked drops epochs older than keyRetention. The current (newest)
 // epoch is always retained regardless of age so the enclave can always serve a
 // key. Callers must hold km.mu.
@@ -165,6 +185,12 @@ func (km *KeyManager) currentEpoch() *keyEpoch {
 // epochs as it goes. It runs until the context is canceled. Rotation failures
 // (e.g. a transient attestation error) are logged and retried on the next tick;
 // the existing epochs keep serving in the meantime.
+//
+// Eviction runs on every tick regardless of whether minting a new epoch
+// succeeded. This keeps the retention invariant honored even during an extended
+// minting outage (e.g. a wedged attester): aged-out epochs — and the private key
+// material and dedup sets they pin — are still released on schedule rather than
+// being held indefinitely until the next successful mint.
 func (km *KeyManager) StartRotation(ctx context.Context, attester EnclaveAttester) {
 	go func() {
 		ticker := time.NewTicker(keyRotationInterval)
@@ -175,11 +201,15 @@ func (km *KeyManager) StartRotation(ctx context.Context, attester EnclaveAtteste
 			case <-ctx.Done():
 				log.Printf("Key rotation: stopping due to context cancellation")
 				return
-			case <-ticker.C:
+			case now := <-ticker.C:
 				if _, err := km.addEpoch(attester); err != nil {
+					// Minting failed, but still enforce retention so aged-out
+					// epochs and their key material do not linger.
+					km.evictExpired(now)
 					log.Printf("ERROR: Key rotation failed, keeping existing epochs: %v", err)
 					continue
 				}
+				km.evictExpired(now)
 				log.Printf("Key rotation: minted new epoch (live epochs: %d)", km.epochCount())
 			}
 		}

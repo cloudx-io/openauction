@@ -187,14 +187,15 @@ type KeyWithAttestation struct {
 	AuctionToken string `json:"auction_token,omitempty"`
 }
 
-// KeyAttestationUserData represents the key-specific data embedded in key attestation
+// KeyAttestationUserData represents the key-specific data embedded in the signed
+// key attestation. It intentionally carries no auction token: replay protection is
+// enforced by ciphertext-fingerprint deduplication, so there is no per-request
+// token to attest. (A deprecated AuctionToken field is still present on the
+// unsigned KeyWithAttestation wire type for backward compatibility with older
+// clients, but it is not part of the attested payload.)
 type KeyAttestationUserData struct {
 	KeyAlgorithm string `json:"key_algorithm"` // e.g., "RSA-2048"
 	PublicKey    string `json:"public_key"`    // PEM-encoded public key
-	// Deprecated: AuctionToken is retained for backward compatibility. It is no
-	// longer populated or validated; replay protection is enforced by ciphertext
-	// fingerprint deduplication. Emitted omitempty so it can be dropped.
-	AuctionToken string `json:"auction_token,omitempty"`
 }
 
 // AttestationCOSE represents raw COSE_Sign1 bytes from AWS Nitro Enclaves

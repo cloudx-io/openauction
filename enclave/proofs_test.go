@@ -309,9 +309,9 @@ func TestGenerateKeyAttestationWithMock(t *testing.T) {
 	check.NoError(t, err)
 	check.Equal(t, "RSA-2048", keyUserData.KeyAlgorithm)
 	check.NotEqual(t, "", keyUserData.PublicKey)
-	// The key attestation no longer carries a per-request token.
-	//nolint:staticcheck // intentionally asserting the deprecated field is unset
-	check.Equal(t, "", keyUserData.AuctionToken)
+	// The key attestation carries no per-request token field at all (replay
+	// protection is by ciphertext dedup), so there is nothing token-related to
+	// assert here — its absence is enforced by the KeyAttestationUserData type.
 
 	// Verify public key is in PEM format
 	check.True(t, strings.Contains(keyUserData.PublicKey, "-----BEGIN PUBLIC KEY-----"))

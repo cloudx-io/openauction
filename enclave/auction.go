@@ -10,13 +10,39 @@ import (
 	"github.com/cloudx-io/openauction/enclaveapi"
 )
 
+// Exclusion reasons reported for bids dropped before the auction. These are
+// surfaced on the wire in ExcludedBid.Reason, so they double as a stable
+// vocabulary for callers inspecting why a bid did not participate.
+const (
+	// reasonDecryptionFailed is used when an encrypted bid could not be
+	// decrypted (no key manager, or no live epoch's key resolved it).
+	reasonDecryptionFailed = "decryption_failed"
+	// reasonInvalidPayloadFormat is used when a decrypted payload did not parse
+	// as the expected JSON structure.
+	reasonInvalidPayloadFormat = "invalid_payload_format"
+	// reasonDuplicateCiphertext is used when a bid's ciphertext fingerprint was
+	// already seen for the epoch that decrypted it (a byte-identical replay).
+	reasonDuplicateCiphertext = "duplicate_ciphertext"
+	// reasonFingerprintFailed covers the two post-decryption paths that cannot
+	// establish a dedup fingerprint, in the order they are checked: (1) a bid
+	// decrypted but resolved to no key epoch, and (2) a decrypted bid whose
+	// ciphertext fingerprint could not be computed. Both are unreachable by
+	// construction today and both fail closed (exclude the bid) rather than skip
+	// replay protection. Distinct from reasonDecryptionFailed because decryption
+	// has already succeeded by the time either can occur.
+	reasonFingerprintFailed = "fingerprint_failed"
+)
+
 // decryptedBidPayload represents the decrypted bid payload structure.
 type decryptedBidPayload struct {
-	Price        float64 `json:"price"`                   // Bid price in USD
-	AuctionToken string  `json:"auction_token,omitempty"` // Optional single-use token for replay protection
+	Price float64 `json:"price"` // Bid price in USD
+	// Deprecated: AuctionToken is parsed for backward compatibility with clients
+	// that still embed a per-request token, but it is ignored. Replay protection
+	// is enforced by ciphertext fingerprint deduplication, not by tokens.
+	AuctionToken string `json:"auction_token,omitempty"`
 }
 
-func ProcessAuction(attester EnclaveAttester, req enclaveapi.EnclaveAuctionRequest, keyManager *KeyManager, tokenManager *TokenManager) enclaveapi.EnclaveAuctionResponse {
+func ProcessAuction(attester EnclaveAttester, req enclaveapi.EnclaveAuctionRequest, keyManager *KeyManager) enclaveapi.EnclaveAuctionResponse {
 	startTime := time.Now()
 	log.Printf("INFO: Processing auction %s with %d bids", req.AuctionID, len(req.Bids))
 
@@ -41,12 +67,11 @@ func ProcessAuction(attester EnclaveAttester, req enclaveapi.EnclaveAuctionReque
 		}
 	}
 
-	consumedTokens := extractAndConsumeUniqueTokens(decryptedBids, tokenManager)
-	log.Printf("INFO: Consumed %d unique auction tokens: %v", len(consumedTokens), getTokenList(consumedTokens))
+	// Replay protection: exclude any encrypted bid whose ciphertext fingerprint
+	// was already seen for the epoch that decrypted it.
+	unencryptedBids, dedupExcluded := dedupAndBuildBids(decryptedBids)
 
-	unencryptedBids, tokenExcluded := filterBidsByConsumedTokens(decryptedBids, consumedTokens)
-
-	excludedBids := append(decryptionExcluded, tokenExcluded...)
+	excludedBids := append(decryptionExcluded, dedupExcluded...)
 	// Run unified auction logic: adjustment → floor enforcement → ranking
 	auctionResult := core.RunAuction(unencryptedBids, req.AdjustmentFactors, req.BidFloor)
 
@@ -100,22 +125,17 @@ func getBidPrice(bid *core.CoreBid) float64 {
 	return bid.Price
 }
 
-func getTokenList(tokens map[string]bool) []string {
-	tokenList := make([]string, 0, len(tokens))
-	for token := range tokens {
-		tokenList = append(tokenList, token)
-	}
-	return tokenList
-}
-
-// decryptedBidData holds a bid with its decrypted payload
+// decryptedBidData holds a bid with its decrypted payload and the key epoch that
+// decrypted it. For unencrypted bids, payload and epoch are nil.
 type decryptedBidData struct {
 	encBid  enclaveapi.EncryptedCoreBid
 	payload *decryptedBidPayload
+	epoch   *keyEpoch
 }
 
-// decryptAllBids decrypts all encrypted bids once
-// Returns decrypted bid data (only successfully decrypted), excluded bids, and errors
+// decryptAllBids decrypts all encrypted bids once, trying every live key epoch
+// so that bids sealed to a recently-rotated key still decrypt.
+// Returns decrypted bid data (only successfully decrypted), excluded bids, and errors.
 func decryptAllBids(encryptedBids []enclaveapi.EncryptedCoreBid, keyManager *KeyManager) ([]decryptedBidData, []core.ExcludedBid, []error) {
 	decryptedBids := make([]decryptedBidData, 0, len(encryptedBids))
 	excludedBids := make([]core.ExcludedBid, 0)
@@ -135,7 +155,7 @@ func decryptAllBids(encryptedBids []enclaveapi.EncryptedCoreBid, keyManager *Key
 			err := fmt.Errorf("no key manager available")
 			excludedBids = append(excludedBids, core.ExcludedBid{
 				BidID:  encBid.ID,
-				Reason: "decryption_failed",
+				Reason: reasonDecryptionFailed,
 			})
 			errors = append(errors, fmt.Errorf("decryption failed for bid %s: %w", encBid.ID, err))
 			continue
@@ -149,18 +169,12 @@ func decryptAllBids(encryptedBids []enclaveapi.EncryptedCoreBid, keyManager *Key
 			hashAlg = HashAlgorithmSHA256
 		}
 
-		plaintextBytes, err := DecryptHybrid(
-			encBid.EncryptedPrice.AESKeyEncrypted,
-			encBid.EncryptedPrice.EncryptedPayload,
-			encBid.EncryptedPrice.Nonce,
-			keyManager.privateKey,
-			hashAlg,
-		)
+		plaintextBytes, epoch, err := keyManager.DecryptBid(encBid.EncryptedPrice, hashAlg)
 		if err != nil {
 			log.Printf("INFO: Failed to decrypt bid %s: %v", encBid.ID, err)
 			excludedBids = append(excludedBids, core.ExcludedBid{
 				BidID:  encBid.ID,
-				Reason: "decryption_failed",
+				Reason: reasonDecryptionFailed,
 			})
 			errors = append(errors, fmt.Errorf("decryption failed for bid %s: %w", encBid.ID, err))
 			continue
@@ -171,7 +185,7 @@ func decryptAllBids(encryptedBids []enclaveapi.EncryptedCoreBid, keyManager *Key
 			log.Printf("INFO: Failed to parse decrypted payload for bid %s: %v", encBid.ID, err)
 			excludedBids = append(excludedBids, core.ExcludedBid{
 				BidID:  encBid.ID,
-				Reason: "invalid_payload_format",
+				Reason: reasonInvalidPayloadFormat,
 			})
 			errors = append(errors, fmt.Errorf("invalid payload format for bid %s: %w", encBid.ID, err))
 			continue
@@ -181,75 +195,82 @@ func decryptAllBids(encryptedBids []enclaveapi.EncryptedCoreBid, keyManager *Key
 		decryptedBids = append(decryptedBids, decryptedBidData{
 			encBid:  encBid,
 			payload: &payload,
+			epoch:   epoch,
 		})
 	}
 
 	return decryptedBids, excludedBids, errors
 }
 
-// extractAndConsumeUniqueTokens extracts tokens from decrypted bids, then atomically consumes unique tokens
-// Returns a set of successfully consumed tokens for validation during bid processing
-func extractAndConsumeUniqueTokens(decryptedBids []decryptedBidData, tokenManager *TokenManager) map[string]bool {
-	// Extract unique tokens from all successfully decrypted bids
-	uniqueTokens := make(map[string]struct{})
-	for _, decBid := range decryptedBids {
-		if decBid.payload != nil && decBid.payload.AuctionToken != "" {
-			uniqueTokens[decBid.payload.AuctionToken] = struct{}{}
-		}
-	}
-
-	// Atomically consume all unique tokens
-	consumedTokens := make(map[string]bool)
-	for token := range uniqueTokens {
-		if tokenManager.ValidateAndConsumeToken(token) {
-			consumedTokens[token] = true
-			log.Printf("INFO: Consumed auction token: %s", token)
-		} else {
-			log.Printf("WARNING: Failed to consume token (invalid or already used): %s", token)
-		}
-	}
-
-	return consumedTokens
-}
-
-// filterBidsByConsumedTokens validates and filters decrypted bids based on consumed tokens
-// Returns unencrypted CoreBids and excluded bids
-// consumedTokens is a set of tokens that were successfully consumed upfront
-func filterBidsByConsumedTokens(decryptedBids []decryptedBidData, consumedTokens map[string]bool) ([]core.CoreBid, []core.ExcludedBid) {
+// dedupAndBuildBids turns decrypted bids into CoreBids for the auction, excluding
+// any encrypted bid whose ciphertext was already seen for its key epoch.
+//
+// The fingerprint is scoped to the epoch that decrypted the bid, so replay is
+// detected only within the lifetime of that epoch's key. Byte-identical
+// resubmission (the only replayable artifact under authenticated encryption) is
+// caught here; a bid re-encrypted with fresh randomness produces a different
+// ciphertext and is not treated as a replay. Any legacy auction_token present in
+// the payload is intentionally ignored.
+func dedupAndBuildBids(decryptedBids []decryptedBidData) ([]core.CoreBid, []core.ExcludedBid) {
 	unencryptedBids := make([]core.CoreBid, 0, len(decryptedBids))
 	excludedBids := make([]core.ExcludedBid, 0)
 
 	for _, decBid := range decryptedBids {
-		// If bid doesn't have encrypted price, use as-is
+		// If bid doesn't have encrypted price, use as-is. Plaintext bids carry
+		// no ciphertext to fingerprint and are never subject to dedup.
 		if decBid.encBid.EncryptedPrice == nil {
 			unencryptedBids = append(unencryptedBids, decBid.encBid.CoreBid)
 			continue
 		}
 
-		// Validate that token was successfully consumed upfront
-		if decBid.payload.AuctionToken != "" {
-			if !consumedTokens[decBid.payload.AuctionToken] {
-				// Token was not successfully consumed (invalid or already used in another auction)
-				log.Printf("WARNING: Bid %s excluded due to invalid/consumed token: %s", decBid.encBid.ID, decBid.payload.AuctionToken)
-				excludedBids = append(excludedBids, core.ExcludedBid{
-					BidID:  decBid.encBid.ID,
-					Reason: "invalid_or_consumed_auction_token",
-				})
-				continue // Skip this bid, don't include in auction
-			}
-
-			// Token is valid - already consumed upfront
-			log.Printf("INFO: Bid %s has valid token: %s", decBid.encBid.ID, decBid.payload.AuctionToken)
+		// This bid carried an EncryptedPrice and reached here, so it decrypted
+		// successfully and must have a resolving epoch. If it somehow does not
+		// (e.g. a future refactor produces a decrypted-but-epochless bid), fail
+		// closed: without an epoch there is no dedup set to fingerprint against,
+		// and passing it through would silently drop replay protection.
+		if decBid.epoch == nil {
+			log.Printf("WARNING: Bid %s decrypted but resolved to no epoch; excluding to preserve replay protection", decBid.encBid.ID)
+			excludedBids = append(excludedBids, core.ExcludedBid{
+				BidID:  decBid.encBid.ID,
+				Reason: reasonFingerprintFailed,
+			})
+			continue
 		}
 
-		// Create CoreBid with decrypted price
+		fingerprint, err := ciphertextFingerprint(decBid.encBid.EncryptedPrice)
+		if err != nil {
+			// The only failure ciphertextFingerprint can return is a base64
+			// decode error over AESKeyEncrypted/EncryptedPayload/Nonce -- the
+			// exact same fields DecryptHybrid already decoded to get here, so a
+			// bid that decrypted cannot fail this step. It should not happen;
+			// exclude the bid rather than risk skipping replay protection.
+			// Decryption already succeeded, so this is a fingerprint failure,
+			// not a decryption failure.
+			log.Printf("WARNING: Failed to fingerprint bid %s: %v", decBid.encBid.ID, err)
+			excludedBids = append(excludedBids, core.ExcludedBid{
+				BidID:  decBid.encBid.ID,
+				Reason: reasonFingerprintFailed,
+			})
+			continue
+		}
+
+		if decBid.epoch.dedup.recordAndCheckDuplicate(fingerprint) {
+			log.Printf("WARNING: Bid %s excluded as duplicate ciphertext (replay)", decBid.encBid.ID)
+			excludedBids = append(excludedBids, core.ExcludedBid{
+				BidID:  decBid.encBid.ID,
+				Reason: reasonDuplicateCiphertext,
+			})
+			continue
+		}
+
+		// Create CoreBid with decrypted price.
 		unencryptedBid := decBid.encBid.CoreBid
 		unencryptedBid.Price = decBid.payload.Price
 
 		unencryptedBids = append(unencryptedBids, unencryptedBid)
 	}
 
-	log.Printf("INFO: Bid filtering complete: %d bids ready for auction, %d excluded",
+	log.Printf("INFO: Bid dedup complete: %d bids ready for auction, %d excluded",
 		len(unencryptedBids), len(excludedBids))
 
 	return unencryptedBids, excludedBids

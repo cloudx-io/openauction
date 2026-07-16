@@ -11,7 +11,7 @@ import (
 )
 
 func TestDecryptBids_NoEncryptedData(t *testing.T) {
-	km, _ := NewKeyManager()
+	km, _ := NewKeyManager(CreateMockEnclave(t))
 
 	encBids := []enclaveapi.EncryptedCoreBid{
 		{CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder1", Price: 2.50}},
@@ -21,19 +21,19 @@ func TestDecryptBids_NoEncryptedData(t *testing.T) {
 	decryptedData, _, errors := decryptAllBids(encBids, km)
 	assert.Equal(t, 0, len(errors))
 
-	finalBids, _ := filterBidsByConsumedTokens(decryptedData, make(map[string]bool))
+	finalBids, _ := dedupAndBuildBids(decryptedData)
 	assert.Equal(t, 2, len(finalBids))
 	assert.Equal(t, 2.50, finalBids[0].Price)
 }
 
 func TestDecryptBids_MixedEncryptedUnencrypted(t *testing.T) {
-	km, _ := NewKeyManager()
+	km, _ := NewKeyManager(CreateMockEnclave(t))
 
 	payload := map[string]any{
 		"price": 4.25,
 	}
 	plaintextBytes, _ := json.Marshal(payload)
-	result, _ := EncryptHybridWithHash(plaintextBytes, km.PublicKey, HashAlgorithmSHA256)
+	result, _ := EncryptHybridWithHash(plaintextBytes, km.currentEpoch().PublicKey, HashAlgorithmSHA256)
 
 	encBids := []enclaveapi.EncryptedCoreBid{
 		{CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder1", Price: 2.50}},
@@ -54,7 +54,7 @@ func TestDecryptBids_MixedEncryptedUnencrypted(t *testing.T) {
 	decryptedData, _, errors := decryptAllBids(encBids, km)
 	assert.Equal(t, 0, len(errors))
 
-	finalBids, _ := filterBidsByConsumedTokens(decryptedData, make(map[string]bool))
+	finalBids, _ := dedupAndBuildBids(decryptedData)
 	assert.Equal(t, 3, len(finalBids))
 	assert.Equal(t, 2.50, finalBids[0].Price)
 	assert.Equal(t, 4.25, finalBids[1].Price)
@@ -62,7 +62,7 @@ func TestDecryptBids_MixedEncryptedUnencrypted(t *testing.T) {
 }
 
 func TestDecryptBids_InvalidEncryptedData(t *testing.T) {
-	km, _ := NewKeyManager()
+	km, _ := NewKeyManager(CreateMockEnclave(t))
 
 	encBids := []enclaveapi.EncryptedCoreBid{
 		{
@@ -81,18 +81,18 @@ func TestDecryptBids_InvalidEncryptedData(t *testing.T) {
 	decryptedData, _, errors := decryptAllBids(encBids, km)
 	assert.Equal(t, 1, len(errors))
 
-	finalBids, _ := filterBidsByConsumedTokens(decryptedData, make(map[string]bool))
+	finalBids, _ := dedupAndBuildBids(decryptedData)
 	assert.Equal(t, 0, len(finalBids)) // Excluded
 }
 
 func TestDecryptBids_InvalidPrice(t *testing.T) {
-	km, _ := NewKeyManager()
+	km, _ := NewKeyManager(CreateMockEnclave(t))
 
 	payload := map[string]any{
 		"price": -1.50,
 	}
 	plaintextBytes, _ := json.Marshal(payload)
-	result, _ := EncryptHybridWithHash(plaintextBytes, km.PublicKey, HashAlgorithmSHA256)
+	result, _ := EncryptHybridWithHash(plaintextBytes, km.currentEpoch().PublicKey, HashAlgorithmSHA256)
 
 	encBids := []enclaveapi.EncryptedCoreBid{
 		{
@@ -111,7 +111,7 @@ func TestDecryptBids_InvalidPrice(t *testing.T) {
 	decryptedData, _, errors := decryptAllBids(encBids, km)
 	assert.Equal(t, 0, len(errors))
 
-	finalBids, excludedBids := filterBidsByConsumedTokens(decryptedData, make(map[string]bool))
+	finalBids, excludedBids := dedupAndBuildBids(decryptedData)
 	assert.Equal(t, 1, len(finalBids))
 	assert.Equal(t, 0, len(excludedBids))
 
@@ -131,19 +131,19 @@ func TestDecryptBids_NilKeyManager(t *testing.T) {
 	assert.Equal(t, 0, len(errors))
 	assert.Equal(t, 0, len(excludedBids))
 
-	finalBids, _ := filterBidsByConsumedTokens(decryptedData, make(map[string]bool))
+	finalBids, _ := dedupAndBuildBids(decryptedData)
 	assert.Equal(t, 1, len(finalBids))
 }
 
 func TestDecryptBids_WrongKey(t *testing.T) {
-	km1, _ := NewKeyManager()
-	km2, _ := NewKeyManager()
+	km1, _ := NewKeyManager(CreateMockEnclave(t))
+	km2, _ := NewKeyManager(CreateMockEnclave(t))
 
 	payload := map[string]any{
 		"price": 2.50,
 	}
 	plaintextBytes, _ := json.Marshal(payload)
-	result, _ := EncryptHybridWithHash(plaintextBytes, km1.PublicKey, HashAlgorithmSHA256)
+	result, _ := EncryptHybridWithHash(plaintextBytes, km1.currentEpoch().PublicKey, HashAlgorithmSHA256)
 
 	encBids := []enclaveapi.EncryptedCoreBid{
 		{
@@ -164,19 +164,19 @@ func TestDecryptBids_WrongKey(t *testing.T) {
 	assert.Equal(t, 1, len(excludedBids)) // Should be excluded
 	assert.Equal(t, "bid1", excludedBids[0].BidID)
 
-	finalBids, _ := filterBidsByConsumedTokens(decryptedData, make(map[string]bool))
+	finalBids, _ := dedupAndBuildBids(decryptedData)
 	assert.Equal(t, 0, len(finalBids)) // Should fail
 }
 
 func TestDecryptBids_BothEncryptedAndUnencryptedPrice(t *testing.T) {
-	km, _ := NewKeyManager()
+	km, _ := NewKeyManager(CreateMockEnclave(t))
 
 	// Create encrypted price payload
 	payload := map[string]any{
 		"price": 7.25, // This should take precedence
 	}
 	plaintextBytes, _ := json.Marshal(payload)
-	result, _ := EncryptHybridWithHash(plaintextBytes, km.PublicKey, HashAlgorithmSHA256)
+	result, _ := EncryptHybridWithHash(plaintextBytes, km.currentEpoch().PublicKey, HashAlgorithmSHA256)
 
 	encBids := []enclaveapi.EncryptedCoreBid{
 		{
@@ -198,7 +198,7 @@ func TestDecryptBids_BothEncryptedAndUnencryptedPrice(t *testing.T) {
 	assert.Equal(t, 0, len(errors))
 	assert.Equal(t, 0, len(excludedBids))
 
-	finalBids, _ := filterBidsByConsumedTokens(decryptedData, make(map[string]bool))
+	finalBids, _ := dedupAndBuildBids(decryptedData)
 	assert.Equal(t, 1, len(finalBids))
 
 	bid := finalBids[0]
@@ -208,7 +208,7 @@ func TestDecryptBids_BothEncryptedAndUnencryptedPrice(t *testing.T) {
 }
 
 func TestDecryptBids_HashAlgorithms(t *testing.T) {
-	km, _ := NewKeyManager()
+	km, _ := NewKeyManager(CreateMockEnclave(t))
 
 	tests := []struct {
 		name            string
@@ -242,7 +242,7 @@ func TestDecryptBids_HashAlgorithms(t *testing.T) {
 				"price": tt.expectedPrice,
 			}
 			plaintextBytes, _ := json.Marshal(payload)
-			result, _ := EncryptHybridWithHash(plaintextBytes, km.PublicKey, tt.encryptHashAlg)
+			result, _ := EncryptHybridWithHash(plaintextBytes, km.currentEpoch().PublicKey, tt.encryptHashAlg)
 
 			encBids := []enclaveapi.EncryptedCoreBid{
 				{
@@ -263,7 +263,7 @@ func TestDecryptBids_HashAlgorithms(t *testing.T) {
 			assert.Equal(t, 0, len(errors))
 			assert.Equal(t, 0, len(excludedBids))
 
-			finalBids, _ := filterBidsByConsumedTokens(decryptedData, make(map[string]bool))
+			finalBids, _ := dedupAndBuildBids(decryptedData)
 			assert.Equal(t, 1, len(finalBids))
 			assert.Equal(t, tt.expectedPrice, finalBids[0].Price)
 		})
@@ -271,7 +271,7 @@ func TestDecryptBids_HashAlgorithms(t *testing.T) {
 }
 
 func TestDecryptBids_HashAlgorithmMismatch(t *testing.T) {
-	km, _ := NewKeyManager()
+	km, _ := NewKeyManager(CreateMockEnclave(t))
 
 	tests := []struct {
 		name            string
@@ -296,7 +296,7 @@ func TestDecryptBids_HashAlgorithmMismatch(t *testing.T) {
 				"price": 5.00,
 			}
 			plaintextBytes, _ := json.Marshal(payload)
-			result, _ := EncryptHybridWithHash(plaintextBytes, km.PublicKey, tt.encryptHashAlg)
+			result, _ := EncryptHybridWithHash(plaintextBytes, km.currentEpoch().PublicKey, tt.encryptHashAlg)
 
 			encBids := []enclaveapi.EncryptedCoreBid{
 				{
@@ -322,19 +322,19 @@ func TestDecryptBids_HashAlgorithmMismatch(t *testing.T) {
 }
 
 func TestDecryptBids_MixedHashAlgorithms(t *testing.T) {
-	km, _ := NewKeyManager()
+	km, _ := NewKeyManager(CreateMockEnclave(t))
 
 	payload1 := map[string]any{"price": 3.50}
 	plaintext1, _ := json.Marshal(payload1)
-	result1, _ := EncryptHybridWithHash(plaintext1, km.PublicKey, HashAlgorithmSHA256)
+	result1, _ := EncryptHybridWithHash(plaintext1, km.currentEpoch().PublicKey, HashAlgorithmSHA256)
 
 	payload2 := map[string]any{"price": 5.25}
 	plaintext2, _ := json.Marshal(payload2)
-	result2, _ := EncryptHybridWithHash(plaintext2, km.PublicKey, HashAlgorithmSHA1)
+	result2, _ := EncryptHybridWithHash(plaintext2, km.currentEpoch().PublicKey, HashAlgorithmSHA1)
 
 	payload3 := map[string]any{"price": 4.75}
 	plaintext3, _ := json.Marshal(payload3)
-	result3, _ := EncryptHybridWithHash(plaintext3, km.PublicKey, HashAlgorithmSHA256)
+	result3, _ := EncryptHybridWithHash(plaintext3, km.currentEpoch().PublicKey, HashAlgorithmSHA256)
 
 	encBids := []enclaveapi.EncryptedCoreBid{
 		{
@@ -370,7 +370,7 @@ func TestDecryptBids_MixedHashAlgorithms(t *testing.T) {
 	assert.Equal(t, 0, len(errors))
 	assert.Equal(t, 0, len(excludedBids))
 
-	finalBids, _ := filterBidsByConsumedTokens(decryptedData, make(map[string]bool))
+	finalBids, _ := dedupAndBuildBids(decryptedData)
 	assert.Equal(t, 3, len(finalBids))
 	assert.Equal(t, 3.50, finalBids[0].Price)
 	assert.Equal(t, 5.25, finalBids[1].Price)

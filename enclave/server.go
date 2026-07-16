@@ -36,19 +36,22 @@ func (s *EnclaveServer) Start() error {
 		log.Printf("ERROR: NSM initialization failed: %v (continuing with mocks)", err)
 	}
 
-	keyManager, err := NewKeyManager()
+	// The attester is needed at startup so the first key epoch's attestation can
+	// be generated and cached up front, and so rotation can mint new epochs.
+	attester, err := getEnclaveAttester()
+	if err != nil {
+		return fmt.Errorf("failed to initialize TEE attester: %w", err)
+	}
+
+	keyManager, err := NewKeyManager(attester)
 	if err != nil {
 		return fmt.Errorf("failed to initialize key manager: %w", err)
 	}
 	s.keyManager = keyManager
 	log.Printf("KeyManager initialized")
 
-	tokenManager := NewTokenManager()
-	s.tokenManager = tokenManager
-	log.Printf("TokenManager initialized")
-
-	tokenManager.StartExpirationCleanup(context.Background(), 10*time.Second, 1*time.Minute)
-	log.Printf("Token expiration cleanup started (interval: 10s, max age: 1m)")
+	keyManager.StartRotation(context.Background(), attester)
+	log.Printf("Key rotation started (interval: %s, retention: %s)", keyRotationInterval, keyRetention)
 
 	listener, err := vsock.Listen(s.port, nil)
 	if err != nil {
@@ -136,25 +139,18 @@ func (s *EnclaveServer) handleConnection(conn net.Conn) {
 
 	case "key_request":
 		log.Printf("INFO: Processing key request")
-		attester, err := getEnclaveAttester()
+		// The key attestation is generated once per epoch and served from cache,
+		// so the key-request path performs no Attest() call here.
+		keyResp, err := HandleKeyRequest(s.keyManager)
 		if err != nil {
 			response = map[string]any{
 				"type":    "error",
-				"message": fmt.Sprintf("Failed to initialize TEE attester: %v", err),
+				"message": fmt.Sprintf("Key request failed: %v", err),
 			}
 			log.Printf("ERROR: Key request failed: %v", err)
 		} else {
-			keyResp, err := HandleKeyRequest(attester, s.keyManager, s.tokenManager)
-			if err != nil {
-				response = map[string]any{
-					"type":    "error",
-					"message": fmt.Sprintf("Key request failed: %v", err),
-				}
-				log.Printf("ERROR: Key request failed: %v", err)
-			} else {
-				response = keyResp
-				log.Printf("INFO: Key request processed successfully")
-			}
+			response = keyResp
+			log.Printf("INFO: Key request processed successfully")
 		}
 
 	case "auction_request":
@@ -174,7 +170,7 @@ func (s *EnclaveServer) handleConnection(conn net.Conn) {
 				}
 				log.Printf("ERROR: Auction processing failed: %v", err)
 			} else {
-				response = ProcessAuction(attester, auctionReq, s.keyManager, s.tokenManager)
+				response = ProcessAuction(attester, auctionReq, s.keyManager)
 				log.Printf("INFO: Auction processed successfully with TEE attestation data")
 			}
 		}

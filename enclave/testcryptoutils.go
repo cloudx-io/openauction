@@ -7,6 +7,8 @@ import (
 	"crypto/rsa"
 	"encoding/base64"
 	"fmt"
+
+	"github.com/cloudx-io/openauction/enclaveapi"
 )
 
 // HybridEncryptionResult contains the results of hybrid encryption
@@ -14,6 +16,16 @@ type HybridEncryptionResult struct {
 	EncryptedAESKey  string
 	EncryptedPayload string
 	Nonce            string
+}
+
+// encryptedPriceFromResult adapts a HybridEncryptionResult into the wire
+// EncryptedBidPrice used by bids. Test-only convenience.
+func encryptedPriceFromResult(r *HybridEncryptionResult) *enclaveapi.EncryptedBidPrice {
+	return &enclaveapi.EncryptedBidPrice{
+		AESKeyEncrypted:  r.EncryptedAESKey,
+		EncryptedPayload: r.EncryptedPayload,
+		Nonce:            r.Nonce,
+	}
 }
 
 // EncryptHybridWithHash encrypts data using hybrid RSA-OAEP + AES-256-GCM encryption

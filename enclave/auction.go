@@ -23,10 +23,13 @@ const (
 	// reasonDuplicateCiphertext is used when a bid's ciphertext fingerprint was
 	// already seen for the epoch that decrypted it (a byte-identical replay).
 	reasonDuplicateCiphertext = "duplicate_ciphertext"
-	// reasonFingerprintFailed is used when a bid decrypted successfully but its
-	// ciphertext fingerprint could not be computed, or a decrypted bid resolved
-	// to no epoch. Both cases fail closed rather than skip replay protection.
-	// Distinct from reasonDecryptionFailed because decryption already succeeded.
+	// reasonFingerprintFailed covers the two post-decryption paths that cannot
+	// establish a dedup fingerprint, in the order they are checked: (1) a bid
+	// decrypted but resolved to no key epoch, and (2) a decrypted bid whose
+	// ciphertext fingerprint could not be computed. Both are unreachable by
+	// construction today and both fail closed (exclude the bid) rather than skip
+	// replay protection. Distinct from reasonDecryptionFailed because decryption
+	// has already succeeded by the time either can occur.
 	reasonFingerprintFailed = "fingerprint_failed"
 )
 
@@ -236,10 +239,13 @@ func dedupAndBuildBids(decryptedBids []decryptedBidData) ([]core.CoreBid, []core
 
 		fingerprint, err := ciphertextFingerprint(decBid.encBid.EncryptedPrice)
 		if err != nil {
-			// Bytes that decrypted successfully must be valid base64, so this
-			// should not happen; exclude the bid rather than risk skipping
-			// replay protection. Decryption already succeeded, so this is a
-			// fingerprint failure, not a decryption failure.
+			// The only failure ciphertextFingerprint can return is a base64
+			// decode error over AESKeyEncrypted/EncryptedPayload/Nonce -- the
+			// exact same fields DecryptHybrid already decoded to get here, so a
+			// bid that decrypted cannot fail this step. It should not happen;
+			// exclude the bid rather than risk skipping replay protection.
+			// Decryption already succeeded, so this is a fingerprint failure,
+			// not a decryption failure.
 			log.Printf("WARNING: Failed to fingerprint bid %s: %v", decBid.encBid.ID, err)
 			excludedBids = append(excludedBids, core.ExcludedBid{
 				BidID:  decBid.encBid.ID,

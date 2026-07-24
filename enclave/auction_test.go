@@ -84,8 +84,7 @@ func TestProcessAuction_OneBid(t *testing.T) {
 		Bids: []enclaveapi.EncryptedCoreBid{
 			{CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder_a", Price: 2.50, Currency: "USD"}},
 		},
-		AdjustmentFactors: map[string]float64{},
-		Timestamp:         time.Now(),
+		Timestamp: time.Now(),
 	}
 
 	response := ProcessAuction(mockAttester, req, nil)
@@ -119,10 +118,6 @@ func TestProcessAuction_TwoBids(t *testing.T) {
 		Bids: []enclaveapi.EncryptedCoreBid{
 			{CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder_a", Price: 2.50, Currency: "USD"}},
 			{CoreBid: core.CoreBid{ID: "bid2", Bidder: "bidder_b", Price: 3.00, Currency: "USD"}},
-		},
-		AdjustmentFactors: map[string]float64{
-			"bidder_a": 1.0, // 2.50 * 1.0 = 2.50
-			"bidder_b": 1.0, // 3.00 * 1.0 = 3.00
 		},
 		Timestamp: time.Now(),
 	}
@@ -166,11 +161,6 @@ func TestProcessAuction_ThreeBids(t *testing.T) {
 			{CoreBid: core.CoreBid{ID: "bid2", Bidder: "bidder_b", Price: 3.00, Currency: "USD"}},
 			{CoreBid: core.CoreBid{ID: "bid3", Bidder: "bidder_c", Price: 2.25, Currency: "USD"}},
 		},
-		AdjustmentFactors: map[string]float64{
-			"bidder_a": 1.0, // 2.50 * 1.0 = 2.50
-			"bidder_b": 0.9, // 3.00 * 0.9 = 2.70
-			"bidder_c": 1.1, // 2.25 * 1.1 = 2.475
-		},
 		Timestamp: time.Now(),
 	}
 
@@ -183,12 +173,9 @@ func TestProcessAuction_ThreeBids(t *testing.T) {
 	check.NotNil(t, attestationDoc.UserData.Winner)
 	check.NotNil(t, attestationDoc.UserData.RunnerUp)
 
-	// After adjustment factors, the ranking should be:
-	// 1. bidder_b: 2.70 (winner) - 3.00 * 0.9 = 2.70
-	// 2. bidder_a: 2.50 (runner-up) - 2.50 * 1.0 = 2.50
-	// 3. bidder_c: 2.475 - 2.25 * 1.1 = 2.475
+	// The highest original bid wins, followed by the next-highest bid.
 	check.Equal(t, "bid2", attestationDoc.UserData.Winner.ID)
-	check.Equal(t, 2.70, attestationDoc.UserData.Winner.Price)
+	check.Equal(t, 3.00, attestationDoc.UserData.Winner.Price)
 
 	check.Equal(t, "bid1", attestationDoc.UserData.RunnerUp.ID)
 	check.Equal(t, 2.50, attestationDoc.UserData.RunnerUp.Price)
@@ -258,10 +245,8 @@ func validateSuccessfulResponse(t *testing.T, response enclaveapi.EnclaveAuction
 
 	// User data hashes and nonces validation
 	check.NotEqual(t, "", attestationDoc.UserData.RequestHash)
-	check.NotEqual(t, "", attestationDoc.UserData.AdjustmentFactorsHash)
 	check.NotEqual(t, "", attestationDoc.UserData.BidHashNonce)
 	check.NotEqual(t, "", attestationDoc.UserData.RequestNonce)
-	check.NotEqual(t, "", attestationDoc.UserData.AdjustmentFactorsNonce)
 
 	return attestationDoc
 }
@@ -281,9 +266,8 @@ func TestProcessAuction_BidFloorEnforcement(t *testing.T) {
 			{CoreBid: core.CoreBid{ID: "bid2", Bidder: "bidder_b", Price: 2.50, Currency: "USD"}}, // At floor
 			{CoreBid: core.CoreBid{ID: "bid3", Bidder: "bidder_c", Price: 2.00, Currency: "USD"}}, // Below floor
 		},
-		AdjustmentFactors: map[string]float64{},
-		BidFloor:          2.50,
-		Timestamp:         time.Now(),
+		BidFloor:  2.50,
+		Timestamp: time.Now(),
 	}
 
 	response := ProcessAuction(mockAttester, req, nil)
@@ -324,9 +308,8 @@ func TestProcessAuction_BidFloorAllRejected(t *testing.T) {
 			{CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder_a", Price: 2.00, Currency: "USD"}},
 			{CoreBid: core.CoreBid{ID: "bid2", Bidder: "bidder_b", Price: 1.50, Currency: "USD"}},
 		},
-		AdjustmentFactors: map[string]float64{},
-		BidFloor:          2.50,
-		Timestamp:         time.Now(),
+		BidFloor:  2.50,
+		Timestamp: time.Now(),
 	}
 
 	response := ProcessAuction(mockAttester, req, nil)
@@ -758,9 +741,8 @@ func TestProcessAuction_BidFloorZero(t *testing.T) {
 			{CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder_a", Price: 3.00, Currency: "USD"}},
 			{CoreBid: core.CoreBid{ID: "bid2", Bidder: "bidder_b", Price: 0.50, Currency: "USD"}},
 		},
-		AdjustmentFactors: map[string]float64{}, // No floors
-		BidFloor:          0.00,
-		Timestamp:         time.Now(),
+		BidFloor:  0.00,
+		Timestamp: time.Now(),
 	}
 
 	response := ProcessAuction(mockAttester, req, nil)
@@ -777,49 +759,6 @@ func TestProcessAuction_BidFloorZero(t *testing.T) {
 	check.Equal(t, 2, len(attestationDoc.UserData.BidHashes))
 }
 
-// TestProcessAuction_BidFloorWithAdjustments tests floor enforcement happens after adjustments
-func TestProcessAuction_BidFloorWithAdjustments(t *testing.T) {
-	mockAttester := CreateMockEnclave(t)
-
-	req := enclaveapi.EnclaveAuctionRequest{
-		Type:          "auction_request",
-		AuctionID:     "test_auction_floor_with_adjustments",
-		RoundIDString: "test_auction_floor_with_adjustments-1",
-		Bids: []enclaveapi.EncryptedCoreBid{
-			{CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder_a", Price: 3.00, Currency: "USD"}},
-			{CoreBid: core.CoreBid{ID: "bid2", Bidder: "bidder_b", Price: 2.00, Currency: "USD"}}, // Below floor before adjustment
-		},
-		AdjustmentFactors: map[string]float64{
-			"bidder_b": 2.0, // This makes bid2 = $4.00 after adjustment
-		},
-		BidFloor:  2.50,
-		Timestamp: time.Now(),
-	}
-
-	response := ProcessAuction(mockAttester, req, nil)
-
-	// Validate successful response
-	assert.True(t, response.Success)
-	attestationDoc := parseAttestationFromResponse(t, response)
-	assert.NotNil(t, attestationDoc)
-
-	// Verify floors are included in attestation
-	check.Equal(t, 2.50, attestationDoc.UserData.BidFloor)
-
-	// Verify both bids are in attestation
-	check.Equal(t, 2, len(attestationDoc.UserData.BidHashes))
-
-	// Verify bidder_b won (after 2.0x adjustment: $2.00 × 2.0 = $4.00 > $2.50 floor)
-	check.NotNil(t, attestationDoc.UserData.Winner)
-	check.Equal(t, "bid2", attestationDoc.UserData.Winner.ID)
-	check.Equal(t, 4.00, attestationDoc.UserData.Winner.Price)
-
-	// Verify bidder_a is runner-up
-	check.NotNil(t, attestationDoc.UserData.RunnerUp)
-	check.Equal(t, "bid1", attestationDoc.UserData.RunnerUp.ID)
-	check.Equal(t, 3.00, attestationDoc.UserData.RunnerUp.Price)
-}
-
 // TestProcessAuction_NegativeFloorRejected tests that TEE rejects negative floor prices
 func TestProcessAuction_NegativeFloorRejected(t *testing.T) {
 	mockAttester := CreateMockEnclave(t)
@@ -831,9 +770,8 @@ func TestProcessAuction_NegativeFloorRejected(t *testing.T) {
 		Bids: []enclaveapi.EncryptedCoreBid{
 			{CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder_a", Price: 3.00, Currency: "USD"}},
 		},
-		AdjustmentFactors: map[string]float64{},
-		BidFloor:          -2.50, // Negative floor - invalid!
-		Timestamp:         time.Now(),
+		BidFloor:  -2.50, // Negative floor - invalid!
+		Timestamp: time.Now(),
 	}
 
 	response := ProcessAuction(mockAttester, req, nil)

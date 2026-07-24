@@ -33,11 +33,6 @@ func GenerateTEEProofs(attester EnclaveAttester, req enclaveapi.EnclaveAuctionRe
 		return nil, nil, fmt.Errorf("failed to generate request nonce: %w", err)
 	}
 
-	adjustmentFactorsNonce, err := generateNonce()
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to generate adjustment factors nonce: %w", err)
-	}
-
 	// Build list of bid hashes from decrypted bids
 	// All bids (encrypted and unencrypted) are hashed using their decrypted price
 	bidHashes := make([]string, 0, len(unencryptedBids))
@@ -47,10 +42,8 @@ func GenerateTEEProofs(attester EnclaveAttester, req enclaveapi.EnclaveAuctionRe
 	}
 
 	requestHash := calculateRequestHash(req, requestNonce)
-	adjustmentFactorsHash := calculateAdjustmentFactorsHash(req.AdjustmentFactors, adjustmentFactorsNonce)
-
-	return GenerateAttestation(attester, req, bidHashes, requestHash, adjustmentFactorsHash,
-		bidHashNonce, requestNonce, adjustmentFactorsNonce, winner, runnerUp)
+	return GenerateAttestation(attester, req, bidHashes, requestHash,
+		bidHashNonce, requestNonce, winner, runnerUp)
 }
 
 // generateSecureRandomBytes generates cryptographically secure random bytes
@@ -82,10 +75,6 @@ func calculateRequestHash(req enclaveapi.EnclaveAuctionRequest, nonce string) st
 	return core.ComputeRequestHash(req.AuctionID, roundID, nonce)
 }
 
-func calculateAdjustmentFactorsHash(adjustmentFactors map[string]float64, nonce string) string {
-	return core.ComputeAdjustmentFactorsHash(adjustmentFactors, nonce)
-}
-
 // stripBidderName converts a CoreBid to CoreBidWithoutBidder, removing bidder identity
 func stripBidderName(bid *core.CoreBid) *enclaveapi.CoreBidWithoutBidder {
 	if bid == nil {
@@ -105,10 +94,8 @@ func GenerateAttestation(
 	req enclaveapi.EnclaveAuctionRequest,
 	bidHashes []string,
 	requestHash string,
-	adjustmentFactorsHash string,
 	bidHashNonce string,
 	requestNonce string,
-	adjustmentFactorsNonce string,
 	winner *core.CoreBid,
 	runnerUp *core.CoreBid,
 ) (enclaveapi.AttestationCOSE, *float64, error) {
@@ -116,19 +103,17 @@ func GenerateAttestation(
 
 	// Create the user data that will be embedded in the attestation
 	userData := &enclaveapi.AuctionAttestationUserData{
-		AuctionID:              req.AuctionID,
-		RoundID:                req.RoundID,
-		RoundIDString:          req.RoundIDString,
-		BidHashes:              bidHashes,
-		RequestHash:            requestHash,
-		AdjustmentFactorsHash:  adjustmentFactorsHash,
-		BidFloor:               req.BidFloor,
-		BidHashNonce:           bidHashNonce,
-		Winner:                 stripBidderName(winner),
-		RunnerUp:               stripBidderName(runnerUp),
-		RequestNonce:           requestNonce,
-		AdjustmentFactorsNonce: adjustmentFactorsNonce,
-		Timestamp:              now,
+		AuctionID:     req.AuctionID,
+		RoundID:       req.RoundID,
+		RoundIDString: req.RoundIDString,
+		BidHashes:     bidHashes,
+		RequestHash:   requestHash,
+		BidFloor:      req.BidFloor,
+		BidHashNonce:  bidHashNonce,
+		Winner:        stripBidderName(winner),
+		RunnerUp:      stripBidderName(runnerUp),
+		RequestNonce:  requestNonce,
+		Timestamp:     now,
 	}
 
 	if attester == nil {

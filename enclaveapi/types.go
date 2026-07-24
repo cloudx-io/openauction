@@ -101,19 +101,17 @@ type CoreBidWithoutBidder struct {
 
 // AuctionAttestationUserData represents the auction-specific data embedded in the attestation
 type AuctionAttestationUserData struct {
-	AuctionID              string                `json:"auction_id"`
-	RoundID                int                   `json:"round_id"`
-	RoundIDString          string                `json:"round_id_string,omitempty"`
-	BidHashes              []string              `json:"bid_hashes"`
-	RequestHash            string                `json:"request_hash"`
-	AdjustmentFactorsHash  string                `json:"adjustment_factors_hash"`
-	BidFloor               float64               `json:"bid_floor"`
-	BidHashNonce           string                `json:"bid_hash_nonce"`
-	Winner                 *CoreBidWithoutBidder `json:"winner,omitempty"`
-	RunnerUp               *CoreBidWithoutBidder `json:"runner_up,omitempty"`
-	RequestNonce           string                `json:"request_nonce"`
-	AdjustmentFactorsNonce string                `json:"adjustment_factors_nonce"`
-	Timestamp              time.Time             `json:"timestamp"`
+	AuctionID     string                `json:"auction_id"`
+	RoundID       int                   `json:"round_id"`
+	RoundIDString string                `json:"round_id_string,omitempty"`
+	BidHashes     []string              `json:"bid_hashes"`
+	RequestHash   string                `json:"request_hash"`
+	BidFloor      float64               `json:"bid_floor"`
+	BidHashNonce  string                `json:"bid_hash_nonce"`
+	Winner        *CoreBidWithoutBidder `json:"winner,omitempty"`
+	RunnerUp      *CoreBidWithoutBidder `json:"runner_up,omitempty"`
+	RequestNonce  string                `json:"request_nonce"`
+	Timestamp     time.Time             `json:"timestamp"`
 }
 
 // URLEncode encodes attestation for URLs
@@ -137,14 +135,13 @@ type EncryptedCoreBid struct {
 
 // EnclaveAuctionRequest represents the format expected by TEE enclaves for auction processing
 type EnclaveAuctionRequest struct {
-	Type              string             `json:"type"`
-	AuctionID         string             `json:"auction_id"`
-	RoundID           int                `json:"round_id"`
-	RoundIDString     string             `json:"round_id_string,omitempty"`
-	Bids              []EncryptedCoreBid `json:"bids"`
-	AdjustmentFactors map[string]float64 `json:"adjustment_factors"`
-	BidFloor          float64            `json:"bid_floor"`
-	Timestamp         time.Time          `json:"timestamp"`
+	Type          string             `json:"type"`
+	AuctionID     string             `json:"auction_id"`
+	RoundID       int                `json:"round_id"`
+	RoundIDString string             `json:"round_id_string,omitempty"`
+	Bids          []EncryptedCoreBid `json:"bids"`
+	BidFloor      float64            `json:"bid_floor"`
+	Timestamp     time.Time          `json:"timestamp"`
 }
 
 // EnclaveAuctionResponse represents the response from TEE enclaves after auction processing

@@ -92,11 +92,6 @@ func showUsage() {
 	fmt.Println("  {")
 	fmt.Println("    \"id\": \"auction-123\",")
 	fmt.Println("    \"imp\": [{\"bidfloor\": 2.00}],")
-	fmt.Println("    \"ext\": {")
-	fmt.Println("      \"prebid\": {")
-	fmt.Println("        \"bidadjustmentfactors\": {\"bidderA\": 1.0}")
-	fmt.Println("      }")
-	fmt.Println("    }")
 	fmt.Println("  }")
 	fmt.Println()
 	fmt.Println("Bid Response (from S3: {bidder}_response_0.json):")
@@ -173,20 +168,6 @@ func extractValidationInput(bidRequestJSON, bidResponseJSON, notificationJSON []
 		}
 	}
 
-	// Extract adjustment factors from ext.prebid.bidadjustmentfactors
-	adjustmentFactors := map[string]float64{}
-	if ext, ok := bidRequest["ext"].(map[string]any); ok {
-		if prebid, ok := ext["prebid"].(map[string]any); ok {
-			if factors, ok := prebid["bidadjustmentfactors"].(map[string]any); ok {
-				for bidder, factor := range factors {
-					if f, ok := factor.(float64); ok {
-						adjustmentFactors[bidder] = f
-					}
-				}
-			}
-		}
-	}
-
 	// Extract bid_id, bid_price, and optional encrypted_payload from bid response
 	var bidID string
 	var bidPrice float64
@@ -247,7 +228,6 @@ func extractValidationInput(bidRequestJSON, bidResponseJSON, notificationJSON []
 		EncryptedPayload:    encryptedPayload,
 		BidFloor:            bidFloor,
 		ClearingPrice:       clearingPrice,
-		AdjustmentFactors:   adjustmentFactors,
 		IsWinner:            isWinner,
 	}, nil
 }
@@ -268,7 +248,6 @@ func outputText(result *validation.AuctionValidationResult) {
 	fmt.Printf("  Bid Hash Valid:          %v\n", result.BidHashValid)
 	fmt.Printf("  Clearing Price Valid:    %v\n", result.ClearingPriceValid)
 	fmt.Printf("  Bid Floor Valid:         %v\n", result.BidFloorValid)
-	fmt.Printf("  Adjustment Hash Valid:   %v\n", result.AdjustmentHashValid)
 	fmt.Printf("  Winner Valid:            %v\n", result.WinnerValid)
 
 	fmt.Println()
@@ -290,16 +269,15 @@ func outputText(result *validation.AuctionValidationResult) {
 
 func outputJSON(result *validation.AuctionValidationResult) {
 	output := map[string]any{
-		"valid":                 result.IsValid(),
-		"pcrs_valid":            result.PCRsValid,
-		"certificate_valid":     result.CertificateValid,
-		"signature_valid":       result.SignatureValid,
-		"bid_hash_valid":        result.BidHashValid,
-		"clearing_price_valid":  result.ClearingPriceValid,
-		"bid_floor_valid":       result.BidFloorValid,
-		"adjustment_hash_valid": result.AdjustmentHashValid,
-		"winner_valid":          result.WinnerValid,
-		"details":               result.ValidationDetails,
+		"valid":                result.IsValid(),
+		"pcrs_valid":           result.PCRsValid,
+		"certificate_valid":    result.CertificateValid,
+		"signature_valid":      result.SignatureValid,
+		"bid_hash_valid":       result.BidHashValid,
+		"clearing_price_valid": result.ClearingPriceValid,
+		"bid_floor_valid":      result.BidFloorValid,
+		"winner_valid":         result.WinnerValid,
+		"details":              result.ValidationDetails,
 	}
 
 	data, err := json.MarshalIndent(output, "", "  ")

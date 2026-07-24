@@ -8,7 +8,7 @@ https://www.cloudx.ai/
 
 This repository contains the core auction functionality that has been extracted from the main CloudX platform for independent versioning and reusability. It includes:
 
-- **`core/`**: Core auction logic including bid ranking, adjustments, and floor enforcement
+- **`core/`**: Core auction logic including bid ranking and floor enforcement
 - **`enclaveapi/`**: API types for TEE enclave communication
 - **`enclave/`**: AWS Nitro Enclave implementation for secure auction processing
 

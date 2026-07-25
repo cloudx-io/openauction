@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	enclave "github.com/edgebitio/nitro-enclaves-sdk-go"
 	"github.com/peterldowns/testy/assert"
 	"github.com/peterldowns/testy/check"
 
@@ -205,6 +206,56 @@ func TestProcessAuction_ThreeBids(t *testing.T) {
 	check.True(t, slices.Contains(attestationDoc.UserData.BidHashes, hash1))
 	check.True(t, slices.Contains(attestationDoc.UserData.BidHashes, hash2))
 	check.True(t, slices.Contains(attestationDoc.UserData.BidHashes, hash3))
+}
+
+func TestProcessAuction_RejectsCrossBidderDuplicateIDs(t *testing.T) {
+	attestCalled := false
+	attester := &MockEnclaveHandle{
+		AttestFunc: func(enclave.AttestationOptions) ([]byte, error) {
+			attestCalled = true
+			return nil, nil
+		},
+	}
+	req := enclaveapi.EnclaveAuctionRequest{
+		AuctionID: "duplicate-cross-bidder",
+		Bids: []enclaveapi.EncryptedCoreBid{
+			{CoreBid: core.CoreBid{ID: "shared", Bidder: "bidder-a", Price: 3}},
+			{CoreBid: core.CoreBid{ID: "shared", Bidder: "bidder-b", Price: 2}},
+		},
+	}
+
+	response := ProcessAuction(attester, req, nil)
+
+	check.False(t, response.Success)
+	check.Equal(t, `duplicate bid ID "shared"`, response.Message)
+	check.Equal(t, enclaveapi.AttestationCOSEBase64(""), response.AttestationCOSEBase64)
+	check.False(t, attestCalled)
+}
+
+func TestProcessAuction_RejectsWinnerFloorRejectedIDAmbiguity(t *testing.T) {
+	attestCalled := false
+	attester := &MockEnclaveHandle{
+		AttestFunc: func(enclave.AttestationOptions) ([]byte, error) {
+			attestCalled = true
+			return nil, nil
+		},
+	}
+	req := enclaveapi.EnclaveAuctionRequest{
+		AuctionID: "duplicate-winner-rejected",
+		BidFloor:  2,
+		Bids: []enclaveapi.EncryptedCoreBid{
+			{CoreBid: core.CoreBid{ID: "ambiguous", Bidder: "bidder-a", Price: 3}},
+			{CoreBid: core.CoreBid{ID: "ambiguous", Bidder: "bidder-a", Price: 1}},
+		},
+	}
+
+	response := ProcessAuction(attester, req, nil)
+
+	check.False(t, response.Success)
+	check.Equal(t, `duplicate bid ID "ambiguous"`, response.Message)
+	check.Equal(t, []string(nil), response.FloorRejectedBidIDs)
+	check.Equal(t, enclaveapi.AttestationCOSEBase64(""), response.AttestationCOSEBase64)
+	check.False(t, attestCalled)
 }
 
 func TestGetBidderName(t *testing.T) {

@@ -113,7 +113,7 @@ func TestGenerateAttestation(t *testing.T) {
 	// Test with nil enclave handle (error case)
 	bidHashes := []string{"hash1", "hash2"}
 	coseBytes, _, err := GenerateAttestation(nil, req, bidHashes, "test_request_hash", "test_adj_hash",
-		"test_bid_nonce", "test_req_nonce", "test_adj_nonce", winner, runnerUp)
+		"test_bid_nonce", "test_req_nonce", "test_adj_nonce", winner, runnerUp, nil)
 
 	// Should fail with nil enclave handle
 	check.Error(t, err)
@@ -143,7 +143,7 @@ func TestGenerateAttestationWithMock(t *testing.T) {
 
 	// Test successful attestation generation with mock
 	coseBytes, attestationUs, err := GenerateAttestation(mockEnclave, req, []string{bidHash}, "test_request_hash", "test_adj_hash",
-		bidHashNonce, "test_req_nonce", "test_adj_nonce", winner, nil)
+		bidHashNonce, "test_req_nonce", "test_adj_nonce", winner, nil, nil)
 
 	// Should succeed with mock enclave
 	check.NoError(t, err)
@@ -222,7 +222,7 @@ func TestGenerateAttestationWithEncryptedBids(t *testing.T) {
 
 	// Test successful attestation generation with encrypted bids
 	coseBytes, attestationUs, err := GenerateAttestation(mockEnclave, req, bidHashes, "test_request_hash", "test_adj_hash",
-		bidHashNonce, "test_req_nonce", "test_adj_nonce", winner, runnerUp)
+		bidHashNonce, "test_req_nonce", "test_adj_nonce", winner, runnerUp, nil)
 
 	// Should succeed with mock enclave
 	check.NoError(t, err)
@@ -488,7 +488,7 @@ func TestGenerateAttestationWithMixedBidTypes(t *testing.T) {
 
 	// Generate attestation for mixed bid scenario
 	coseBytes, _, err := GenerateAttestation(mockEnclave, req, bidHashes, "mixed_request_hash", "mixed_adj_hash",
-		bidHashNonce, "mixed_req_nonce", "mixed_adj_nonce", winner, runnerUp)
+		bidHashNonce, "mixed_req_nonce", "mixed_adj_nonce", winner, runnerUp, nil)
 
 	// Verify successful attestation generation
 	check.NoError(t, err)

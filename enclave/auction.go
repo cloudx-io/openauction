@@ -81,7 +81,14 @@ func ProcessAuction(attester EnclaveAttester, req enclaveapi.EnclaveAuctionReque
 	winner := auctionResult.Winner
 	runnerUp := auctionResult.RunnerUp
 
-	coseAttestation, attestationUs, err := GenerateTEEProofs(attester, req, unencryptedBids, winner, runnerUp)
+	coseAttestation, attestationUs, err := GenerateTEEProofs(
+		attester,
+		req,
+		unencryptedBids,
+		winner,
+		runnerUp,
+		auctionResult.FloorRejectedBids,
+	)
 	processingTime := time.Since(startTime).Milliseconds()
 
 	log.Printf("INFO: Auction complete: winner=%s (%.2f), runner-up=%s (%.2f), processing=%dms",

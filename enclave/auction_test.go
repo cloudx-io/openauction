@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"testing"
@@ -310,6 +312,44 @@ func TestProcessAuction_BidFloorEnforcement(t *testing.T) {
 	check.NotNil(t, attestationDoc.UserData.RunnerUp)
 	check.Equal(t, "bid2", attestationDoc.UserData.RunnerUp.ID)
 	check.Equal(t, 2.50, attestationDoc.UserData.RunnerUp.Price)
+}
+
+func TestProcessAuction_AttestsDecryptedAdjustedFloorRejectedBid(t *testing.T) {
+	mockAttester := CreateMockEnclave(t)
+	keyManager := newTestKeyManager(t)
+	encryptedBid := encryptPriceBid(t, keyManager, "bid1", "private_bidder", `{"price": 2.00}`)
+	encryptedBid.Price = 999.0
+	encryptedBid.DealID = "deal-1"
+	encryptedBid.BidType = "banner"
+
+	req := enclaveapi.EnclaveAuctionRequest{
+		Type:              "auction_request",
+		AuctionID:         "test_attested_floor_rejection",
+		RoundIDString:     "test_attested_floor_rejection-1",
+		Bids:              []enclaveapi.EncryptedCoreBid{encryptedBid},
+		AdjustmentFactors: map[string]float64{"private_bidder": 0.5},
+		BidFloor:          1.5,
+		Timestamp:         time.Now(),
+	}
+
+	response := ProcessAuction(mockAttester, req, keyManager)
+
+	check.True(t, response.Success)
+	check.Equal(t, []string{"bid1"}, response.FloorRejectedBidIDs)
+
+	attestationDoc := parseAttestationFromResponse(t, response)
+	check.Equal(t, []enclaveapi.CoreBidWithoutBidder{{
+		ID:       "bid1",
+		Price:    1.0,
+		Currency: "USD",
+		DealID:   "deal-1",
+		BidType:  "banner",
+	}}, attestationDoc.UserData.FloorRejectedBids)
+
+	userDataJSON, err := json.Marshal(attestationDoc.UserData)
+	check.NoError(t, err)
+	check.True(t, !bytes.Contains(userDataJSON, []byte(`"bidder"`)))
+	check.True(t, !bytes.Contains(userDataJSON, []byte(`999`)))
 }
 
 // TestProcessAuction_BidFloorAllRejected tests when all bids are below floor

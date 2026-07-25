@@ -48,6 +48,32 @@ func TestRunAuction_BasicFlow(t *testing.T) {
 	check.Equal(t, "bid3", result.FloorRejectedBidIDs[0])
 }
 
+func TestRunAuction_FloorRejectedBidsUseAdjustedValues(t *testing.T) {
+	bids := []CoreBid{
+		{
+			ID:       "rejected",
+			Bidder:   "bidder_a",
+			Price:    2.0,
+			Currency: "USD",
+			DealID:   "deal-1",
+			BidType:  "banner",
+		},
+	}
+
+	result := RunAuction(bids, map[string]float64{"bidder_a": 0.5}, 1.5)
+
+	check.Equal(t, []string{"rejected"}, result.FloorRejectedBidIDs)
+	check.Equal(t, []CoreBid{{
+		ID:       "rejected",
+		Bidder:   "bidder_a",
+		Price:    1.0,
+		Currency: "USD",
+		DealID:   "deal-1",
+		BidType:  "banner",
+	}}, result.FloorRejectedBids)
+	check.Equal(t, 2.0, bids[0].Price)
+}
+
 func TestRunAuction_NoBids(t *testing.T) {
 	result := RunAuction([]CoreBid{}, nil, 0.0)
 

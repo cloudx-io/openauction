@@ -22,7 +22,7 @@ type EnclaveAttester interface {
 	Attest(options enclave.AttestationOptions) ([]byte, error)
 }
 
-func GenerateTEEProofs(attester EnclaveAttester, req enclaveapi.EnclaveAuctionRequest, unencryptedBids []core.CoreBid, winner, runnerUp *core.CoreBid) (enclaveapi.AttestationCOSE, *float64, error) {
+func GenerateTEEProofs(attester EnclaveAttester, req enclaveapi.EnclaveAuctionRequest, unencryptedBids []core.CoreBid, winner, runnerUp *core.CoreBid, floorRejectedBids []core.CoreBid) (enclaveapi.AttestationCOSE, *float64, error) {
 	bidHashNonce, err := generateNonce()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to generate bid hash nonce: %w", err)
@@ -50,7 +50,7 @@ func GenerateTEEProofs(attester EnclaveAttester, req enclaveapi.EnclaveAuctionRe
 	adjustmentFactorsHash := calculateAdjustmentFactorsHash(req.AdjustmentFactors, adjustmentFactorsNonce)
 
 	return GenerateAttestation(attester, req, bidHashes, requestHash, adjustmentFactorsHash,
-		bidHashNonce, requestNonce, adjustmentFactorsNonce, winner, runnerUp)
+		bidHashNonce, requestNonce, adjustmentFactorsNonce, winner, runnerUp, floorRejectedBids)
 }
 
 // generateSecureRandomBytes generates cryptographically secure random bytes
@@ -100,6 +100,18 @@ func stripBidderName(bid *core.CoreBid) *enclaveapi.CoreBidWithoutBidder {
 	}
 }
 
+func stripBidderNames(bids []core.CoreBid) []enclaveapi.CoreBidWithoutBidder {
+	if len(bids) == 0 {
+		return nil
+	}
+
+	strippedBids := make([]enclaveapi.CoreBidWithoutBidder, 0, len(bids))
+	for i := range bids {
+		strippedBids = append(strippedBids, *stripBidderName(&bids[i]))
+	}
+	return strippedBids
+}
+
 func GenerateAttestation(
 	attester EnclaveAttester,
 	req enclaveapi.EnclaveAuctionRequest,
@@ -111,6 +123,7 @@ func GenerateAttestation(
 	adjustmentFactorsNonce string,
 	winner *core.CoreBid,
 	runnerUp *core.CoreBid,
+	floorRejectedBids []core.CoreBid,
 ) (enclaveapi.AttestationCOSE, *float64, error) {
 	now := time.Now()
 
@@ -126,6 +139,7 @@ func GenerateAttestation(
 		BidHashNonce:           bidHashNonce,
 		Winner:                 stripBidderName(winner),
 		RunnerUp:               stripBidderName(runnerUp),
+		FloorRejectedBids:      stripBidderNames(floorRejectedBids),
 		RequestNonce:           requestNonce,
 		AdjustmentFactorsNonce: adjustmentFactorsNonce,
 		Timestamp:              now,

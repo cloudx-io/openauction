@@ -46,6 +46,15 @@ func ProcessAuction(attester EnclaveAttester, req enclaveapi.EnclaveAuctionReque
 	startTime := time.Now()
 	log.Printf("INFO: Processing auction %s with %d bids", req.AuctionID, len(req.Bids))
 
+	if err := validateUniqueBidIDs(req.Bids); err != nil {
+		return enclaveapi.EnclaveAuctionResponse{
+			Type:           "auction_response",
+			Success:        false,
+			Message:        err.Error(),
+			ProcessingTime: time.Since(startTime).Milliseconds(),
+		}
+	}
+
 	// Validate bid floor is non-negative
 	if req.BidFloor < 0.0 {
 		return enclaveapi.EnclaveAuctionResponse{
@@ -81,7 +90,14 @@ func ProcessAuction(attester EnclaveAttester, req enclaveapi.EnclaveAuctionReque
 	winner := auctionResult.Winner
 	runnerUp := auctionResult.RunnerUp
 
-	coseAttestation, attestationUs, err := GenerateTEEProofs(attester, req, unencryptedBids, winner, runnerUp)
+	coseAttestation, attestationUs, err := GenerateTEEProofs(
+		attester,
+		req,
+		unencryptedBids,
+		winner,
+		runnerUp,
+		auctionResult.FloorRejectedBids,
+	)
 	processingTime := time.Since(startTime).Milliseconds()
 
 	log.Printf("INFO: Auction complete: winner=%s (%.2f), runner-up=%s (%.2f), processing=%dms",
@@ -109,6 +125,17 @@ func ProcessAuction(attester EnclaveAttester, req enclaveapi.EnclaveAuctionReque
 		ProcessingTime:        processingTime,
 		AttestationUs:         attestationUs,
 	}
+}
+
+func validateUniqueBidIDs(bids []enclaveapi.EncryptedCoreBid) error {
+	seen := make(map[string]struct{}, len(bids))
+	for _, bid := range bids {
+		if _, exists := seen[bid.ID]; exists {
+			return fmt.Errorf("duplicate bid ID %q", bid.ID)
+		}
+		seen[bid.ID] = struct{}{}
+	}
+	return nil
 }
 
 func getBidderName(bid *core.CoreBid) string {

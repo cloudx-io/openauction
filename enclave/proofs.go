@@ -17,12 +17,17 @@ import (
 	"github.com/cloudx-io/openauction/enclaveapi"
 )
 
+const (
+	maxAttestationUserDataBytes      = 1024
+	maxAttestedFloorRejectedBidCount = 4
+)
+
 // EnclaveAttester interface for dependency injection and testing
 type EnclaveAttester interface {
 	Attest(options enclave.AttestationOptions) ([]byte, error)
 }
 
-func GenerateTEEProofs(attester EnclaveAttester, req enclaveapi.EnclaveAuctionRequest, unencryptedBids []core.CoreBid, winner, runnerUp *core.CoreBid) (enclaveapi.AttestationCOSE, *float64, error) {
+func GenerateTEEProofs(attester EnclaveAttester, req enclaveapi.EnclaveAuctionRequest, unencryptedBids []core.CoreBid, winner, runnerUp *core.CoreBid, floorRejectedBids []core.CoreBid) (enclaveapi.AttestationCOSE, *float64, error) {
 	bidHashNonce, err := generateNonce()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to generate bid hash nonce: %w", err)
@@ -50,7 +55,7 @@ func GenerateTEEProofs(attester EnclaveAttester, req enclaveapi.EnclaveAuctionRe
 	adjustmentFactorsHash := calculateAdjustmentFactorsHash(req.AdjustmentFactors, adjustmentFactorsNonce)
 
 	return GenerateAttestation(attester, req, bidHashes, requestHash, adjustmentFactorsHash,
-		bidHashNonce, requestNonce, adjustmentFactorsNonce, winner, runnerUp)
+		bidHashNonce, requestNonce, adjustmentFactorsNonce, winner, runnerUp, floorRejectedBids)
 }
 
 // generateSecureRandomBytes generates cryptographically secure random bytes
@@ -100,6 +105,21 @@ func stripBidderName(bid *core.CoreBid) *enclaveapi.CoreBidWithoutBidder {
 	}
 }
 
+func attestFloorRejectedBids(bids []core.CoreBid) []enclaveapi.AttestedFloorRejectedBid {
+	if len(bids) == 0 {
+		return nil
+	}
+
+	attestedBids := make([]enclaveapi.AttestedFloorRejectedBid, 0, len(bids))
+	for _, bid := range bids {
+		attestedBids = append(attestedBids, enclaveapi.AttestedFloorRejectedBid{
+			ID:    bid.ID,
+			Price: bid.Price,
+		})
+	}
+	return attestedBids
+}
+
 func GenerateAttestation(
 	attester EnclaveAttester,
 	req enclaveapi.EnclaveAuctionRequest,
@@ -111,7 +131,16 @@ func GenerateAttestation(
 	adjustmentFactorsNonce string,
 	winner *core.CoreBid,
 	runnerUp *core.CoreBid,
+	floorRejectedBids []core.CoreBid,
 ) (enclaveapi.AttestationCOSE, *float64, error) {
+	if len(floorRejectedBids) > maxAttestedFloorRejectedBidCount {
+		return nil, nil, fmt.Errorf(
+			"floor-rejected bid count %d exceeds attestation limit %d",
+			len(floorRejectedBids),
+			maxAttestedFloorRejectedBidCount,
+		)
+	}
+
 	now := time.Now()
 
 	// Create the user data that will be embedded in the attestation
@@ -126,6 +155,7 @@ func GenerateAttestation(
 		BidHashNonce:           bidHashNonce,
 		Winner:                 stripBidderName(winner),
 		RunnerUp:               stripBidderName(runnerUp),
+		FloorRejectedBids:      attestFloorRejectedBids(floorRejectedBids),
 		RequestNonce:           requestNonce,
 		AdjustmentFactorsNonce: adjustmentFactorsNonce,
 		Timestamp:              now,
@@ -139,6 +169,13 @@ func GenerateAttestation(
 	userDataBytes, err := json.Marshal(userData)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to marshal user data: %w", err)
+	}
+	if len(userDataBytes) > maxAttestationUserDataBytes {
+		return nil, nil, fmt.Errorf(
+			"attestation user data is %d bytes, exceeds NSM limit %d",
+			len(userDataBytes),
+			maxAttestationUserDataBytes,
+		)
 	}
 	randomNonce, err := generateNonce()
 	if err != nil {

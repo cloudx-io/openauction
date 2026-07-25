@@ -34,6 +34,9 @@ type AuctionResult struct {
 
 	// FloorRejectedBidIDs contains IDs of bids that failed floor enforcement
 	FloorRejectedBidIDs []string
+
+	// FloorRejectedBids contains post-adjustment bids that failed floor enforcement
+	FloorRejectedBids []CoreBid
 }
 
 // ExcludedBid represents a bid that was excluded from the auction (floor rejection, decryption failure, etc.)

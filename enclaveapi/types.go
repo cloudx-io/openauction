@@ -99,21 +99,28 @@ type CoreBidWithoutBidder struct {
 	BidType  string  `json:"bid_type,omitempty"`
 }
 
+// AttestedFloorRejectedBid contains the trusted values needed to recover a rejected bid.
+type AttestedFloorRejectedBid struct {
+	ID    string  `json:"id"`
+	Price float64 `json:"price"`
+}
+
 // AuctionAttestationUserData represents the auction-specific data embedded in the attestation
 type AuctionAttestationUserData struct {
-	AuctionID              string                `json:"auction_id"`
-	RoundID                int                   `json:"round_id"`
-	RoundIDString          string                `json:"round_id_string,omitempty"`
-	BidHashes              []string              `json:"bid_hashes"`
-	RequestHash            string                `json:"request_hash"`
-	AdjustmentFactorsHash  string                `json:"adjustment_factors_hash"`
-	BidFloor               float64               `json:"bid_floor"`
-	BidHashNonce           string                `json:"bid_hash_nonce"`
-	Winner                 *CoreBidWithoutBidder `json:"winner,omitempty"`
-	RunnerUp               *CoreBidWithoutBidder `json:"runner_up,omitempty"`
-	RequestNonce           string                `json:"request_nonce"`
-	AdjustmentFactorsNonce string                `json:"adjustment_factors_nonce"`
-	Timestamp              time.Time             `json:"timestamp"`
+	AuctionID              string                     `json:"auction_id"`
+	RoundID                int                        `json:"round_id"`
+	RoundIDString          string                     `json:"round_id_string,omitempty"`
+	BidHashes              []string                   `json:"bid_hashes"`
+	RequestHash            string                     `json:"request_hash"`
+	AdjustmentFactorsHash  string                     `json:"adjustment_factors_hash"`
+	BidFloor               float64                    `json:"bid_floor"`
+	BidHashNonce           string                     `json:"bid_hash_nonce"`
+	Winner                 *CoreBidWithoutBidder      `json:"winner,omitempty"`
+	RunnerUp               *CoreBidWithoutBidder      `json:"runner_up,omitempty"`
+	FloorRejectedBids      []AttestedFloorRejectedBid `json:"floor_rejected_bids,omitempty"`
+	RequestNonce           string                     `json:"request_nonce"`
+	AdjustmentFactorsNonce string                     `json:"adjustment_factors_nonce"`
+	Timestamp              time.Time                  `json:"timestamp"`
 }
 
 // URLEncode encodes attestation for URLs

@@ -1,6 +1,7 @@
 package enclaveapi
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -234,6 +235,24 @@ func TestAttestationTypes_JSONMarshaling(t *testing.T) {
 
 	encoded := jsonData.EncodeBase64()
 	check.Equal(t, original.Attestation, encoded)
+}
+
+func TestAuctionAttestationUserData_FloorRejectedBidsJSON(t *testing.T) {
+	withoutRejectedBids, err := json.Marshal(AuctionAttestationUserData{})
+	check.NoError(t, err)
+	check.True(t, !strings.Contains(string(withoutRejectedBids), "floor_rejected_bids"))
+
+	withRejectedBids, err := json.Marshal(AuctionAttestationUserData{
+		FloorRejectedBids: []AttestedFloorRejectedBid{{
+			ID:    "bid1",
+			Price: 1.25,
+		}},
+	})
+	check.NoError(t, err)
+	check.True(t, strings.Contains(string(withRejectedBids), `"floor_rejected_bids":[{"id":"bid1","price":1.25}]`))
+	for _, field := range []string{`"bidder"`, `"currency"`, `"deal_id"`, `"bid_type"`} {
+		check.True(t, !strings.Contains(string(withRejectedBids), field))
+	}
 }
 
 // TestAttestationTypes_RoundTrip tests complete round-trip conversions

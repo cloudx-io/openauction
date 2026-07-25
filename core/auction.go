@@ -48,7 +48,11 @@ func RunAuction(
 	}
 
 	// Step 3: Enforce floor price
-	eligibleBids, floorRejectedBids := EnforceBidFloor(adjustedBids, bidFloor)
+	eligibleBids, floorRejectedBids := partitionBidsByFloor(adjustedBids, bidFloor)
+	floorRejectedBidIDs := make([]string, 0, len(floorRejectedBids))
+	for _, bid := range floorRejectedBids {
+		floorRejectedBidIDs = append(floorRejectedBidIDs, bid.ID)
+	}
 
 	// Step 4: Rank eligible bids by price with random tie-breaking
 	ranking := RankCoreBids(eligibleBids, defaultRandSource)
@@ -67,6 +71,7 @@ func RunAuction(
 		RunnerUp:            runnerUp,
 		EligibleBids:        eligibleBids,
 		PriceRejectedBidIDs: priceRejectedBids,
-		FloorRejectedBidIDs: floorRejectedBids,
+		FloorRejectedBidIDs: floorRejectedBidIDs,
+		FloorRejectedBids:   floorRejectedBids,
 	}
 }

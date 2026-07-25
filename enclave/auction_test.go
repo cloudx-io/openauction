@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"testing"
 	"time"
 
+	enclave "github.com/edgebitio/nitro-enclaves-sdk-go"
 	"github.com/peterldowns/testy/assert"
 	"github.com/peterldowns/testy/check"
 
@@ -205,6 +208,56 @@ func TestProcessAuction_ThreeBids(t *testing.T) {
 	check.True(t, slices.Contains(attestationDoc.UserData.BidHashes, hash3))
 }
 
+func TestProcessAuction_RejectsCrossBidderDuplicateIDs(t *testing.T) {
+	attestCalled := false
+	attester := &MockEnclaveHandle{
+		AttestFunc: func(enclave.AttestationOptions) ([]byte, error) {
+			attestCalled = true
+			return nil, nil
+		},
+	}
+	req := enclaveapi.EnclaveAuctionRequest{
+		AuctionID: "duplicate-cross-bidder",
+		Bids: []enclaveapi.EncryptedCoreBid{
+			{CoreBid: core.CoreBid{ID: "shared", Bidder: "bidder-a", Price: 3}},
+			{CoreBid: core.CoreBid{ID: "shared", Bidder: "bidder-b", Price: 2}},
+		},
+	}
+
+	response := ProcessAuction(attester, req, nil)
+
+	check.False(t, response.Success)
+	check.Equal(t, `duplicate bid ID "shared"`, response.Message)
+	check.Equal(t, enclaveapi.AttestationCOSEBase64(""), response.AttestationCOSEBase64)
+	check.False(t, attestCalled)
+}
+
+func TestProcessAuction_RejectsWinnerFloorRejectedIDAmbiguity(t *testing.T) {
+	attestCalled := false
+	attester := &MockEnclaveHandle{
+		AttestFunc: func(enclave.AttestationOptions) ([]byte, error) {
+			attestCalled = true
+			return nil, nil
+		},
+	}
+	req := enclaveapi.EnclaveAuctionRequest{
+		AuctionID: "duplicate-winner-rejected",
+		BidFloor:  2,
+		Bids: []enclaveapi.EncryptedCoreBid{
+			{CoreBid: core.CoreBid{ID: "ambiguous", Bidder: "bidder-a", Price: 3}},
+			{CoreBid: core.CoreBid{ID: "ambiguous", Bidder: "bidder-a", Price: 1}},
+		},
+	}
+
+	response := ProcessAuction(attester, req, nil)
+
+	check.False(t, response.Success)
+	check.Equal(t, `duplicate bid ID "ambiguous"`, response.Message)
+	check.Equal(t, []string(nil), response.FloorRejectedBidIDs)
+	check.Equal(t, enclaveapi.AttestationCOSEBase64(""), response.AttestationCOSEBase64)
+	check.False(t, attestCalled)
+}
+
 func TestGetBidderName(t *testing.T) {
 	bid := &core.CoreBid{
 		ID:     "test_bid",
@@ -310,6 +363,48 @@ func TestProcessAuction_BidFloorEnforcement(t *testing.T) {
 	check.NotNil(t, attestationDoc.UserData.RunnerUp)
 	check.Equal(t, "bid2", attestationDoc.UserData.RunnerUp.ID)
 	check.Equal(t, 2.50, attestationDoc.UserData.RunnerUp.Price)
+}
+
+func TestProcessAuction_AttestsDecryptedAdjustedFloorRejectedBid(t *testing.T) {
+	mockAttester := CreateMockEnclave(t)
+	keyManager := newTestKeyManager(t)
+	encryptedBid := encryptPriceBid(t, keyManager, "bid1", "private_bidder", `{"price": 2.00}`)
+	encryptedBid.Price = 999.0
+	encryptedBid.DealID = "deal-1"
+	encryptedBid.BidType = "banner"
+
+	req := enclaveapi.EnclaveAuctionRequest{
+		Type:              "auction_request",
+		AuctionID:         "test_attested_floor_rejection",
+		RoundIDString:     "test_attested_floor_rejection-1",
+		Bids:              []enclaveapi.EncryptedCoreBid{encryptedBid},
+		AdjustmentFactors: map[string]float64{"private_bidder": 0.5},
+		BidFloor:          1.5,
+		Timestamp:         time.Now(),
+	}
+
+	response := ProcessAuction(mockAttester, req, keyManager)
+
+	check.True(t, response.Success)
+	check.Equal(t, []string{"bid1"}, response.FloorRejectedBidIDs)
+
+	attestationDoc := parseAttestationFromResponse(t, response)
+	check.Equal(t, []enclaveapi.AttestedFloorRejectedBid{{
+		ID:    "bid1",
+		Price: 1.0,
+	}}, attestationDoc.UserData.FloorRejectedBids)
+
+	userDataJSON, err := json.Marshal(attestationDoc.UserData)
+	check.NoError(t, err)
+	for _, value := range [][]byte{
+		[]byte(`"bidder"`),
+		[]byte(`"currency"`),
+		[]byte(`"deal_id"`),
+		[]byte(`"bid_type"`),
+		[]byte(`999`),
+	} {
+		check.True(t, !bytes.Contains(userDataJSON, value))
+	}
 }
 
 // TestProcessAuction_BidFloorAllRejected tests when all bids are below floor

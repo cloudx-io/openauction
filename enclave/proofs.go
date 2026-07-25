@@ -17,6 +17,11 @@ import (
 	"github.com/cloudx-io/openauction/enclaveapi"
 )
 
+const (
+	maxAttestationUserDataBytes      = 1024
+	maxAttestedFloorRejectedBidCount = 4
+)
+
 // EnclaveAttester interface for dependency injection and testing
 type EnclaveAttester interface {
 	Attest(options enclave.AttestationOptions) ([]byte, error)
@@ -128,6 +133,14 @@ func GenerateAttestation(
 	runnerUp *core.CoreBid,
 	floorRejectedBids []core.CoreBid,
 ) (enclaveapi.AttestationCOSE, *float64, error) {
+	if len(floorRejectedBids) > maxAttestedFloorRejectedBidCount {
+		return nil, nil, fmt.Errorf(
+			"floor-rejected bid count %d exceeds attestation limit %d",
+			len(floorRejectedBids),
+			maxAttestedFloorRejectedBidCount,
+		)
+	}
+
 	now := time.Now()
 
 	// Create the user data that will be embedded in the attestation
@@ -156,6 +169,13 @@ func GenerateAttestation(
 	userDataBytes, err := json.Marshal(userData)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to marshal user data: %w", err)
+	}
+	if len(userDataBytes) > maxAttestationUserDataBytes {
+		return nil, nil, fmt.Errorf(
+			"attestation user data is %d bytes, exceeds NSM limit %d",
+			len(userDataBytes),
+			maxAttestationUserDataBytes,
+		)
 	}
 	randomNonce, err := generateNonce()
 	if err != nil {

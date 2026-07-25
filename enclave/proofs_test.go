@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	enclave "github.com/edgebitio/nitro-enclaves-sdk-go"
 	"github.com/peterldowns/testy/check"
 
 	"github.com/cloudx-io/openauction/core"
@@ -119,6 +120,65 @@ func TestGenerateAttestation(t *testing.T) {
 	check.Error(t, err)
 	check.Nil(t, coseBytes)
 	check.True(t, strings.Contains(err.Error(), "enclave attester is nil"))
+}
+
+func TestGenerateAttestationRejectsLimitsBeforeAttest(t *testing.T) {
+	tests := []struct {
+		name              string
+		req               enclaveapi.EnclaveAuctionRequest
+		floorRejectedBids []core.CoreBid
+		expectedError     string
+	}{
+		{
+			name: "floor-rejected bid count",
+			req:  enclaveapi.EnclaveAuctionRequest{AuctionID: "auction"},
+			floorRejectedBids: []core.CoreBid{
+				{ID: "bid1", Price: 1},
+				{ID: "bid2", Price: 1},
+				{ID: "bid3", Price: 1},
+				{ID: "bid4", Price: 1},
+				{ID: "bid5", Price: 1},
+			},
+			expectedError: "floor-rejected bid count 5 exceeds attestation limit 4",
+		},
+		{
+			name:          "encoded user data",
+			req:           enclaveapi.EnclaveAuctionRequest{AuctionID: strings.Repeat("a", maxAttestationUserDataBytes)},
+			expectedError: "exceeds NSM limit 1024",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			attestCalled := false
+			attester := &MockEnclaveHandle{
+				AttestFunc: func(enclave.AttestationOptions) ([]byte, error) {
+					attestCalled = true
+					return nil, nil
+				},
+			}
+
+			coseBytes, attestationUs, err := GenerateAttestation(
+				attester,
+				tt.req,
+				nil,
+				"request_hash",
+				"adjustment_factors_hash",
+				"bid_hash_nonce",
+				"request_nonce",
+				"adjustment_factors_nonce",
+				nil,
+				nil,
+				tt.floorRejectedBids,
+			)
+
+			check.Error(t, err)
+			check.True(t, strings.Contains(err.Error(), tt.expectedError))
+			check.Nil(t, coseBytes)
+			check.Nil(t, attestationUs)
+			check.False(t, attestCalled)
+		})
+	}
 }
 
 func TestGenerateAttestationWithMock(t *testing.T) {

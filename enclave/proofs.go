@@ -100,16 +100,19 @@ func stripBidderName(bid *core.CoreBid) *enclaveapi.CoreBidWithoutBidder {
 	}
 }
 
-func stripBidderNames(bids []core.CoreBid) []enclaveapi.CoreBidWithoutBidder {
+func attestFloorRejectedBids(bids []core.CoreBid) []enclaveapi.AttestedFloorRejectedBid {
 	if len(bids) == 0 {
 		return nil
 	}
 
-	strippedBids := make([]enclaveapi.CoreBidWithoutBidder, 0, len(bids))
-	for i := range bids {
-		strippedBids = append(strippedBids, *stripBidderName(&bids[i]))
+	attestedBids := make([]enclaveapi.AttestedFloorRejectedBid, 0, len(bids))
+	for _, bid := range bids {
+		attestedBids = append(attestedBids, enclaveapi.AttestedFloorRejectedBid{
+			ID:    bid.ID,
+			Price: bid.Price,
+		})
 	}
-	return strippedBids
+	return attestedBids
 }
 
 func GenerateAttestation(
@@ -139,7 +142,7 @@ func GenerateAttestation(
 		BidHashNonce:           bidHashNonce,
 		Winner:                 stripBidderName(winner),
 		RunnerUp:               stripBidderName(runnerUp),
-		FloorRejectedBids:      stripBidderNames(floorRejectedBids),
+		FloorRejectedBids:      attestFloorRejectedBids(floorRejectedBids),
 		RequestNonce:           requestNonce,
 		AdjustmentFactorsNonce: adjustmentFactorsNonce,
 		Timestamp:              now,

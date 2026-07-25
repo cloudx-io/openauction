@@ -243,17 +243,16 @@ func TestAuctionAttestationUserData_FloorRejectedBidsJSON(t *testing.T) {
 	check.True(t, !strings.Contains(string(withoutRejectedBids), "floor_rejected_bids"))
 
 	withRejectedBids, err := json.Marshal(AuctionAttestationUserData{
-		FloorRejectedBids: []CoreBidWithoutBidder{{
-			ID:       "bid1",
-			Price:    1.25,
-			Currency: "USD",
-			DealID:   "deal-1",
-			BidType:  "banner",
+		FloorRejectedBids: []AttestedFloorRejectedBid{{
+			ID:    "bid1",
+			Price: 1.25,
 		}},
 	})
 	check.NoError(t, err)
-	check.True(t, strings.Contains(string(withRejectedBids), `"floor_rejected_bids":[{"id":"bid1","price":1.25,"currency":"USD","deal_id":"deal-1","bid_type":"banner"}]`))
-	check.True(t, !strings.Contains(string(withRejectedBids), `"bidder"`))
+	check.True(t, strings.Contains(string(withRejectedBids), `"floor_rejected_bids":[{"id":"bid1","price":1.25}]`))
+	for _, field := range []string{`"bidder"`, `"currency"`, `"deal_id"`, `"bid_type"`} {
+		check.True(t, !strings.Contains(string(withRejectedBids), field))
+	}
 }
 
 // TestAttestationTypes_RoundTrip tests complete round-trip conversions

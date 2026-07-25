@@ -338,18 +338,22 @@ func TestProcessAuction_AttestsDecryptedAdjustedFloorRejectedBid(t *testing.T) {
 	check.Equal(t, []string{"bid1"}, response.FloorRejectedBidIDs)
 
 	attestationDoc := parseAttestationFromResponse(t, response)
-	check.Equal(t, []enclaveapi.CoreBidWithoutBidder{{
-		ID:       "bid1",
-		Price:    1.0,
-		Currency: "USD",
-		DealID:   "deal-1",
-		BidType:  "banner",
+	check.Equal(t, []enclaveapi.AttestedFloorRejectedBid{{
+		ID:    "bid1",
+		Price: 1.0,
 	}}, attestationDoc.UserData.FloorRejectedBids)
 
 	userDataJSON, err := json.Marshal(attestationDoc.UserData)
 	check.NoError(t, err)
-	check.True(t, !bytes.Contains(userDataJSON, []byte(`"bidder"`)))
-	check.True(t, !bytes.Contains(userDataJSON, []byte(`999`)))
+	for _, value := range [][]byte{
+		[]byte(`"bidder"`),
+		[]byte(`"currency"`),
+		[]byte(`"deal_id"`),
+		[]byte(`"bid_type"`),
+		[]byte(`999`),
+	} {
+		check.True(t, !bytes.Contains(userDataJSON, value))
+	}
 }
 
 // TestProcessAuction_BidFloorAllRejected tests when all bids are below floor

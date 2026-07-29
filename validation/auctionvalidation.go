@@ -12,19 +12,17 @@ import (
 type AuctionValidationInput struct {
 	AttestationCOSEGzip enclaveapi.AttestationCOSEGzip // Gzipped format from win/loss notifications
 	BidID               string
-	BidPrice            float64            // For unencrypted bids
-	EncryptedPayload    string             // For encrypted bids (base64-encoded encrypted data)
-	BidFloor            float64            // Always validated against attestation.bid_floor
-	ClearingPrice       *float64           // nil = no winner expected, non-nil = winner with this price
-	AdjustmentFactors   map[string]float64 // Compute hash and validate (empty map = no adjustments)
-	IsWinner            bool               // Expected auction result (true = expect to win, false = expect to lose)
+	BidPrice            float64  // For unencrypted bids
+	EncryptedPayload    string   // For encrypted bids (base64-encoded encrypted data)
+	BidFloor            float64  // Always validated against attestation.bid_floor
+	ClearingPrice       *float64 // nil = no winner expected, non-nil = winner with this price
+	IsWinner            bool     // Expected auction result (true = expect to win, false = expect to lose)
 }
 
 // ValidateAuctionAttestation validates a TEE auction attestation and verifies:
 // - Bid was included in the auction
 // - Clearing price matches
 // - Bid floor matches
-// - Adjustment factors hash matches
 // - Winner/loser determination
 //
 // Returns:
@@ -60,7 +58,6 @@ func ValidateAuctionAttestation(input *AuctionValidationInput) (*AuctionValidati
 		result.BidHashValid = false
 		result.ClearingPriceValid = false
 		result.BidFloorValid = false
-		result.AdjustmentHashValid = false
 		result.WinnerValid = false
 		result.ValidationDetails = append(result.ValidationDetails, "Attestation user data missing")
 		return result, nil
@@ -74,9 +71,6 @@ func ValidateAuctionAttestation(input *AuctionValidationInput) (*AuctionValidati
 
 	// Validate bid floor
 	result.BidFloorValid = validateBidFloor(input, auctionAttestation, result)
-
-	// Validate adjustment factors hash
-	result.AdjustmentHashValid = validateAdjustmentHash(input, auctionAttestation, result)
 
 	// Validate winner determination
 	result.WinnerValid = validateWinnerAndRunnerUp(input, auctionAttestation, result)
@@ -141,25 +135,6 @@ func validateBidFloor(input *AuctionValidationInput, attestation *enclaveapi.Auc
 	}
 
 	result.ValidationDetails = append(result.ValidationDetails, fmt.Sprintf("Bid floor mismatch: expected %.6f, attestation has %.6f", input.BidFloor, attestation.UserData.BidFloor))
-	return false
-}
-
-func validateAdjustmentHash(input *AuctionValidationInput, attestation *enclaveapi.AuctionAttestationDoc, result *AuctionValidationResult) bool {
-	nonce := attestation.UserData.AdjustmentFactorsNonce
-	if nonce == "" {
-		result.ValidationDetails = append(result.ValidationDetails, "Adjustment factors nonce missing from attestation")
-		return false
-	}
-
-	computedHash := core.ComputeAdjustmentFactorsHash(input.AdjustmentFactors, nonce)
-	attestedHash := attestation.UserData.AdjustmentFactorsHash
-
-	if computedHash == attestedHash {
-		result.ValidationDetails = append(result.ValidationDetails, fmt.Sprintf("Adjustment factors hash validation passed: %s", computedHash))
-		return true
-	}
-
-	result.ValidationDetails = append(result.ValidationDetails, fmt.Sprintf("Adjustment factors hash mismatch: computed %s, attestation has %s", computedHash, attestedHash))
 	return false
 }
 

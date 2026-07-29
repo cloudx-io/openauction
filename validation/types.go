@@ -27,11 +27,10 @@ func (r *KeyValidationResult) IsValid() bool {
 // AuctionValidationResult contains validation results specific to auction attestations
 type AuctionValidationResult struct {
 	BaseValidationResult
-	BidHashValid        bool
-	ClearingPriceValid  bool
-	BidFloorValid       bool
-	AdjustmentHashValid bool
-	WinnerValid         bool
+	BidHashValid       bool
+	ClearingPriceValid bool
+	BidFloorValid      bool
+	WinnerValid        bool
 }
 
 // IsValid returns true if all auction validation checks passed
@@ -40,7 +39,6 @@ func (r *AuctionValidationResult) IsValid() bool {
 		r.BidHashValid &&
 		r.ClearingPriceValid &&
 		r.BidFloorValid &&
-		r.AdjustmentHashValid &&
 		r.WinnerValid
 }
 

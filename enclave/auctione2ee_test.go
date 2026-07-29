@@ -116,7 +116,7 @@ func TestDecryptBids_InvalidPrice(t *testing.T) {
 	assert.Equal(t, 0, len(excludedBids))
 
 	// Verify the bid will be rejected later in RunAuction
-	auctionResult := core.RunAuction(finalBids, nil, 0.0)
+	auctionResult := core.RunAuction(finalBids, 0.0)
 	assert.Nil(t, auctionResult.Winner)
 	assert.Equal(t, 1, len(auctionResult.PriceRejectedBidIDs))
 	assert.Equal(t, "bid1", auctionResult.PriceRejectedBidIDs[0])

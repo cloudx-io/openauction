@@ -78,26 +78,6 @@ func TestCalculateRequestHash(t *testing.T) {
 	check.Equal(t, hash2, hash)
 }
 
-func TestCalculateAdjustmentFactorsHash(t *testing.T) {
-	adjustmentFactors := map[string]float64{
-		"bidder_a": 1.0,
-		"bidder_b": 0.95,
-	}
-	nonce := "test_nonce"
-
-	hash := calculateAdjustmentFactorsHash(adjustmentFactors, nonce)
-
-	check.Equal(t, 64, len(hash))
-	checkBidHashPattern(t, hash)
-
-	hash2 := calculateAdjustmentFactorsHash(adjustmentFactors, nonce)
-	check.Equal(t, hash2, hash)
-
-	emptyHash := calculateAdjustmentFactorsHash(map[string]float64{}, nonce)
-	check.Equal(t, 64, len(emptyHash))
-	check.NotEqual(t, hash, emptyHash)
-}
-
 func TestGenerateAttestation(t *testing.T) {
 	req := enclaveapi.EnclaveAuctionRequest{
 		AuctionID:     "test_auction",
@@ -112,8 +92,8 @@ func TestGenerateAttestation(t *testing.T) {
 
 	// Test with nil enclave handle (error case)
 	bidHashes := []string{"hash1", "hash2"}
-	coseBytes, _, err := GenerateAttestation(nil, req, bidHashes, "test_request_hash", "test_adj_hash",
-		"test_bid_nonce", "test_req_nonce", "test_adj_nonce", winner, runnerUp)
+	coseBytes, _, err := GenerateAttestation(nil, req, bidHashes, "test_request_hash",
+		"test_bid_nonce", "test_req_nonce", winner, runnerUp)
 
 	// Should fail with nil enclave handle
 	check.Error(t, err)
@@ -129,7 +109,6 @@ func TestGenerateAttestationWithMock(t *testing.T) {
 		Bids: []enclaveapi.EncryptedCoreBid{
 			{CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder_a", Price: 2.50, Currency: "USD"}},
 		},
-		AdjustmentFactors: map[string]float64{"bidder_a": 1.0},
 	}
 
 	winner := &core.CoreBid{ID: "bid1", Bidder: "bidder_a", Price: 2.50}
@@ -142,8 +121,8 @@ func TestGenerateAttestationWithMock(t *testing.T) {
 	bidHash := core.ComputeBidHash("bid1", 2.50, bidHashNonce)
 
 	// Test successful attestation generation with mock
-	coseBytes, attestationUs, err := GenerateAttestation(mockEnclave, req, []string{bidHash}, "test_request_hash", "test_adj_hash",
-		bidHashNonce, "test_req_nonce", "test_adj_nonce", winner, nil)
+	coseBytes, attestationUs, err := GenerateAttestation(mockEnclave, req, []string{bidHash}, "test_request_hash",
+		bidHashNonce, "test_req_nonce", winner, nil)
 
 	// Should succeed with mock enclave
 	check.NoError(t, err)
@@ -197,10 +176,6 @@ func TestGenerateAttestationWithEncryptedBids(t *testing.T) {
 				},
 			},
 		},
-		AdjustmentFactors: map[string]float64{
-			"bidder_b": 0.95,
-			"bidder_c": 1.1,
-		},
 	}
 
 	// These represent the decrypted bid prices (what should be used for merkle tree)
@@ -221,8 +196,8 @@ func TestGenerateAttestationWithEncryptedBids(t *testing.T) {
 	bidHashes := []string{hash2, hash3}
 
 	// Test successful attestation generation with encrypted bids
-	coseBytes, attestationUs, err := GenerateAttestation(mockEnclave, req, bidHashes, "test_request_hash", "test_adj_hash",
-		bidHashNonce, "test_req_nonce", "test_adj_nonce", winner, runnerUp)
+	coseBytes, attestationUs, err := GenerateAttestation(mockEnclave, req, bidHashes, "test_request_hash",
+		bidHashNonce, "test_req_nonce", winner, runnerUp)
 
 	// Should succeed with mock enclave
 	check.NoError(t, err)
@@ -241,7 +216,6 @@ func TestGenerateAttestationWithEncryptedBids(t *testing.T) {
 	check.Equal(t, attestationDoc.UserData.RoundID, req.RoundID)
 	check.Equal(t, attestationDoc.UserData.RoundIDString, req.RoundIDString)
 	check.NotEqual(t, "", attestationDoc.UserData.RequestHash)
-	check.NotEqual(t, "", attestationDoc.UserData.AdjustmentFactorsHash)
 
 	// Verify winner and runner-up from decrypted encrypted bids
 	check.NotNil(t, attestationDoc.UserData.Winner)
@@ -451,21 +425,9 @@ func TestGenerateAttestationWithMixedBidTypes(t *testing.T) {
 			// Unencrypted bid 3 - Middle price
 			{CoreBid: core.CoreBid{ID: "unencrypted_bid_3", Bidder: "plaintext_bidder_e", Price: 3.25, Currency: "USD"}},
 		},
-		AdjustmentFactors: map[string]float64{
-			"plaintext_bidder_a": 1.0,
-			"encrypted_bidder_b": 1.0,
-			"plaintext_bidder_c": 0.95, // Adjustment factor affects final ranking
-			"encrypted_bidder_d": 1.0,
-			"plaintext_bidder_e": 1.05,
-		},
 	}
 
-	// Expected results after E2EE decryption and adjustment factors applied:
-	// encrypted_bidder_b: 4.50 * 1.0 = 4.50 (WINNER - encrypted)
-	// encrypted_bidder_d: 4.00 * 1.0 = 4.00 (RUNNER-UP - encrypted)
-	// plaintext_bidder_c: 3.80 * 0.95 = 3.61 (3rd place - unencrypted)
-	// plaintext_bidder_e: 3.25 * 1.05 = 3.41 (4th place - unencrypted)
-	// plaintext_bidder_a: 2.25 * 1.0 = 2.25 (5th place - unencrypted)
+	// Expected results after E2EE decryption use the original bid prices.
 
 	winner := &core.CoreBid{ID: "encrypted_bid_1", Bidder: "encrypted_bidder_b", Price: 4.50, Currency: "USD"}   // Encrypted winner
 	runnerUp := &core.CoreBid{ID: "encrypted_bid_2", Bidder: "encrypted_bidder_d", Price: 4.00, Currency: "USD"} // Encrypted runner-up
@@ -487,8 +449,8 @@ func TestGenerateAttestationWithMixedBidTypes(t *testing.T) {
 	bidHashes := []string{hashU1, hashE1, hashU2, hashE2, hashU3}
 
 	// Generate attestation for mixed bid scenario
-	coseBytes, _, err := GenerateAttestation(mockEnclave, req, bidHashes, "mixed_request_hash", "mixed_adj_hash",
-		bidHashNonce, "mixed_req_nonce", "mixed_adj_nonce", winner, runnerUp)
+	coseBytes, _, err := GenerateAttestation(mockEnclave, req, bidHashes, "mixed_request_hash",
+		bidHashNonce, "mixed_req_nonce", winner, runnerUp)
 
 	// Verify successful attestation generation
 	check.NoError(t, err)
@@ -522,10 +484,8 @@ func TestGenerateAttestationWithMixedBidTypes(t *testing.T) {
 
 	// Verify hashes and nonces are properly generated for mixed scenario
 	check.NotEqual(t, "", userData.RequestHash)
-	check.NotEqual(t, "", userData.AdjustmentFactorsHash) // Important: adjustment factors applied to both types
 	check.NotEqual(t, "", userData.BidHashNonce)
 	check.NotEqual(t, "", userData.RequestNonce)
-	check.NotEqual(t, "", userData.AdjustmentFactorsNonce)
 
 	// Verify attestation structural integrity
 	check.NotNil(t, attestationDoc.PCRs)

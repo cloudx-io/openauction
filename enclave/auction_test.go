@@ -232,6 +232,74 @@ func TestBidderOf(t *testing.T) {
 	check.Equal(t, "", bidderOf(nil))
 }
 
+// TestProcessAuction_RejectionsQualifiedByBidder: two bidders share a bid ID and
+// only one is below floor. The response must name the rejected bidder, because
+// the ID alone also belongs to the winner.
+func TestProcessAuction_RejectionsQualifiedByBidder(t *testing.T) {
+	const sharedBidID = "1"
+
+	mockAttester := CreateMockEnclave(t)
+	req := enclaveapi.EnclaveAuctionRequest{
+		Type:          "auction_request",
+		AuctionID:     "test_auction_qualified_rejections",
+		RoundIDString: "test_auction_qualified_rejections-1",
+		Bids: []enclaveapi.EncryptedCoreBid{
+			{CoreBid: core.CoreBid{ID: sharedBidID, Bidder: "aaa_bidder", Price: 2.26, Currency: "USD"}},
+			{CoreBid: core.CoreBid{ID: sharedBidID, Bidder: "zzz_bidder", Price: 0.10, Currency: "USD"}},
+			{CoreBid: core.CoreBid{ID: "2", Bidder: "mmm_bidder", Price: 0.0, Currency: "USD"}},
+		},
+		BidFloor:  1.00,
+		Timestamp: time.Now(),
+	}
+
+	response := ProcessAuction(mockAttester, req, nil)
+	assert.True(t, response.Success)
+
+	check.Equal(t, "aaa_bidder", response.WinnerBidder)
+	check.Equal(t, []core.BidRef{{BidID: sharedBidID, Bidder: "zzz_bidder"}}, response.FloorRejected)
+	check.Equal(t, []core.BidRef{{BidID: "2", Bidder: "mmm_bidder"}}, response.PriceRejected)
+
+	// The deprecated ID-only field still ships for older hosts, and on its own
+	// reports the floor rejection under the winner's bid ID.
+	check.Equal(t, []string{sharedBidID}, response.FloorRejectedBidIDs)
+}
+
+// TestProcessAuction_ExcludedBidCarriesBidder: an excluded bid names its bidder,
+// so a host never has to guess which seat lost a bid to exclusion.
+func TestProcessAuction_ExcludedBidCarriesBidder(t *testing.T) {
+	mockAttester := CreateMockEnclave(t)
+	keyManager := newTestKeyManager(t)
+
+	bid := encryptPriceBid(t, keyManager, "1", "zzz_bidder", `{"price": 3.00}`)
+	newReq := func(id string) enclaveapi.EnclaveAuctionRequest {
+		return enclaveapi.EnclaveAuctionRequest{
+			Type:          "auction_request",
+			AuctionID:     id,
+			RoundIDString: id + "-1",
+			// A plaintext bid from another bidder reuses the encrypted bid's ID,
+			// so attributing the exclusion by ID alone would be ambiguous.
+			Bids: []enclaveapi.EncryptedCoreBid{
+				bid,
+				{CoreBid: core.CoreBid{ID: "1", Bidder: "aaa_bidder", Price: 1.00, Currency: "USD"}},
+			},
+			Timestamp: time.Now(),
+		}
+	}
+
+	assert.True(t, ProcessAuction(mockAttester, newReq("test_excluded_bidder_1"), keyManager).Success)
+
+	// Replaying the identical ciphertext excludes it as a duplicate.
+	response := ProcessAuction(mockAttester, newReq("test_excluded_bidder_2"), keyManager)
+
+	assert.True(t, response.Success)
+	assert.Equal(t, 1, len(response.ExcludedBids))
+	check.Equal(t, core.ExcludedBid{
+		BidID:  "1",
+		Bidder: "zzz_bidder",
+		Reason: reasonDuplicateCiphertext,
+	}, response.ExcludedBids[0])
+}
+
 func TestGetBidderName(t *testing.T) {
 	bid := &core.CoreBid{
 		ID:     "test_bid",

@@ -1,19 +1,20 @@
 package core
 
 // validateBidPrices filters bids with invalid (non-positive) prices.
-func validateBidPrices(bids []CoreBid) (valid []CoreBid, rejectedBidIDs []string) {
+// Returns valid bids and bidder-qualified references to the rejected bids.
+func validateBidPrices(bids []CoreBid) (valid []CoreBid, rejected []BidRef) {
 	validBids := make([]CoreBid, 0, len(bids))
-	rejectedIDs := make([]string, 0)
+	rejectedBids := make([]BidRef, 0)
 
 	for _, bid := range bids {
 		if bid.Price > 0.0 {
 			validBids = append(validBids, bid)
 		} else {
-			rejectedIDs = append(rejectedIDs, bid.ID)
+			rejectedBids = append(rejectedBids, BidRef{BidID: bid.ID, Bidder: bid.Bidder})
 		}
 	}
 
-	return validBids, rejectedIDs
+	return validBids, rejectedBids
 }
 
 // RunAuction executes the core auction logic: price validation → adjustment → floor enforcement → ranking.
@@ -39,7 +40,7 @@ func RunAuction(
 	bidFloor float64,
 ) *AuctionResult {
 	// Step 1: Validate bid prices
-	validBids, priceRejectedBids := validateBidPrices(bids)
+	validBids, priceRejected := validateBidPrices(bids)
 
 	// Step 2: Apply bid adjustment factors
 	adjustedBids := validBids
@@ -48,7 +49,7 @@ func RunAuction(
 	}
 
 	// Step 3: Enforce floor price
-	eligibleBids, floorRejectedBids := EnforceBidFloor(adjustedBids, bidFloor)
+	eligibleBids, floorRejected := EnforceBidFloor(adjustedBids, bidFloor)
 
 	// Step 4: Rank eligible bids by price with random tie-breaking
 	ranking := RankCoreBids(eligibleBids, defaultRandSource)
@@ -66,7 +67,9 @@ func RunAuction(
 		Winner:              winner,
 		RunnerUp:            runnerUp,
 		EligibleBids:        eligibleBids,
-		PriceRejectedBidIDs: priceRejectedBids,
-		FloorRejectedBidIDs: floorRejectedBids,
+		PriceRejected:       priceRejected,
+		FloorRejected:       floorRejected,
+		PriceRejectedBidIDs: bidRefIDs(priceRejected),
+		FloorRejectedBidIDs: bidRefIDs(floorRejected),
 	}
 }

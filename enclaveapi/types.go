@@ -154,10 +154,20 @@ type EnclaveAuctionResponse struct {
 	Message               string                `json:"message"`
 	AttestationCOSEBase64 AttestationCOSEBase64 `json:"attestation_cose_base64,omitempty"` // Base64-encoded COSE_Sign1 attestation
 	ExcludedBids          []core.ExcludedBid    `json:"excluded_bids,omitempty"`           // Decryption failures, validation errors
-	FloorRejectedBidIDs   []string              `json:"floor_rejected_bid_ids,omitempty"`  // Bid IDs that were below floor
+	// Pre-auction rejections, identified by bidder as well as bid ID. A bare bid
+	// ID cannot be attributed to a seat: IDs are only unique per bidder, so when
+	// two bidders in a round share one, a host reconstructing the seat from the ID
+	// can route the rejection — and its loss notice — to the wrong bidder, or drop
+	// the wrong bid from its response.
+	FloorRejected []core.BidRef `json:"floor_rejected,omitempty"` // Bids below floor
+	PriceRejected []core.BidRef `json:"price_rejected,omitempty"` // Bids with non-positive prices
+	// Deprecated: use FloorRejected. Retained so hosts predating bidder-qualified
+	// rejections keep working against a newer enclave.
+	FloorRejectedBidIDs []string `json:"floor_rejected_bid_ids,omitempty"`
 	// Bidder behind the attested winner and runner-up, echoed from the request bids
 	// (bid IDs are only unique per bidder). Deliberately not part of the signed
-	// attestation user data, which is shared with SDKs and bidders and stays bidder-free.
+	// attestation user data, which is transmitted to devices and to bidders and
+	// stays bidder-free.
 	WinnerBidder   string `json:"winner_bidder,omitempty"`
 	RunnerUpBidder string `json:"runner_up_bidder,omitempty"`
 	ProcessingTime int64  `json:"processing_time_ms"`

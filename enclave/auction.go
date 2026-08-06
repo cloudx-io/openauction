@@ -105,7 +105,7 @@ func ProcessAuction(attester EnclaveAttester, req enclaveapi.EnclaveAuctionReque
 		ExcludedBids:          excludedBids,
 		FloorRejected:         auctionResult.FloorRejected,
 		PriceRejected:         auctionResult.PriceRejected,
-		FloorRejectedBidIDs:   auctionResult.FloorRejectedBidIDs,
+		FloorRejectedBidIDs:   auctionResult.FloorRejectedBidIDs, //nolint:staticcheck // still populated for hosts predating the qualified lists
 		WinnerBidder:          bidderOf(winner),
 		RunnerUpBidder:        bidderOf(runnerUp),
 		ProcessingTime:        processingTime,

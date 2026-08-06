@@ -261,6 +261,7 @@ func TestProcessAuction_RejectionsQualifiedByBidder(t *testing.T) {
 
 	// The deprecated ID-only field still ships for older hosts, and on its own
 	// reports the floor rejection under the winner's bid ID.
+	//nolint:staticcheck // asserts the deprecated field still ships for older hosts
 	check.Equal(t, []string{sharedBidID}, response.FloorRejectedBidIDs)
 }
 

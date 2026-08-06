@@ -155,7 +155,12 @@ type EnclaveAuctionResponse struct {
 	AttestationCOSEBase64 AttestationCOSEBase64 `json:"attestation_cose_base64,omitempty"` // Base64-encoded COSE_Sign1 attestation
 	ExcludedBids          []core.ExcludedBid    `json:"excluded_bids,omitempty"`           // Decryption failures, validation errors
 	FloorRejectedBidIDs   []string              `json:"floor_rejected_bid_ids,omitempty"`  // Bid IDs that were below floor
-	ProcessingTime        int64                 `json:"processing_time_ms"`
+	// Bidder behind the attested winner and runner-up, echoed from the request bids
+	// (bid IDs are only unique per bidder). Deliberately not part of the signed
+	// attestation user data, which is shared with SDKs and bidders and stays bidder-free.
+	WinnerBidder   string `json:"winner_bidder,omitempty"`
+	RunnerUpBidder string `json:"runner_up_bidder,omitempty"`
+	ProcessingTime int64  `json:"processing_time_ms"`
 	// AttestationUs is the wall-clock time spent in the attestation call, in
 	// microseconds. Reported in us (not ms) because the value is often
 	// sub-millisecond and integer-ms rounding would hide it. A pointer so that

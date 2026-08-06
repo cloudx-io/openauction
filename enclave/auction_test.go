@@ -70,6 +70,10 @@ func TestProcessAuction_ZeroBids(t *testing.T) {
 	check.Nil(t, attestationDoc.UserData.Winner)
 	check.Nil(t, attestationDoc.UserData.RunnerUp)
 
+	// No winner/runner-up means no bidder identity to echo
+	check.Equal(t, "", response.WinnerBidder)
+	check.Equal(t, "", response.RunnerUpBidder)
+
 	// Verify empty bid hashes
 	check.Equal(t, []string{}, attestationDoc.UserData.BidHashes)
 }
@@ -100,6 +104,10 @@ func TestProcessAuction_OneBid(t *testing.T) {
 	// Verify winner details
 	check.Equal(t, "bid1", attestationDoc.UserData.Winner.ID)
 	check.Equal(t, 2.50, attestationDoc.UserData.Winner.Price)
+
+	// Winner identity is echoed on the response envelope; no runner-up to echo
+	check.Equal(t, "bidder_a", response.WinnerBidder)
+	check.Equal(t, "", response.RunnerUpBidder)
 
 	// Verify bid hashes contains single bid
 	nonce := attestationDoc.UserData.BidHashNonce
@@ -143,6 +151,10 @@ func TestProcessAuction_TwoBids(t *testing.T) {
 	// Verify runner-up is the second highest bid (bidder_a at 2.50)
 	check.Equal(t, "bid1", attestationDoc.UserData.RunnerUp.ID)
 	check.Equal(t, 2.50, attestationDoc.UserData.RunnerUp.Price)
+
+	// Both identities are echoed on the response envelope
+	check.Equal(t, "bidder_b", response.WinnerBidder)
+	check.Equal(t, "bidder_a", response.RunnerUpBidder)
 
 	// Verify bid hashes contains both bids
 	nonce := attestationDoc.UserData.BidHashNonce
@@ -193,6 +205,10 @@ func TestProcessAuction_ThreeBids(t *testing.T) {
 	check.Equal(t, "bid1", attestationDoc.UserData.RunnerUp.ID)
 	check.Equal(t, 2.50, attestationDoc.UserData.RunnerUp.Price)
 
+	// Echoed identities follow the adjusted ranking
+	check.Equal(t, "bidder_b", response.WinnerBidder)
+	check.Equal(t, "bidder_a", response.RunnerUpBidder)
+
 	// Verify bid hashes contains all three bids
 	nonce := attestationDoc.UserData.BidHashNonce
 	hash1 := core.ComputeBidHash("bid1", 2.50, nonce)
@@ -203,6 +219,17 @@ func TestProcessAuction_ThreeBids(t *testing.T) {
 	check.True(t, slices.Contains(attestationDoc.UserData.BidHashes, hash1))
 	check.True(t, slices.Contains(attestationDoc.UserData.BidHashes, hash2))
 	check.True(t, slices.Contains(attestationDoc.UserData.BidHashes, hash3))
+}
+
+func TestBidderOf(t *testing.T) {
+	bid := &core.CoreBid{
+		ID:     "test_bid",
+		Bidder: "test_bidder",
+		Price:  1.50,
+	}
+
+	check.Equal(t, "test_bidder", bidderOf(bid))
+	check.Equal(t, "", bidderOf(nil))
 }
 
 func TestGetBidderName(t *testing.T) {

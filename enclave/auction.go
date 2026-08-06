@@ -106,6 +106,8 @@ func ProcessAuction(attester EnclaveAttester, req enclaveapi.EnclaveAuctionReque
 		AttestationCOSEBase64: coseAttestation.EncodeBase64(),
 		ExcludedBids:          excludedBids,
 		FloorRejectedBidIDs:   floorRejectedBidIDs,
+		WinnerBidder:          bidderOf(winner),
+		RunnerUpBidder:        bidderOf(runnerUp),
 		ProcessingTime:        processingTime,
 		AttestationUs:         attestationUs,
 	}
@@ -114,6 +116,14 @@ func ProcessAuction(attester EnclaveAttester, req enclaveapi.EnclaveAuctionReque
 func getBidderName(bid *core.CoreBid) string {
 	if bid == nil {
 		return "none"
+	}
+	return bid.Bidder
+}
+
+// bidderOf returns the bid's bidder, or "" for a nil bid.
+func bidderOf(bid *core.CoreBid) string {
+	if bid == nil {
+		return ""
 	}
 	return bid.Bidder
 }

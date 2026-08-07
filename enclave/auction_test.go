@@ -70,6 +70,10 @@ func TestProcessAuction_ZeroBids(t *testing.T) {
 	check.Nil(t, attestationDoc.UserData.Winner)
 	check.Nil(t, attestationDoc.UserData.RunnerUp)
 
+	// No winner/runner-up means no bidder identity to echo
+	check.Equal(t, "", response.WinnerBidder)
+	check.Equal(t, "", response.RunnerUpBidder)
+
 	// Verify empty bid hashes
 	check.Equal(t, []string{}, attestationDoc.UserData.BidHashes)
 }
@@ -100,6 +104,10 @@ func TestProcessAuction_OneBid(t *testing.T) {
 	// Verify winner details
 	check.Equal(t, "bid1", attestationDoc.UserData.Winner.ID)
 	check.Equal(t, 2.50, attestationDoc.UserData.Winner.Price)
+
+	// Winner identity is echoed on the response envelope; no runner-up to echo
+	check.Equal(t, "bidder_a", response.WinnerBidder)
+	check.Equal(t, "", response.RunnerUpBidder)
 
 	// Verify bid hashes contains single bid
 	nonce := attestationDoc.UserData.BidHashNonce
@@ -143,6 +151,10 @@ func TestProcessAuction_TwoBids(t *testing.T) {
 	// Verify runner-up is the second highest bid (bidder_a at 2.50)
 	check.Equal(t, "bid1", attestationDoc.UserData.RunnerUp.ID)
 	check.Equal(t, 2.50, attestationDoc.UserData.RunnerUp.Price)
+
+	// Both identities are echoed on the response envelope
+	check.Equal(t, "bidder_b", response.WinnerBidder)
+	check.Equal(t, "bidder_a", response.RunnerUpBidder)
 
 	// Verify bid hashes contains both bids
 	nonce := attestationDoc.UserData.BidHashNonce
@@ -193,6 +205,10 @@ func TestProcessAuction_ThreeBids(t *testing.T) {
 	check.Equal(t, "bid1", attestationDoc.UserData.RunnerUp.ID)
 	check.Equal(t, 2.50, attestationDoc.UserData.RunnerUp.Price)
 
+	// Echoed identities follow the adjusted ranking
+	check.Equal(t, "bidder_b", response.WinnerBidder)
+	check.Equal(t, "bidder_a", response.RunnerUpBidder)
+
 	// Verify bid hashes contains all three bids
 	nonce := attestationDoc.UserData.BidHashNonce
 	hash1 := core.ComputeBidHash("bid1", 2.50, nonce)
@@ -203,6 +219,86 @@ func TestProcessAuction_ThreeBids(t *testing.T) {
 	check.True(t, slices.Contains(attestationDoc.UserData.BidHashes, hash1))
 	check.True(t, slices.Contains(attestationDoc.UserData.BidHashes, hash2))
 	check.True(t, slices.Contains(attestationDoc.UserData.BidHashes, hash3))
+}
+
+func TestBidderOf(t *testing.T) {
+	bid := &core.CoreBid{
+		ID:     "test_bid",
+		Bidder: "test_bidder",
+		Price:  1.50,
+	}
+
+	check.Equal(t, "test_bidder", bidderOf(bid))
+	check.Equal(t, "", bidderOf(nil))
+}
+
+// TestProcessAuction_RejectionsQualifiedByBidder: two bidders share a bid ID and
+// only one is below floor. The response must name the rejected bidder, because
+// the ID alone also belongs to the winner.
+func TestProcessAuction_RejectionsQualifiedByBidder(t *testing.T) {
+	const sharedBidID = "1"
+
+	mockAttester := CreateMockEnclave(t)
+	req := enclaveapi.EnclaveAuctionRequest{
+		Type:          "auction_request",
+		AuctionID:     "test_auction_qualified_rejections",
+		RoundIDString: "test_auction_qualified_rejections-1",
+		Bids: []enclaveapi.EncryptedCoreBid{
+			{CoreBid: core.CoreBid{ID: sharedBidID, Bidder: "aaa_bidder", Price: 2.26, Currency: "USD"}},
+			{CoreBid: core.CoreBid{ID: sharedBidID, Bidder: "zzz_bidder", Price: 0.10, Currency: "USD"}},
+			{CoreBid: core.CoreBid{ID: "2", Bidder: "mmm_bidder", Price: 0.0, Currency: "USD"}},
+		},
+		BidFloor:  1.00,
+		Timestamp: time.Now(),
+	}
+
+	response := ProcessAuction(mockAttester, req, nil)
+	assert.True(t, response.Success)
+
+	check.Equal(t, "aaa_bidder", response.WinnerBidder)
+	check.Equal(t, []core.BidRef{{BidID: sharedBidID, Bidder: "zzz_bidder"}}, response.FloorRejected)
+	check.Equal(t, []core.BidRef{{BidID: "2", Bidder: "mmm_bidder"}}, response.PriceRejected)
+
+	// The deprecated ID-only field still ships for older hosts, and on its own
+	// reports the floor rejection under the winner's bid ID.
+	//nolint:staticcheck // asserts the deprecated field still ships for older hosts
+	check.Equal(t, []string{sharedBidID}, response.FloorRejectedBidIDs)
+}
+
+// TestProcessAuction_ExcludedBidCarriesBidder: an excluded bid names its bidder,
+// so a host never has to guess which seat lost a bid to exclusion.
+func TestProcessAuction_ExcludedBidCarriesBidder(t *testing.T) {
+	mockAttester := CreateMockEnclave(t)
+	keyManager := newTestKeyManager(t)
+
+	bid := encryptPriceBid(t, keyManager, "1", "zzz_bidder", `{"price": 3.00}`)
+	newReq := func(id string) enclaveapi.EnclaveAuctionRequest {
+		return enclaveapi.EnclaveAuctionRequest{
+			Type:          "auction_request",
+			AuctionID:     id,
+			RoundIDString: id + "-1",
+			// A plaintext bid from another bidder reuses the encrypted bid's ID,
+			// so attributing the exclusion by ID alone would be ambiguous.
+			Bids: []enclaveapi.EncryptedCoreBid{
+				bid,
+				{CoreBid: core.CoreBid{ID: "1", Bidder: "aaa_bidder", Price: 1.00, Currency: "USD"}},
+			},
+			Timestamp: time.Now(),
+		}
+	}
+
+	assert.True(t, ProcessAuction(mockAttester, newReq("test_excluded_bidder_1"), keyManager).Success)
+
+	// Replaying the identical ciphertext excludes it as a duplicate.
+	response := ProcessAuction(mockAttester, newReq("test_excluded_bidder_2"), keyManager)
+
+	assert.True(t, response.Success)
+	assert.Equal(t, 1, len(response.ExcludedBids))
+	check.Equal(t, core.ExcludedBid{
+		BidID:  "1",
+		Bidder: "zzz_bidder",
+		Reason: reasonDuplicateCiphertext,
+	}, response.ExcludedBids[0])
 }
 
 func TestGetBidderName(t *testing.T) {

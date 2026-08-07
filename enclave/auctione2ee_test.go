@@ -118,8 +118,8 @@ func TestDecryptBids_InvalidPrice(t *testing.T) {
 	// Verify the bid will be rejected later in RunAuction
 	auctionResult := core.RunAuction(finalBids, nil, 0.0)
 	assert.Nil(t, auctionResult.Winner)
-	assert.Equal(t, 1, len(auctionResult.PriceRejectedBidIDs))
-	assert.Equal(t, "bid1", auctionResult.PriceRejectedBidIDs[0])
+	assert.Equal(t, 1, len(auctionResult.PriceRejected))
+	assert.Equal(t, core.BidRef{BidID: "bid1", Bidder: "bidder1"}, auctionResult.PriceRejected[0])
 }
 
 func TestDecryptBids_NilKeyManager(t *testing.T) {

@@ -75,8 +75,6 @@ func ProcessAuction(attester EnclaveAttester, req enclaveapi.EnclaveAuctionReque
 	// Run unified auction logic: adjustment → floor enforcement → ranking
 	auctionResult := core.RunAuction(unencryptedBids, req.AdjustmentFactors, req.BidFloor)
 
-	floorRejectedBidIDs := auctionResult.FloorRejectedBidIDs
-
 	// Extract winner and runner-up from auction result
 	winner := auctionResult.Winner
 	runnerUp := auctionResult.RunnerUp
@@ -105,7 +103,11 @@ func ProcessAuction(attester EnclaveAttester, req enclaveapi.EnclaveAuctionReque
 		Message:               fmt.Sprintf("Processed %d bids in enclave", len(req.Bids)),
 		AttestationCOSEBase64: coseAttestation.EncodeBase64(),
 		ExcludedBids:          excludedBids,
-		FloorRejectedBidIDs:   floorRejectedBidIDs,
+		FloorRejected:         auctionResult.FloorRejected,
+		PriceRejected:         auctionResult.PriceRejected,
+		FloorRejectedBidIDs:   auctionResult.FloorRejectedBidIDs, //nolint:staticcheck // still populated for hosts predating the qualified lists
+		WinnerBidder:          bidderOf(winner),
+		RunnerUpBidder:        bidderOf(runnerUp),
 		ProcessingTime:        processingTime,
 		AttestationUs:         attestationUs,
 	}
@@ -114,6 +116,14 @@ func ProcessAuction(attester EnclaveAttester, req enclaveapi.EnclaveAuctionReque
 func getBidderName(bid *core.CoreBid) string {
 	if bid == nil {
 		return "none"
+	}
+	return bid.Bidder
+}
+
+// bidderOf returns the bid's bidder, or "" for a nil bid.
+func bidderOf(bid *core.CoreBid) string {
+	if bid == nil {
+		return ""
 	}
 	return bid.Bidder
 }
@@ -155,6 +165,7 @@ func decryptAllBids(encryptedBids []enclaveapi.EncryptedCoreBid, keyManager *Key
 			err := fmt.Errorf("no key manager available")
 			excludedBids = append(excludedBids, core.ExcludedBid{
 				BidID:  encBid.ID,
+				Bidder: encBid.Bidder,
 				Reason: reasonDecryptionFailed,
 			})
 			errors = append(errors, fmt.Errorf("decryption failed for bid %s: %w", encBid.ID, err))
@@ -174,6 +185,7 @@ func decryptAllBids(encryptedBids []enclaveapi.EncryptedCoreBid, keyManager *Key
 			log.Printf("INFO: Failed to decrypt bid %s: %v", encBid.ID, err)
 			excludedBids = append(excludedBids, core.ExcludedBid{
 				BidID:  encBid.ID,
+				Bidder: encBid.Bidder,
 				Reason: reasonDecryptionFailed,
 			})
 			errors = append(errors, fmt.Errorf("decryption failed for bid %s: %w", encBid.ID, err))
@@ -185,6 +197,7 @@ func decryptAllBids(encryptedBids []enclaveapi.EncryptedCoreBid, keyManager *Key
 			log.Printf("INFO: Failed to parse decrypted payload for bid %s: %v", encBid.ID, err)
 			excludedBids = append(excludedBids, core.ExcludedBid{
 				BidID:  encBid.ID,
+				Bidder: encBid.Bidder,
 				Reason: reasonInvalidPayloadFormat,
 			})
 			errors = append(errors, fmt.Errorf("invalid payload format for bid %s: %w", encBid.ID, err))
@@ -232,6 +245,7 @@ func dedupAndBuildBids(decryptedBids []decryptedBidData) ([]core.CoreBid, []core
 			log.Printf("WARNING: Bid %s decrypted but resolved to no epoch; excluding to preserve replay protection", decBid.encBid.ID)
 			excludedBids = append(excludedBids, core.ExcludedBid{
 				BidID:  decBid.encBid.ID,
+				Bidder: decBid.encBid.Bidder,
 				Reason: reasonFingerprintFailed,
 			})
 			continue
@@ -249,6 +263,7 @@ func dedupAndBuildBids(decryptedBids []decryptedBidData) ([]core.CoreBid, []core
 			log.Printf("WARNING: Failed to fingerprint bid %s: %v", decBid.encBid.ID, err)
 			excludedBids = append(excludedBids, core.ExcludedBid{
 				BidID:  decBid.encBid.ID,
+				Bidder: decBid.encBid.Bidder,
 				Reason: reasonFingerprintFailed,
 			})
 			continue
@@ -258,6 +273,7 @@ func dedupAndBuildBids(decryptedBids []decryptedBidData) ([]core.CoreBid, []core
 			log.Printf("WARNING: Bid %s excluded as duplicate ciphertext (replay)", decBid.encBid.ID)
 			excludedBids = append(excludedBids, core.ExcludedBid{
 				BidID:  decBid.encBid.ID,
+				Bidder: decBid.encBid.Bidder,
 				Reason: reasonDuplicateCiphertext,
 			})
 			continue

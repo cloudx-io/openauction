@@ -58,6 +58,35 @@ func TestRunAuction_NoBids(t *testing.T) {
 	check.Equal(t, 0, len(result.FloorRejectedBidIDs))
 }
 
+// TestRunAuction_RejectionsQualifiedByBidder: when two bidders share a bid ID
+// and only one of them is rejected, the bare ID cannot say which. The
+// bidder-qualified rejections can, and the winner keeps the shared ID.
+func TestRunAuction_RejectionsQualifiedByBidder(t *testing.T) {
+	const sharedBidID = "1"
+
+	bids := []CoreBid{
+		{ID: sharedBidID, Bidder: "aaa_bidder", Price: 2.26},
+		{ID: sharedBidID, Bidder: "zzz_bidder", Price: 0.10},
+		{ID: "2", Bidder: "mmm_bidder", Price: -1.0},
+	}
+
+	result := RunAuction(bids, nil, 1.00)
+
+	check.NotNil(t, result.Winner)
+	check.Equal(t, "aaa_bidder", result.Winner.Bidder)
+	check.Equal(t, sharedBidID, result.Winner.ID)
+
+	// Only zzz_bidder was below floor, even though the winner shares its bid ID.
+	check.Equal(t, []BidRef{{BidID: sharedBidID, Bidder: "zzz_bidder"}}, result.FloorRejected)
+	check.Equal(t, []BidRef{{BidID: "2", Bidder: "mmm_bidder"}}, result.PriceRejected)
+
+	// The deprecated ID-only views stay populated for existing callers, and show
+	// exactly the ambiguity that motivated the qualified fields: the floor
+	// rejection is reported under an ID the winner also holds.
+	check.Equal(t, []string{sharedBidID}, result.FloorRejectedBidIDs)
+	check.Equal(t, []string{"2"}, result.PriceRejectedBidIDs)
+}
+
 func TestRunAuction_SingleBid(t *testing.T) {
 	bids := []CoreBid{
 		{ID: "bid1", Bidder: "bidder_a", Price: 2.0},

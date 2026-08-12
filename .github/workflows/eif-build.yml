@@ -57,11 +57,15 @@ jobs:
   build-eif:
     name: Build EIF on Nitro EC2
     runs-on: ubuntu-latest
+    # The [skip-build] marker is matched with startsWith, not contains: a squash
+    # merge puts the entire PR description in the commit body, so contains also
+    # matches any PR whose description merely mentions the marker in prose. The
+    # update-pcrs commits this guard exists to ignore always lead with it.
     if: |
       (github.event_name == 'workflow_dispatch' ||
        (github.event.workflow_run.conclusion == 'success' &&
         github.event.workflow_run.head_branch == 'main' &&
-        !contains(github.event.workflow_run.head_commit.message, '[skip-build]')))
+        !startsWith(github.event.workflow_run.head_commit.message, '[skip-build]')))
     permissions:
       id-token: write
       contents: read

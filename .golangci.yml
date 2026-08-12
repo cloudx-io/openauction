@@ -14,7 +14,7 @@ linters:
     - exhaustive
     - forbidigo
     - gocritic
-    - gomodguard
+    - gomodguard_v2
     - govet
     - importas
     - ineffassign

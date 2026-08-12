@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"encoding/json"
 	"testing"
 
@@ -17,7 +18,7 @@ func TestGenerateRSAKeyPair(t *testing.T) {
 
 	// Verify we can use the key
 	testData := []byte("test data")
-	_, err = rsa.EncryptPKCS1v15(rand.Reader, &privateKey.PublicKey, testData)
+	_, err = rsa.EncryptOAEP(sha256.New(), rand.Reader, &privateKey.PublicKey, testData, nil)
 	assert.NoError(t, err)
 }
 

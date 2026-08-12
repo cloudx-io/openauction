@@ -1,6 +1,6 @@
 module github.com/cloudx-io/openauction
 
-go 1.25.0
+go 1.26
 
 require (
 	github.com/edgebitio/nitro-enclaves-sdk-go v1.0.1-0.20221110205443-8a5476ff3cc2

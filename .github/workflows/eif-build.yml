@@ -325,8 +325,22 @@ jobs:
           # the target EIF's, so it stays amd64 even for arm64 EIF builds (which are
           # built on the remote Nitro instance). Do not switch this to arm64.
           VERSION="1.1.0"
-          curl -LO "https://github.com/oras-project/oras/releases/download/v${VERSION}/oras_${VERSION}_linux_amd64.tar.gz"
-          tar -zxf oras_${VERSION}_*.tar.gz
+          TARBALL="oras_${VERSION}_linux_amd64.tar.gz"
+          # Checksum from the release's oras_${VERSION}_checksums.txt. Update
+          # both together when bumping VERSION.
+          SHA256="e09e85323b24ccc8209a1506f142e3d481e6e809018537c6b3db979c891e6ad7"
+
+          # --fail so an HTTP error page is not silently written to the tarball
+          # (a bad download used to surface much later as "gzip: stdin: not in
+          # gzip format"), plus retries for transient release-CDN failures.
+          curl --fail --location --show-error --silent \
+            --retry 5 --retry-all-errors --retry-delay 5 \
+            --output "${TARBALL}" \
+            "https://github.com/oras-project/oras/releases/download/v${VERSION}/${TARBALL}"
+
+          echo "${SHA256}  ${TARBALL}" | sha256sum --check --strict
+
+          tar -zxf "${TARBALL}" oras
           sudo mv oras /usr/local/bin/
           oras version
 

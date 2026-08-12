@@ -160,8 +160,13 @@ jobs:
         id: create-key
         run: |
           KEY_NAME="eif-builder-${{ github.run_id }}-${{ github.run_attempt }}"
+          # Purpose=EIF-Build is what the eif-builder-workflow IAM policy gates
+          # DeleteKeyPair on, so the cleanup step below can only ever delete a
+          # key pair this workflow created. Tag on create: a later CreateTags
+          # would leave a window where cleanup is denied.
           aws ec2 create-key-pair \
             --key-name "${KEY_NAME}" \
+            --tag-specifications 'ResourceType=key-pair,Tags=[{Key=Name,Value=eif-builder},{Key=Purpose,Value=EIF-Build}]' \
             --query 'KeyMaterial' \
             --output text > /tmp/eif-builder-key.pem
           chmod 400 /tmp/eif-builder-key.pem
@@ -191,10 +196,14 @@ jobs:
         id: security-group
         run: |
           SG_NAME="eif-builder-${{ github.run_id }}"
+          # Tagged on create for the same reason as the key pair above: the IAM
+          # policy gates DeleteSecurityGroup and the ingress rule on
+          # Purpose=EIF-Build.
           SG_ID=$(aws ec2 create-security-group \
             --group-name "${SG_NAME}" \
             --description "Temporary SG for EIF building - Run ${{ github.run_id }}" \
             --vpc-id "${{ steps.vpc-info.outputs.vpc_id }}" \
+            --tag-specifications 'ResourceType=security-group,Tags=[{Key=Name,Value=eif-builder},{Key=Purpose,Value=EIF-Build}]' \
             --query 'GroupId' \
             --output text)
 

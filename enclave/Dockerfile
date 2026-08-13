@@ -1,4 +1,6 @@
-FROM amazonlinux:2023
+# Enclave measurements depend on these base image bytes.
+# The digest is the pin; keep the 2023 tag beside it so refreshes stay on that major.
+FROM amazonlinux:2023@sha256:694092ae18877ed4e3cb9b643759ba95df1f12af12528fefa18f60f79d4c1568
 
 ARG ENCLAVE_MAX_WORKERS=50
 ENV ENCLAVE_MAX_WORKERS=${ENCLAVE_MAX_WORKERS}

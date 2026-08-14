@@ -87,7 +87,6 @@ func (s *EnclaveServer) Start() error {
 // dispatch hands an accepted connection to a worker, or closes it immediately
 // when the pool is full.
 func (s *EnclaveServer) dispatch(conn net.Conn) {
-	// Acquire worker slot - immediate rejection if pool full
 	select {
 	case s.workers <- struct{}{}:
 		go func() {

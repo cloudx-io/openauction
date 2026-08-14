@@ -69,7 +69,7 @@ func (s *EnclaveServer) Start() error {
 	if err != nil {
 		return fmt.Errorf("failed to get max workers config: %w", err)
 	}
-	semaphore := make(chan struct{}, maxWorkers)
+	s.workers = make(chan struct{}, maxWorkers)
 
 	log.Printf("INFO: Worker pool initialized with %d max concurrent workers", maxWorkers)
 
@@ -79,19 +79,26 @@ func (s *EnclaveServer) Start() error {
 			log.Printf("ERROR: Failed to accept vsock connection: %v", err)
 			continue
 		}
+		s.connsAccepted.Add(1)
+		s.dispatch(conn)
+	}
+}
 
-		// Acquire worker slot - immediate rejection if pool full
-		select {
-		case semaphore <- struct{}{}:
-			go func(c net.Conn) {
-				defer func() { <-semaphore }() // Release worker slot
-				s.handleConnection(c)
-			}(conn)
-		default:
-			log.Printf("INFO: No workers available, rejecting connection (pool full)")
-			if err := conn.Close(); err != nil {
-				log.Printf("ERROR: Failed to close rejected connection: %v", err)
-			}
+// dispatch hands an accepted connection to a worker, or closes it immediately
+// when the pool is full.
+func (s *EnclaveServer) dispatch(conn net.Conn) {
+	// Acquire worker slot - immediate rejection if pool full
+	select {
+	case s.workers <- struct{}{}:
+		go func() {
+			defer func() { <-s.workers }() // Release worker slot
+			s.handleConnection(conn)
+		}()
+	default:
+		s.connsRejected.Add(1)
+		log.Printf("INFO: No workers available, rejecting connection (pool full)")
+		if err := conn.Close(); err != nil {
+			log.Printf("ERROR: Failed to close rejected connection: %v", err)
 		}
 	}
 }
@@ -129,12 +136,7 @@ func (s *EnclaveServer) handleConnection(conn net.Conn) {
 
 	switch baseReq.Type {
 	case "ping":
-		response = map[string]any{
-			"type":      "pong",
-			"message":   "TEE server is healthy",
-			"timestamp": time.Now().Unix(),
-			"system":    getSystemInfoOrNil(),
-		}
+		response = s.pingResponse()
 		log.Printf("INFO: Responding to ping with pong")
 
 	case "key_request":
@@ -187,6 +189,19 @@ func (s *EnclaveServer) handleConnection(conn net.Conn) {
 		log.Printf("ERROR: Failed to encode response: %v", err)
 	} else {
 		log.Printf("INFO: Successfully sent response for %s", baseReq.Type)
+	}
+}
+
+// pingResponse builds the pong payload. system carries the enclave VM's /proc
+// view and app the server's own internals; both are optional to consumers, which
+// read whichever fields they understand and ignore the rest.
+func (s *EnclaveServer) pingResponse() map[string]any {
+	return map[string]any{
+		"type":      "pong",
+		"message":   "TEE server is healthy",
+		"timestamp": time.Now().Unix(),
+		"system":    getSystemInfoOrNil(),
+		"app":       s.appInfo(),
 	}
 }
 

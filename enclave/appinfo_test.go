@@ -40,10 +40,11 @@ func TestAppInfo_ReportsRuntimeInternals(t *testing.T) {
 
 	assert.True(t, info.Goroutines >= 1)
 	assert.True(t, info.HeapAllocBytes > 0)
-	// A short test binary may never GC; once it has, the cumulative pause time
-	// must be reported alongside the count.
-	if info.GCNum > 0 {
-		assert.True(t, info.GCPauseTotalMillis > 0)
+	// Pause time is rounded to tenths, so a few sub-50us pauses still report 0.0
+	// after a GC. The guaranteed direction is the reverse: reported pause time
+	// means collections happened.
+	if info.GCPauseTotalMillis > 0 {
+		assert.True(t, info.GCNum > 0)
 	}
 }
 

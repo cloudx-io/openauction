@@ -42,14 +42,21 @@ func (s *EnclaveServer) appInfo() *AppInfo {
 	var mem runtime.MemStats
 	runtime.ReadMemStats(&mem)
 
+	// Read rejected before accepted. The accept loop increments accepted first
+	// and only then, for a rejected connection, rejected; reading them in the
+	// opposite order keeps the reported accepted >= rejected even when a
+	// rejection lands between the two loads.
+	rejected := s.connsRejected.Load()
+	accepted := s.connsAccepted.Load()
+
 	return &AppInfo{
 		UptimeSeconds:      s.uptimeSeconds(),
 		Goroutines:         runtime.NumGoroutine(),
 		GCNum:              mem.NumGC,
 		GCPauseTotalMillis: roundTenths(float64(mem.PauseTotalNs) / float64(time.Millisecond)),
 		HeapAllocBytes:     mem.HeapAlloc,
-		ConnsAcceptedTotal: s.connsAccepted.Load(),
-		ConnsRejectedTotal: s.connsRejected.Load(),
+		ConnsAcceptedTotal: accepted,
+		ConnsRejectedTotal: rejected,
 		WorkersInUse:       len(s.workers),
 		WorkersMax:         cap(s.workers),
 	}

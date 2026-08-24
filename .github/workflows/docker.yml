@@ -56,7 +56,7 @@ jobs:
           aws-region: us-east-1
       - name: Login to Amazon ECR
         if: env.PUBLISH_IMAGE == 'true'
-        uses: aws-actions/amazon-ecr-login@d539f0932e70871a027e9d5a9d8fc38589180a64 # ratchet:aws-actions/amazon-ecr-login@v2
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # ratchet:aws-actions/amazon-ecr-login@v2
       - name: go build enclave binary
         run: |
           CGO_ENABLED=0 GOOS=linux GOARCH=${{ env.ARCHITECTURE }} go build -a -ldflags '-extldflags "-static"' -tags netgo -o ./bin/tee-auction-enclave ./enclave
@@ -91,7 +91,7 @@ jobs:
             type=raw,value=latest${{ env.IMAGE_TAG_SUFFIX }},enable=${{ github.event.workflow_run.head_branch == 'main' || github.ref == 'refs/heads/main' }}
       - uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # ratchet:docker/setup-qemu-action@v4
         if: env.ARCHITECTURE == 'arm64'
-      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # ratchet:docker/setup-buildx-action@v4
         with:
           platforms: linux/${{ env.ARCHITECTURE }}
       - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # ratchet:docker/build-push-action@v7

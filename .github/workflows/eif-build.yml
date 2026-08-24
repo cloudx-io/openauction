@@ -304,16 +304,15 @@ jobs:
 
       - name: Build EIF
         env:
-          # image_uri derives from the untrusted image_tag input, so bind it (and
-          # the instance IP) into the environment rather than interpolating
-          # ${{ ... }} into the double-quoted SSH command, where a $(...) in the
-          # value would otherwise be evaluated by the runner's shell.
+          # image_uri derives from the untrusted image_tag input, so bind it into
+          # the environment rather than interpolating ${{ ... }} into the
+          # double-quoted SSH command, where a $(...) in the value would otherwise
+          # be evaluated by the runner's shell before ssh is invoked.
           IMAGE_URI: ${{ steps.image-uri.outputs.image_uri }}
-          PUBLIC_IP: ${{ steps.launch-instance.outputs.public_ip }}
         run: |
           ssh -i /tmp/eif-builder-key.pem \
               -o StrictHostKeyChecking=no \
-              "ec2-user@${PUBLIC_IP}" \
+              ec2-user@${{ steps.launch-instance.outputs.public_ip }} \
               "sudo bash ~/scripts/build-eif-ci.sh \
                     '${IMAGE_URI}' \
                     '/tmp/auction.eif' \

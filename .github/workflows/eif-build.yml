@@ -159,10 +159,13 @@ jobs:
           fi
 
           # Defense in depth on top of env binding: reject anything that is not a
-          # well-formed OCI tag, so no shell metacharacter can reach the SSH
-          # command that later consumes image_uri.
-          if ! printf '%s' "${IMAGE_TAG}" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]*$'; then
-            echo "::error::Invalid image tag (allowed characters: A-Za-z0-9._-): ${IMAGE_TAG}"
+          # well-formed OCI tag before it reaches the SSH command that consumes
+          # image_uri. Match the whole string with bash's =~ rather than a
+          # line-oriented grep -- grep succeeds when ANY line matches, so a
+          # multi-line tag whose first line is valid would pass while smuggling a
+          # quote/semicolon on a later line -- and cap length at the OCI limit.
+          if [[ ! "${IMAGE_TAG}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]]; then
+            echo "::error::Invalid image tag (must be 1-128 chars of [A-Za-z0-9._-], not starting with . or -): ${IMAGE_TAG}"
             exit 1
           fi
 

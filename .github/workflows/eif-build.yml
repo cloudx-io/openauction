@@ -138,25 +138,40 @@ jobs:
 
       - name: Construct Docker image URI
         id: image-uri
+        env:
+          # image_tag is an untrusted workflow_dispatch input. Bind it into the
+          # environment instead of interpolating ${{ ... }} into the script body,
+          # so a crafted tag cannot break out of the quoting and run commands on
+          # the runner (which has already assumed the eif-builder-workflow role).
+          INPUT_IMAGE_TAG: ${{ github.event.inputs.image_tag }}
+          COMMIT_SHA: ${{ steps.set-sha.outputs.commit_sha }}
+          ARCHITECTURE: ${{ steps.builder-arch.outputs.architecture }}
+          ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
         run: |
           # For workflow_run: use commit SHA from triggering workflow
           # For workflow_dispatch: use user-provided image tag
-          if [ -n "${{ github.event.inputs.image_tag }}" ]; then
-            IMAGE_TAG="${{ github.event.inputs.image_tag }}"
+          if [ -n "${INPUT_IMAGE_TAG}" ]; then
+            IMAGE_TAG="${INPUT_IMAGE_TAG}"
             echo "Using manually specified image tag: ${IMAGE_TAG}"
           else
-            COMMIT_SHA="${{ steps.set-sha.outputs.commit_sha }}"
             IMAGE_TAG="${COMMIT_SHA}"
             echo "Using commit-based image tag: ${IMAGE_TAG}"
           fi
 
-          ARCHITECTURE="${{ steps.builder-arch.outputs.architecture }}"
+          # Defense in depth on top of env binding: reject anything that is not a
+          # well-formed OCI tag, so no shell metacharacter can reach the SSH
+          # command that later consumes image_uri.
+          if ! printf '%s' "${IMAGE_TAG}" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]*$'; then
+            echo "::error::Invalid image tag (allowed characters: A-Za-z0-9._-): ${IMAGE_TAG}"
+            exit 1
+          fi
+
           if [ "${ARCHITECTURE}" = "arm64" ] && [[ "${IMAGE_TAG}" != *-arm64 ]]; then
             IMAGE_TAG="${IMAGE_TAG}-arm64"
             echo "Using arm64 image tag: ${IMAGE_TAG}"
           fi
 
-          IMAGE_URI="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/cloudx-io/openauction/enclave:${IMAGE_TAG}"
+          IMAGE_URI="${ECR_REGISTRY}/cloudx-io/openauction/enclave:${IMAGE_TAG}"
           echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
           echo "Docker image: ${IMAGE_URI}"
 
@@ -288,14 +303,21 @@ jobs:
               'sudo bash ~/scripts/setup-nitro-instance.sh'
 
       - name: Build EIF
+        env:
+          # image_uri derives from the untrusted image_tag input, so bind it (and
+          # the instance IP) into the environment rather than interpolating
+          # ${{ ... }} into the double-quoted SSH command, where a $(...) in the
+          # value would otherwise be evaluated by the runner's shell.
+          IMAGE_URI: ${{ steps.image-uri.outputs.image_uri }}
+          PUBLIC_IP: ${{ steps.launch-instance.outputs.public_ip }}
         run: |
           ssh -i /tmp/eif-builder-key.pem \
               -o StrictHostKeyChecking=no \
-              ec2-user@${{ steps.launch-instance.outputs.public_ip }} \
+              "ec2-user@${PUBLIC_IP}" \
               "sudo bash ~/scripts/build-eif-ci.sh \
-                    '${{ steps.image-uri.outputs.image_uri }}' \
+                    '${IMAGE_URI}' \
                     '/tmp/auction.eif' \
-                    '${{ env.AWS_REGION }}'"
+                    '${AWS_REGION}'"
 
       - name: Download EIF and measurements
         run: |
@@ -453,7 +475,14 @@ jobs:
     needs: build-eif
     # arm64 is the canonical fleet, so validation/pcrs.json tracks arm64 PCRs.
     # amd64 dispatches (now opt-in) don't touch the file to avoid arch-mismatched entries.
-    if: github.ref == 'refs/heads/main' && needs.build-eif.outputs.architecture == 'arm64'
+    # image_tag overrides are barred from this path: PCRs are recorded under the
+    # checked-out commit SHA, so a dispatch that measures an arbitrary image_tag would
+    # otherwise append that image's measurements to the bidder-facing allowlist as if
+    # they belonged to main. Only auto-tagged builds (tag == commit) may update pcrs.json.
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      needs.build-eif.outputs.architecture == 'arm64' &&
+      github.event.inputs.image_tag == ''
     env:
       GH_APP_CLIENT_ID: 'Iv23li0CF0SJXIuRq9kS'
 

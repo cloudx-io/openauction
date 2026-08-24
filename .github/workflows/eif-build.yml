@@ -152,22 +152,23 @@ jobs:
           # For workflow_dispatch: use user-provided image tag
           if [ -n "${INPUT_IMAGE_TAG}" ]; then
             IMAGE_TAG="${INPUT_IMAGE_TAG}"
-            echo "Using manually specified image tag: ${IMAGE_TAG}"
           else
             IMAGE_TAG="${COMMIT_SHA}"
-            echo "Using commit-based image tag: ${IMAGE_TAG}"
           fi
 
-          # Defense in depth on top of env binding: reject anything that is not a
-          # well-formed OCI tag before it reaches the SSH command that consumes
-          # image_uri. Match the whole string with bash's =~ rather than a
-          # line-oriented grep -- grep succeeds when ANY line matches, so a
-          # multi-line tag whose first line is valid would pass while smuggling a
-          # quote/semicolon on a later line -- and cap length at the OCI limit.
+          # Validate BEFORE echoing anything derived from the tag. Defense in depth
+          # on top of env binding: reject anything that is not a well-formed OCI tag
+          # before it reaches the SSH command that consumes image_uri, or the log.
+          # Match the whole string with bash's =~ rather than a line-oriented grep
+          # (grep succeeds when ANY line matches, so a multi-line tag whose first
+          # line is valid would pass), and cap length at the OCI limit. The error
+          # deliberately does not echo the raw tag: a multi-line value could emit a
+          # ::workflow-command:: line the runner parses even though the step fails.
           if [[ ! "${IMAGE_TAG}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]]; then
-            echo "::error::Invalid image tag (must be 1-128 chars of [A-Za-z0-9._-], not starting with . or -): ${IMAGE_TAG}"
+            echo "::error::Invalid image tag (must be 1-128 chars of [A-Za-z0-9._-], not starting with . or -)"
             exit 1
           fi
+          echo "Using image tag: ${IMAGE_TAG}"
 
           if [ "${ARCHITECTURE}" = "arm64" ] && [[ "${IMAGE_TAG}" != *-arm64 ]]; then
             IMAGE_TAG="${IMAGE_TAG}-arm64"

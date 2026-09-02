@@ -51,7 +51,8 @@ env:
   # AL2023 release the builder runs on, pinned by AMI name so every EIF is
   # measured on the OS, kernel and nitro-cli the TEE fleet image is built from.
   # Bump it together with the fleet image. AL2023 marks each release deprecated
-  # about 90 days after publication, so the lookup includes deprecated images.
+  # about 90 days after publication and the lookup excludes deprecated images,
+  # so a pin left past that point fails the build rather than running on one.
   BUILDER_AMI_RELEASE: al2023-ami-2023.12.20260817.0-kernel-6.18
 
 concurrency:
@@ -130,7 +131,6 @@ jobs:
           AMI_NAME="${BUILDER_AMI_RELEASE}-${AMI_ARCH}"
           AMI_ID=$(aws ec2 describe-images \
             --owners amazon \
-            --include-deprecated \
             --filters "Name=name,Values=${AMI_NAME}" \
                       "Name=state,Values=available" \
             --query 'Images[0].ImageId' \

@@ -44,22 +44,18 @@ jobs:
           # into the script body; head_branch is a free-form ref name.
           EVENT_NAME: ${{ github.event_name }}
           TRIGGER_EVENT: ${{ github.event.workflow_run.event }}
-          TRIGGER_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
           TRIGGER_BRANCH: ${{ github.event.workflow_run.head_branch }}
-          REPOSITORY: ${{ github.repository }}
           REF: ${{ github.ref }}
         run: |
-          # Automated builds publish, and move `latest`, only when the triggering
-          # run was a push to this repository's default branch: the trigger event,
-          # source repository and branch are each checked. A dispatch on main
-          # publishes the same way; a non-main arm64 dispatch publishes only the
-          # commit-specific tags used for EIF validation.
+          # Automated builds publish, and move `latest`, only for a push to this
+          # repository's default branch. A push run is always on the repository's
+          # own ref, so event plus branch identify it without a repository check.
+          # A dispatch on main publishes the same way; a non-main arm64 dispatch
+          # publishes only the commit-specific tags used for EIF validation.
           PUBLISH_IMAGE=false
           TAG_LATEST=false
           if [ "${EVENT_NAME}" = "workflow_run" ]; then
-            if [ "${TRIGGER_EVENT}" = "push" ] \
-              && [ "${TRIGGER_REPOSITORY}" = "${REPOSITORY}" ] \
-              && [ "${TRIGGER_BRANCH}" = "main" ]; then
+            if [ "${TRIGGER_EVENT}" = "push" ] && [ "${TRIGGER_BRANCH}" = "main" ]; then
               PUBLISH_IMAGE=true
               TAG_LATEST=true
             fi

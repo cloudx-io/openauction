@@ -15,7 +15,9 @@ set -euo pipefail
 #   - AWS Nitro Enclaves CLI
 #   - Docker (if not already installed)
 #   - jq for JSON processing
-#   - Configures Nitro Enclaves allocator
+#
+# The Nitro Enclaves allocator (CPU and hugepage reservation for run-enclave)
+# is not configured: nitro-cli build-enclave needs only Docker and the CLI.
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
@@ -157,51 +159,6 @@ install_dependencies() {
     done
 }
 
-configure_nitro_allocator() {
-    log "Configuring Nitro Enclaves allocator..."
-    
-    # Create allocator config directory
-    sudo mkdir -p /etc/nitro_enclaves
-    
-    # Create allocator configuration
-    # Allocate memory and CPUs for enclave building
-    # These are conservative values suitable for c5.xlarge and similar instances
-    cat << 'EOF' | sudo tee /etc/nitro_enclaves/allocator.yaml > /dev/null
----
-# Enclave memory in MiB (6GB for EIF building)
-memory_mib: 6144
-
-# Number of vCPUs to allocate (2 CPUs for building)
-cpu_count: 2
-
-# CPU pool configuration
-# 0 = dedicated for enclave
-cpu_pool: 0
-EOF
-    
-    log "✓ Allocator configuration created"
-    
-    # Enable and start allocator service
-    if systemctl list-unit-files | grep -q nitro-enclaves-allocator; then
-        log "Enabling nitro-enclaves-allocator service..."
-        sudo systemctl enable nitro-enclaves-allocator.service
-        sudo systemctl start nitro-enclaves-allocator.service
-        
-        # Wait a moment for service to stabilize
-        sleep 2
-        
-        if systemctl is-active --quiet nitro-enclaves-allocator; then
-            log "✓ Nitro Enclaves allocator service running"
-        else
-            log "Warning: Allocator service not running (may need Nitro-compatible instance)"
-            log "This is normal on non-Nitro instances or in virtualized environments"
-        fi
-    else
-        log "Warning: nitro-enclaves-allocator service not found"
-        log "This is normal on non-Nitro instances"
-    fi
-}
-
 verify_setup() {
     log "Verifying setup..."
     
@@ -238,14 +195,6 @@ verify_setup() {
         all_good=false
     fi
     
-    # Check allocator config
-    if [ -f /etc/nitro_enclaves/allocator.yaml ]; then
-        log "✓ allocator.yaml configured"
-    else
-        log_error "✗ allocator.yaml not found"
-        all_good=false
-    fi
-    
     if [ "$all_good" = true ]; then
         log "========================================="
         log "✓ Setup complete!"
@@ -270,7 +219,6 @@ main() {
     install_nitro_cli
     install_docker
     install_dependencies
-    configure_nitro_allocator
     verify_setup
     
     log "========================================="

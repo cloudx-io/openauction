@@ -38,16 +38,37 @@ jobs:
           else
             echo "IMAGE_TAG_SUFFIX=" >> "$GITHUB_ENV"
           fi
-
+      - name: docker set publish env vars
+        env:
+          # Trigger metadata is bound into the environment rather than interpolated
+          # into the script body; head_branch is a free-form ref name.
+          EVENT_NAME: ${{ github.event_name }}
+          TRIGGER_EVENT: ${{ github.event.workflow_run.event }}
+          TRIGGER_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          REF: ${{ github.ref }}
+        run: |
+          # Automated builds publish, and move `latest`, only for a push to this
+          # repository's default branch. A push run is always on the repository's
+          # own ref, so event plus branch identify it without a repository check.
+          # A dispatch on main publishes the same way; a non-main arm64 dispatch
+          # publishes only the commit-specific tags used for EIF validation.
           PUBLISH_IMAGE=false
-          if [ "${{ github.event_name }}" = "workflow_run" ] && [ "${{ github.event.workflow_run.head_branch }}" = "main" ]; then
-            PUBLISH_IMAGE=true
-          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            if [ "${{ github.ref }}" = "refs/heads/main" ] || [ "${ARCHITECTURE}" = "arm64" ]; then
+          TAG_LATEST=false
+          if [ "${EVENT_NAME}" = "workflow_run" ]; then
+            if [ "${TRIGGER_EVENT}" = "push" ] && [ "${TRIGGER_BRANCH}" = "main" ]; then
+              PUBLISH_IMAGE=true
+              TAG_LATEST=true
+            fi
+          elif [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
+            if [ "${REF}" = "refs/heads/main" ]; then
+              PUBLISH_IMAGE=true
+              TAG_LATEST=true
+            elif [ "${ARCHITECTURE}" = "arm64" ]; then
               PUBLISH_IMAGE=true
             fi
           fi
           echo "PUBLISH_IMAGE=${PUBLISH_IMAGE}" >> "$GITHUB_ENV"
+          echo "TAG_LATEST=${TAG_LATEST}" >> "$GITHUB_ENV"
       - name: Configure AWS credentials
         if: env.PUBLISH_IMAGE == 'true'
         uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # ratchet:aws-actions/configure-aws-credentials@v6
@@ -68,6 +89,12 @@ jobs:
           COMMIT="${SHA}${DIRTY}"
           echo "CLOUDX_VERSION=${VERSION}" >> "$GITHUB_ENV"
           echo "CLOUDX_COMMIT=${COMMIT}" >> "$GITHUB_ENV"
+          # Image tags and the revision label name the commit that was checked
+          # out and built. github.sha is not used: for a workflow_run it is the
+          # default-branch tip, which need not be the commit under build.
+          COMMIT_SHA="$(git rev-parse HEAD)"
+          echo "COMMIT_SHA=${COMMIT_SHA}" >> "$GITHUB_ENV"
+          echo "COMMIT_SHA_SHORT=${COMMIT_SHA:0:7}" >> "$GITHUB_ENV"
       - name: docker set metadata
         id: dockermetadata
         # https://github.com/docker/metadata-action
@@ -80,15 +107,16 @@ jobs:
             org.opencontainers.image.description=CloudX Nitro Enclave for secure auction processing
             org.opencontainers.image.vendor=cloudx.io
             org.opencontainers.image.source=https://github.com/cloudx-io/openauction
+            org.opencontainers.image.revision=${{ env.COMMIT_SHA }}
           tags: |
             # short sha of the commit
-            type=sha,prefix=,suffix=${{ env.IMAGE_TAG_SUFFIX }},format=short
+            type=raw,value=${{ env.COMMIT_SHA_SHORT }}${{ env.IMAGE_TAG_SUFFIX }},priority=100
             # long sha of the commit
-            type=sha,prefix=,suffix=${{ env.IMAGE_TAG_SUFFIX }},format=long
+            type=raw,value=${{ env.COMMIT_SHA }}${{ env.IMAGE_TAG_SUFFIX }},priority=100
             # our version tag, like "0.0.0-commit.ABCDEF01"
             type=raw,value=${{ env.CLOUDX_VERSION }}-commit.${{ env.CLOUDX_COMMIT }}${{ env.IMAGE_TAG_SUFFIX }}
             # "latest"
-            type=raw,value=latest${{ env.IMAGE_TAG_SUFFIX }},enable=${{ github.event.workflow_run.head_branch == 'main' || github.ref == 'refs/heads/main' }}
+            type=raw,value=latest${{ env.IMAGE_TAG_SUFFIX }},enable=${{ env.TAG_LATEST == 'true' }}
       - uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # ratchet:docker/setup-qemu-action@v4
         if: env.ARCHITECTURE == 'arm64'
       - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # ratchet:docker/setup-buildx-action@v4

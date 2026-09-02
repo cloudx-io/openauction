@@ -57,6 +57,11 @@ jobs:
   build-eif:
     name: Build EIF on Nitro EC2
     runs-on: ubuntu-latest
+    # Publication is gated in docker.yml: automated Docker Build runs push an
+    # image only for a push to this repository's default branch, and every
+    # Docker Build run is bound to this repository, so the image's source is not
+    # re-checked here. Manual publication and measurement remain the
+    # workflow_dispatch paths of the two workflows.
     # The [skip-build] marker is matched with startsWith, not contains: a squash
     # merge puts the entire PR description in the commit body, so contains also
     # matches any PR whose description merely mentions the marker in prose. The

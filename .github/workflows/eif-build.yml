@@ -48,6 +48,11 @@ on:
 
 env:
   AWS_REGION: us-east-1
+  # AL2023 release the builder runs on, pinned by AMI name so every EIF is
+  # measured on the OS, kernel and nitro-cli the TEE fleet image is built from.
+  # Bump it together with the fleet image. AL2023 marks each release deprecated
+  # about 90 days after publication, so the lookup includes deprecated images.
+  BUILDER_AMI_RELEASE: al2023-ami-2023.12.20260817.0-kernel-6.18
 
 concurrency:
   group: eif-build
@@ -122,17 +127,17 @@ jobs:
             INSTANCE_TYPE="c5.xlarge"
           fi
 
+          AMI_NAME="${BUILDER_AMI_RELEASE}-${AMI_ARCH}"
           AMI_ID=$(aws ec2 describe-images \
             --owners amazon \
-            --filters "Name=name,Values=al2023-ami-2023.*-${AMI_ARCH}" \
+            --include-deprecated \
+            --filters "Name=name,Values=${AMI_NAME}" \
                       "Name=state,Values=available" \
-                      "Name=root-device-type,Values=ebs" \
-                      "Name=virtualization-type,Values=hvm" \
-            --query 'sort_by(Images, &CreationDate)[-1].ImageId' \
+            --query 'Images[0].ImageId' \
             --output text)
 
           if [ -z "${AMI_ID}" ] || [ "${AMI_ID}" = "None" ]; then
-            echo "::error::Failed to resolve AL2023 ${AMI_ARCH} builder AMI"
+            echo "::error::Failed to resolve builder AMI ${AMI_NAME}"
             exit 1
           fi
 

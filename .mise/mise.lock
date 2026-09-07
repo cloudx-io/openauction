@@ -8,7 +8,7 @@ backend = "core:go"
 "platforms.windows-x64" = { checksum = "sha256:f0c0a0d33ba94f4d2c5dbc887334ce678b21813504ddb3aafcb06e60a5a667c4", url = "https://dl.google.com/go/go1.27.0.windows-amd64.zip"}
 
 [[tools."go:github.com/sethvargo/ratchet"]]
-version = "0.11.4"
+version = "0.12.0"
 backend = "go:github.com/sethvargo/ratchet"
 
 [[tools.golangci-lint]]

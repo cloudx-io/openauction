@@ -367,11 +367,11 @@ jobs:
           # already-built EIF artifact to ECR. It is the runner's architecture, not
           # the target EIF's, so it stays amd64 even for arm64 EIF builds (which are
           # built on the remote Nitro instance). Do not switch this to arm64.
-          VERSION="1.1.0"
+          VERSION="1.3.4"
           TARBALL="oras_${VERSION}_linux_amd64.tar.gz"
           # Checksum from the release's oras_${VERSION}_checksums.txt. Update
           # both together when bumping VERSION.
-          SHA256="e09e85323b24ccc8209a1506f142e3d481e6e809018537c6b3db979c891e6ad7"
+          SHA256="f27adb935022d94df8dc77719c322dda592c78a0d57a6f7dcdd8d900b248c454"
 
           # --fail so an HTTP error page is not silently written to the tarball
           # (a bad download used to surface much later as "gzip: stdin: not in

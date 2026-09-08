@@ -1,5 +1,5 @@
 name: Build EIF
-run-name: Build EIF - commit ${{ github.event.workflow_run.head_sha || github.sha }} from image ${{ github.event.inputs.image_tag || 'auto' }}
+run-name: Build EIF - commit ${{ github.event.workflow_run.head_sha || github.sha }}
 
 # This workflow builds Enclave Image Files (EIFs) for AWS Nitro Enclaves
 # EIFs can only be built on Nitro-compatible EC2 instances, so this workflow:

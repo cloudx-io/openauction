@@ -517,27 +517,67 @@ jobs:
         with:
           token: ${{ steps.app-token.outputs.token }}
 
-      - name: Update pcrs.json
+      - name: Append PCR set and push
+        env:
+          COMMIT_SHA: ${{ needs.build-eif.outputs.commit_sha }}
+          PCR0: ${{ needs.build-eif.outputs.pcr0 }}
+          PCR1: ${{ needs.build-eif.outputs.pcr1 }}
+          PCR2: ${{ needs.build-eif.outputs.pcr2 }}
         run: |
-          # Use jq to append new PCR set
-          jq --arg sha "${{ needs.build-eif.outputs.commit_sha }}" \
-             --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-             --arg pcr0 "${{ needs.build-eif.outputs.pcr0 }}" \
-             --arg pcr1 "${{ needs.build-eif.outputs.pcr1 }}" \
-             --arg pcr2 "${{ needs.build-eif.outputs.pcr2 }}" \
-             '.pcr_sets += [{
-               commit_sha: $sha,
-               timestamp: $ts,
-               pcr0: $pcr0,
-               pcr1: $pcr1,
-               pcr2: $pcr2
-             }]' validation/pcrs.json > pcrs.tmp.json
-          mv pcrs.tmp.json validation/pcrs.json
-
-      - name: Commit and push
-        run: |
+          # Two runs can measure the same main commit: a push burst fires one
+          # Docker Build per merge and each one measures the tip of main. The
+          # checkout above is main as of trigger time, not job start, so a
+          # sibling run's PCR commit can already sit on origin. Every attempt
+          # therefore starts from a fresh origin/main: skip when the built set
+          # is recorded there, otherwise append and push. A push that loses the
+          # race is retried once from the moved tip. Regenerating the commit
+          # replaces a rebase, which conflicts when both commits append to the
+          # same array tail.
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add validation/pcrs.json
-          git commit -m "[skip-build] Update PCR measurements for ${{ needs.build-eif.outputs.commit_sha }}"
-          git push
+
+          for attempt in 1 2; do
+            git fetch origin main
+            git reset --hard origin/main
+
+            recorded=$(jq -r --arg sha "${COMMIT_SHA}" \
+                             --arg pcr0 "${PCR0}" --arg pcr1 "${PCR1}" --arg pcr2 "${PCR2}" '
+              [ .pcr_sets[] | select(.commit_sha == $sha)
+                | "an entry for commit \(.commit_sha)" ]
+              + [ .pcr_sets[] | select(.pcr0 == $pcr0 and .pcr1 == $pcr1 and .pcr2 == $pcr2)
+                | "identical measurements under commit \(.commit_sha)" ]
+              | .[0] // empty' validation/pcrs.json)
+            if [ -n "${recorded}" ]; then
+              echo "::notice::validation/pcrs.json on origin/main already has ${recorded}; skipping commit and push for ${COMMIT_SHA}"
+              exit 0
+            fi
+
+            jq --arg sha "${COMMIT_SHA}" \
+               --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+               --arg pcr0 "${PCR0}" --arg pcr1 "${PCR1}" --arg pcr2 "${PCR2}" \
+               '.pcr_sets += [{
+                 commit_sha: $sha,
+                 timestamp: $ts,
+                 pcr0: $pcr0,
+                 pcr1: $pcr1,
+                 pcr2: $pcr2
+               }]' validation/pcrs.json > pcrs.tmp.json
+            mv pcrs.tmp.json validation/pcrs.json
+            git add validation/pcrs.json
+            git commit -m "[skip-build] Update PCR measurements for ${COMMIT_SHA}"
+
+            if push_output=$(git push origin HEAD:main 2>&1); then
+              echo "${push_output}"
+              echo "Recorded PCRs for ${COMMIT_SHA} on attempt ${attempt}"
+              exit 0
+            fi
+            echo "${push_output}"
+            if ! grep -q '\[rejected\]' <<< "${push_output}"; then
+              echo "::error::git push failed for a reason other than a non-fast-forward"
+              exit 1
+            fi
+            echo "origin/main moved during attempt ${attempt}; refetching"
+          done
+
+          echo "::error::git push was rejected as non-fast-forward on both attempts"
+          exit 1

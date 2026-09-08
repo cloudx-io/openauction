@@ -517,27 +517,82 @@ jobs:
         with:
           token: ${{ steps.app-token.outputs.token }}
 
-      - name: Update pcrs.json
+      - name: Append PCR set and push
+        env:
+          COMMIT_SHA: ${{ needs.build-eif.outputs.commit_sha }}
+          PCR0: ${{ needs.build-eif.outputs.pcr0 }}
+          PCR1: ${{ needs.build-eif.outputs.pcr1 }}
+          PCR2: ${{ needs.build-eif.outputs.pcr2 }}
         run: |
-          # Use jq to append new PCR set
-          jq --arg sha "${{ needs.build-eif.outputs.commit_sha }}" \
-             --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-             --arg pcr0 "${{ needs.build-eif.outputs.pcr0 }}" \
-             --arg pcr1 "${{ needs.build-eif.outputs.pcr1 }}" \
-             --arg pcr2 "${{ needs.build-eif.outputs.pcr2 }}" \
-             '.pcr_sets += [{
-               commit_sha: $sha,
-               timestamp: $ts,
-               pcr0: $pcr0,
-               pcr1: $pcr1,
-               pcr2: $pcr2
-             }]' validation/pcrs.json > pcrs.tmp.json
-          mv pcrs.tmp.json validation/pcrs.json
-
-      - name: Commit and push
-        run: |
+          # Two runs can measure the same main commit: a push burst fires one
+          # Docker Build per merge and each one measures the tip of main. The
+          # checkout above is main as of trigger time, not job start, so a
+          # sibling run's PCR commit can already sit on origin. Every attempt
+          # therefore starts from a fresh origin/main: skip when the built set
+          # is recorded there, fail when the commit is recorded with different
+          # measurements (the build is not reproducible and the EIF just pushed
+          # under that commit's tag differs from the trusted one), otherwise
+          # append and push. A push that loses the race is retried once from
+          # the moved tip. Regenerating the commit replaces a rebase, which
+          # conflicts when both commits append to the same array tail.
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add validation/pcrs.json
-          git commit -m "[skip-build] Update PCR measurements for ${{ needs.build-eif.outputs.commit_sha }}"
-          git push
+
+          for attempt in 1 2; do
+            git fetch origin +refs/heads/main:refs/remotes/origin/main
+            git reset --hard origin/main
+
+            verdict=$(jq -r --arg sha "${COMMIT_SHA}" \
+                            --arg pcr0 "${PCR0}" --arg pcr1 "${PCR1}" --arg pcr2 "${PCR2}" '
+              def same_pcrs: .pcr0 == $pcr0 and .pcr1 == $pcr1 and .pcr2 == $pcr2;
+              (.pcr_sets | map(select(.commit_sha == $sha))) as $same_sha
+              | (.pcr_sets | map(select(same_pcrs))) as $twins
+              | if ($same_sha | any(same_pcrs)) then "skip:an entry for commit \($sha)"
+                elif ($same_sha | length) > 0 then "conflict:\($same_sha[0].pcr0) \($same_sha[0].pcr1) \($same_sha[0].pcr2)"
+                elif ($twins | length) > 0 then "skip:identical measurements under commit \($twins[0].commit_sha)"
+                else "append" end' validation/pcrs.json)
+            case "${verdict}" in
+              append) ;;
+              skip:*)
+                echo "::notice::validation/pcrs.json on origin/main already has ${verdict#skip:}; skipping commit and push for ${COMMIT_SHA}"
+                exit 0
+                ;;
+              conflict:*)
+                echo "::error::validation/pcrs.json on origin/main records commit ${COMMIT_SHA} with PCR0/PCR1/PCR2 ${verdict#conflict:}, but this build measured ${PCR0} ${PCR1} ${PCR2}; the build is not reproducible, so the file was left unchanged"
+                exit 1
+                ;;
+              *)
+                echo "::error::unexpected verdict '${verdict}' from validation/pcrs.json"
+                exit 1
+                ;;
+            esac
+
+            jq --arg sha "${COMMIT_SHA}" \
+               --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+               --arg pcr0 "${PCR0}" --arg pcr1 "${PCR1}" --arg pcr2 "${PCR2}" \
+               '.pcr_sets += [{
+                 commit_sha: $sha,
+                 timestamp: $ts,
+                 pcr0: $pcr0,
+                 pcr1: $pcr1,
+                 pcr2: $pcr2
+               }]' validation/pcrs.json > pcrs.tmp.json
+            mv pcrs.tmp.json validation/pcrs.json
+            git add validation/pcrs.json
+            git commit -m "[skip-build] Update PCR measurements for ${COMMIT_SHA}"
+
+            if push_output=$(git push origin HEAD:main 2>&1); then
+              echo "${push_output}"
+              echo "Recorded PCRs for ${COMMIT_SHA} on attempt ${attempt}"
+              exit 0
+            fi
+            echo "${push_output}"
+            if ! grep -q '\[rejected\]' <<< "${push_output}"; then
+              echo "::error::git push failed for a reason other than a non-fast-forward"
+              exit 1
+            fi
+            echo "origin/main moved during attempt ${attempt}; refetching"
+          done
+
+          echo "::error::git push was rejected as non-fast-forward on both attempts"
+          exit 1

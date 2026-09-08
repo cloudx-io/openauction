@@ -82,7 +82,7 @@ jobs:
       contents: read
 
     outputs:
-      architecture: ${{ steps.builder-arch.outputs.architecture }}
+      architecture: ${{ steps.build-inputs.outputs.architecture }}
       pcr0: ${{ steps.extract-pcrs.outputs.pcr0 }}
       pcr1: ${{ steps.extract-pcrs.outputs.pcr1 }}
       pcr2: ${{ steps.extract-pcrs.outputs.pcr2 }}
@@ -107,11 +107,15 @@ jobs:
           echo "commit_short=${COMMIT_SHA:0:7}" >> "$GITHUB_OUTPUT"
           echo "Building EIF for commit: ${COMMIT_SHA}"
 
-      - name: Validate architecture
+      - name: Validate build inputs
+        id: build-inputs
         env:
+          LC_ALL: C
+          INPUT_IMAGE_TAG: ${{ github.event.inputs.image_tag }}
+          COMMIT_SHA: ${{ steps.set-sha.outputs.commit_sha }}
           ARCHITECTURE: ${{ github.event.inputs.architecture || 'arm64' }}
         run: |
-          # Validate before AWS authentication or writing to the environment file.
+          # Bind dispatch inputs as data and validate them before AWS authentication.
           case "${ARCHITECTURE}" in
             arm64|amd64) ;;
             *)
@@ -119,7 +123,36 @@ jobs:
               exit 1
               ;;
           esac
-          echo "ARCHITECTURE=${ARCHITECTURE}" >> "$GITHUB_ENV"
+
+          # Automated builds use the triggering commit SHA as the image tag.
+          IMAGE_TAG="${INPUT_IMAGE_TAG:-${COMMIT_SHA}}"
+
+          # Match the whole tag before logging or exporting it. Do not echo invalid input.
+          if [[ ! "${IMAGE_TAG}" =~ ^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$ ]]; then
+            echo "::error::Invalid image tag (must be 1-128 chars of [A-Za-z0-9._-], not starting with . or -)"
+            exit 1
+          fi
+
+          if [ "${ARCHITECTURE}" = "arm64" ] && [[ "${IMAGE_TAG}" != *-arm64 ]]; then
+            IMAGE_TAG="${IMAGE_TAG}-arm64"
+          fi
+          if (( ${#IMAGE_TAG} > 128 )); then
+            echo "::error::Image tag exceeds 128 characters after the architecture suffix"
+            exit 1
+          fi
+
+          echo "architecture=${ARCHITECTURE}" >> "$GITHUB_OUTPUT"
+          echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Construct Docker image URI
+        id: image-uri
+        env:
+          IMAGE_TAG: ${{ steps.build-inputs.outputs.image_tag }}
+          ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+        run: |
+          IMAGE_URI="${ECR_REGISTRY}/cloudx-io/openauction/enclave:${IMAGE_TAG}"
+          echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
+          echo "Docker image: ${IMAGE_URI}"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # ratchet:aws-actions/configure-aws-credentials@v6
@@ -130,6 +163,8 @@ jobs:
 
       - name: Resolve builder architecture
         id: builder-arch
+        env:
+          ARCHITECTURE: ${{ steps.build-inputs.outputs.architecture }}
         run: |
           # arm64 is the default: the automated Docker Build -> Build EIF chain
           # on main (no input) builds the arm64 EIF. amd64 is opt-in via dispatch.
@@ -154,53 +189,9 @@ jobs:
             exit 1
           fi
 
-          echo "architecture=${ARCHITECTURE}" >> "$GITHUB_OUTPUT"
           echo "ami_id=${AMI_ID}" >> "$GITHUB_OUTPUT"
           echo "instance_type=${INSTANCE_TYPE}" >> "$GITHUB_OUTPUT"
           echo "Using ${ARCHITECTURE} builder ${INSTANCE_TYPE} with AMI ${AMI_ID}"
-
-      - name: Construct Docker image URI
-        id: image-uri
-        env:
-          # image_tag is an untrusted workflow_dispatch input. Bind it into the
-          # environment instead of interpolating ${{ ... }} into the script body,
-          # so a crafted tag cannot break out of the quoting and run commands on
-          # the runner (which has already assumed the eif-builder-workflow role).
-          INPUT_IMAGE_TAG: ${{ github.event.inputs.image_tag }}
-          COMMIT_SHA: ${{ steps.set-sha.outputs.commit_sha }}
-          ARCHITECTURE: ${{ steps.builder-arch.outputs.architecture }}
-          ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
-        run: |
-          # For workflow_run: use commit SHA from triggering workflow
-          # For workflow_dispatch: use user-provided image tag
-          if [ -n "${INPUT_IMAGE_TAG}" ]; then
-            IMAGE_TAG="${INPUT_IMAGE_TAG}"
-          else
-            IMAGE_TAG="${COMMIT_SHA}"
-          fi
-
-          # Validate BEFORE echoing anything derived from the tag. Defense in depth
-          # on top of env binding: reject anything that is not a well-formed OCI tag
-          # before it reaches the SSH command that consumes image_uri, or the log.
-          # Match the whole string with bash's =~ rather than a line-oriented grep
-          # (grep succeeds when ANY line matches, so a multi-line tag whose first
-          # line is valid would pass), and cap length at the OCI limit. The error
-          # deliberately does not echo the raw tag: a multi-line value could emit a
-          # ::workflow-command:: line the runner parses even though the step fails.
-          if [[ ! "${IMAGE_TAG}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]]; then
-            echo "::error::Invalid image tag (must be 1-128 chars of [A-Za-z0-9._-], not starting with . or -)"
-            exit 1
-          fi
-          echo "Using image tag: ${IMAGE_TAG}"
-
-          if [ "${ARCHITECTURE}" = "arm64" ] && [[ "${IMAGE_TAG}" != *-arm64 ]]; then
-            IMAGE_TAG="${IMAGE_TAG}-arm64"
-            echo "Using arm64 image tag: ${IMAGE_TAG}"
-          fi
-
-          IMAGE_URI="${ECR_REGISTRY}/cloudx-io/openauction/enclave:${IMAGE_TAG}"
-          echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
-          echo "Docker image: ${IMAGE_URI}"
 
       - name: Create EC2 key pair
         id: create-key
@@ -404,7 +395,7 @@ jobs:
 
       - name: Push EIF to ECR
         env:
-          ARCHITECTURE: ${{ steps.builder-arch.outputs.architecture }}
+          ARCHITECTURE: ${{ steps.build-inputs.outputs.architecture }}
         run: |
           COMMIT_SHA="${{ steps.set-sha.outputs.commit_sha }}"
           COMMIT_SHORT="${{ steps.set-sha.outputs.commit_short }}"
@@ -438,7 +429,7 @@ jobs:
         with:
           # Include the architecture so an amd64 and arm64 build of the same
           # commit don't collide on the artifact name.
-          name: eif-${{ steps.set-sha.outputs.commit_short }}-${{ steps.builder-arch.outputs.architecture }}
+          name: eif-${{ steps.set-sha.outputs.commit_short }}-${{ steps.build-inputs.outputs.architecture }}
           path: |
             auction.eif
             measurements.json

@@ -548,7 +548,7 @@ jobs:
               (.pcr_sets | map(select(.commit_sha == $sha))) as $same_sha
               | (.pcr_sets | map(select(same_pcrs))) as $twins
               | if ($same_sha | any(same_pcrs)) then "skip:an entry for commit \($sha)"
-                elif ($same_sha | length) > 0 then "conflict:\($same_sha[0].pcr0)"
+                elif ($same_sha | length) > 0 then "conflict:\($same_sha[0].pcr0) \($same_sha[0].pcr1) \($same_sha[0].pcr2)"
                 elif ($twins | length) > 0 then "skip:identical measurements under commit \($twins[0].commit_sha)"
                 else "append" end' validation/pcrs.json)
             case "${verdict}" in
@@ -558,7 +558,7 @@ jobs:
                 exit 0
                 ;;
               conflict:*)
-                echo "::error::validation/pcrs.json on origin/main records commit ${COMMIT_SHA} with PCR0 ${verdict#conflict:}, but this build measured PCR0 ${PCR0}; the build is not reproducible, so the file was left unchanged"
+                echo "::error::validation/pcrs.json on origin/main records commit ${COMMIT_SHA} with PCR0/PCR1/PCR2 ${verdict#conflict:}, but this build measured ${PCR0} ${PCR1} ${PCR2}; the build is not reproducible, so the file was left unchanged"
                 exit 1
                 ;;
               *)

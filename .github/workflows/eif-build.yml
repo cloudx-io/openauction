@@ -107,6 +107,20 @@ jobs:
           echo "commit_short=${COMMIT_SHA:0:7}" >> "$GITHUB_OUTPUT"
           echo "Building EIF for commit: ${COMMIT_SHA}"
 
+      - name: Validate architecture
+        env:
+          ARCHITECTURE: ${{ github.event.inputs.architecture || 'arm64' }}
+        run: |
+          # Validate before AWS authentication or writing to the environment file.
+          case "${ARCHITECTURE}" in
+            arm64|amd64) ;;
+            *)
+              echo "::error::Invalid architecture (must be arm64 or amd64)"
+              exit 1
+              ;;
+          esac
+          echo "ARCHITECTURE=${ARCHITECTURE}" >> "$GITHUB_ENV"
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # ratchet:aws-actions/configure-aws-credentials@v6
         with:
@@ -119,7 +133,6 @@ jobs:
         run: |
           # arm64 is the default: the automated Docker Build -> Build EIF chain
           # on main (no input) builds the arm64 EIF. amd64 is opt-in via dispatch.
-          ARCHITECTURE="${{ github.event.inputs.architecture || 'arm64' }}"
           if [ "${ARCHITECTURE}" = "arm64" ]; then
             AMI_ARCH="arm64"
             INSTANCE_TYPE="c7g.xlarge"
@@ -390,10 +403,11 @@ jobs:
               ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
 
       - name: Push EIF to ECR
+        env:
+          ARCHITECTURE: ${{ steps.builder-arch.outputs.architecture }}
         run: |
           COMMIT_SHA="${{ steps.set-sha.outputs.commit_sha }}"
           COMMIT_SHORT="${{ steps.set-sha.outputs.commit_short }}"
-          ARCHITECTURE="${{ steps.builder-arch.outputs.architecture }}"
           REGISTRY="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com"
           REPO="cloudx-io/openauction/enclave-eif"
 

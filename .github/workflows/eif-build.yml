@@ -529,28 +529,43 @@ jobs:
           # checkout above is main as of trigger time, not job start, so a
           # sibling run's PCR commit can already sit on origin. Every attempt
           # therefore starts from a fresh origin/main: skip when the built set
-          # is recorded there, otherwise append and push. A push that loses the
-          # race is retried once from the moved tip. Regenerating the commit
-          # replaces a rebase, which conflicts when both commits append to the
-          # same array tail.
+          # is recorded there, fail when the commit is recorded with different
+          # measurements (the build is not reproducible and the EIF just pushed
+          # under that commit's tag differs from the trusted one), otherwise
+          # append and push. A push that loses the race is retried once from
+          # the moved tip. Regenerating the commit replaces a rebase, which
+          # conflicts when both commits append to the same array tail.
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           for attempt in 1 2; do
-            git fetch origin main
+            git fetch origin +refs/heads/main:refs/remotes/origin/main
             git reset --hard origin/main
 
-            recorded=$(jq -r --arg sha "${COMMIT_SHA}" \
-                             --arg pcr0 "${PCR0}" --arg pcr1 "${PCR1}" --arg pcr2 "${PCR2}" '
-              [ .pcr_sets[] | select(.commit_sha == $sha)
-                | "an entry for commit \(.commit_sha)" ]
-              + [ .pcr_sets[] | select(.pcr0 == $pcr0 and .pcr1 == $pcr1 and .pcr2 == $pcr2)
-                | "identical measurements under commit \(.commit_sha)" ]
-              | .[0] // empty' validation/pcrs.json)
-            if [ -n "${recorded}" ]; then
-              echo "::notice::validation/pcrs.json on origin/main already has ${recorded}; skipping commit and push for ${COMMIT_SHA}"
-              exit 0
-            fi
+            verdict=$(jq -r --arg sha "${COMMIT_SHA}" \
+                            --arg pcr0 "${PCR0}" --arg pcr1 "${PCR1}" --arg pcr2 "${PCR2}" '
+              def same_pcrs: .pcr0 == $pcr0 and .pcr1 == $pcr1 and .pcr2 == $pcr2;
+              (.pcr_sets | map(select(.commit_sha == $sha))) as $same_sha
+              | (.pcr_sets | map(select(same_pcrs))) as $twins
+              | if ($same_sha | any(same_pcrs)) then "skip:an entry for commit \($sha)"
+                elif ($same_sha | length) > 0 then "conflict:\($same_sha[0].pcr0)"
+                elif ($twins | length) > 0 then "skip:identical measurements under commit \($twins[0].commit_sha)"
+                else "append" end' validation/pcrs.json)
+            case "${verdict}" in
+              append) ;;
+              skip:*)
+                echo "::notice::validation/pcrs.json on origin/main already has ${verdict#skip:}; skipping commit and push for ${COMMIT_SHA}"
+                exit 0
+                ;;
+              conflict:*)
+                echo "::error::validation/pcrs.json on origin/main records commit ${COMMIT_SHA} with PCR0 ${verdict#conflict:}, but this build measured PCR0 ${PCR0}; the build is not reproducible, so the file was left unchanged"
+                exit 1
+                ;;
+              *)
+                echo "::error::unexpected verdict '${verdict}' from validation/pcrs.json"
+                exit 1
+                ;;
+            esac
 
             jq --arg sha "${COMMIT_SHA}" \
                --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \

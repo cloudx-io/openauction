@@ -160,6 +160,7 @@ jobs:
           # OIDC role for EIF building workflow (needs EC2 + ECR permissions)
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/eif-builder-workflow
           aws-region: ${{ env.AWS_REGION }}
+          mask-aws-account-id: true
 
       - name: Resolve builder architecture
         id: builder-arch

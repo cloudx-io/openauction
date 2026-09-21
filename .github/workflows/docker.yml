@@ -79,7 +79,7 @@ jobs:
           echo "TAG_LATEST=${TAG_LATEST}" >> "$GITHUB_ENV"
       - name: Configure AWS credentials
         if: env.PUBLISH_IMAGE == 'true'
-        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # ratchet:aws-actions/configure-aws-credentials@v6
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # ratchet:aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-ecr-push
           aws-region: us-east-1
@@ -126,12 +126,12 @@ jobs:
             type=raw,value=${{ env.CLOUDX_VERSION }}-commit.${{ env.CLOUDX_COMMIT }}${{ env.IMAGE_TAG_SUFFIX }}
             # "latest"
             type=raw,value=latest${{ env.IMAGE_TAG_SUFFIX }},enable=${{ env.TAG_LATEST == 'true' }}
-      - uses: docker/setup-qemu-action@1f40c72289eff860ee54a304f1438e3cff362e0a # ratchet:docker/setup-qemu-action@v4
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # ratchet:docker/setup-qemu-action@v4
         if: env.ARCHITECTURE == 'arm64'
-      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # ratchet:docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # ratchet:docker/setup-buildx-action@v4
         with:
           platforms: linux/${{ env.ARCHITECTURE }}
-      - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # ratchet:docker/build-push-action@v7
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # ratchet:docker/build-push-action@v7
         with:
           context: .
           file: enclave/Dockerfile

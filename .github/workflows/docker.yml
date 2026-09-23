@@ -15,8 +15,8 @@ on:
 
 jobs:
   enclave:
-    # Only run if the Go workflow succeeded
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    # Only build successful Go runs from this repository or manual dispatches.
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository) }}
     permissions:
       id-token: write # for AWS OIDC authentication
     runs-on: ubuntu-latest

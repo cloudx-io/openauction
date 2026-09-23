@@ -64,10 +64,10 @@ jobs:
     name: Build EIF on Nitro EC2
     runs-on: ubuntu-latest
     # Publication is gated in docker.yml: automated Docker Build runs push an
-    # image only for a push to this repository's default branch, and every
-    # Docker Build run is bound to this repository, so the image's source is not
-    # re-checked here. Manual publication and measurement remain the
-    # workflow_dispatch paths of the two workflows.
+    # image only for a push to this repository's default branch. The repository
+    # check below also rejects upstream runs from forks as defence in depth.
+    # Manual publication and measurement remain the workflow_dispatch paths
+    # of the two workflows.
     # The [skip-build] marker is matched with startsWith, not contains: a squash
     # merge puts the entire PR description in the commit body, so contains also
     # matches any PR whose description merely mentions the marker in prose. The
@@ -75,6 +75,7 @@ jobs:
     if: |
       (github.event_name == 'workflow_dispatch' ||
        (github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_repository.full_name == github.repository &&
         github.event.workflow_run.head_branch == 'main' &&
         !startsWith(github.event.workflow_run.head_commit.message, '[skip-build]')))
     permissions:

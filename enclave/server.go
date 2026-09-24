@@ -102,6 +102,14 @@ func (s *EnclaveServer) dispatch(conn net.Conn) {
 	}
 }
 
+// Connection deadlines. The write deadline starts once the request is handled,
+// so a peer that stops reading releases its worker slot. Variables so tests can
+// shorten them.
+var (
+	readTimeout  = 30 * time.Second
+	writeTimeout = 30 * time.Second
+)
+
 func (s *EnclaveServer) handleConnection(conn net.Conn) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -112,7 +120,10 @@ func (s *EnclaveServer) handleConnection(conn net.Conn) {
 		}
 	}()
 
-	_ = conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+	if err := conn.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
+		log.Printf("ERROR: Failed to set read deadline: %v", err)
+		return
+	}
 
 	var buf bytes.Buffer
 	_, err := io.Copy(&buf, conn)
@@ -181,6 +192,11 @@ func (s *EnclaveServer) handleConnection(conn net.Conn) {
 			"type":    "error",
 			"message": fmt.Sprintf("Unknown request type: %s", baseReq.Type),
 		}
+	}
+
+	if err := conn.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
+		log.Printf("ERROR: Failed to set write deadline: %v", err)
+		return
 	}
 
 	encoder := json.NewEncoder(conn)

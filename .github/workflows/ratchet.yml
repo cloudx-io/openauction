@@ -18,6 +18,8 @@ jobs:
           persist-credentials: false
       - name: Install mise
         uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # ratchet:jdx/mise-action@v4
+        with:
+          version: "2026.9.12"
       - name: Lint GitHub Actions refs
         run: mise run //:ratchet:lint
       - name: Verify pinning leaves no diff

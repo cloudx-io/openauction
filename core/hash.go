@@ -12,11 +12,37 @@ import (
 // Formula: SHA256(bid_id + "|" + sprintf("%.6f", price) + "|" + nonce)
 //
 // The price is formatted to exactly 6 decimal places to ensure consistent hashing
-// regardless of how the float is represented in memory.
+// regardless of how the float is represented in memory. A zero price is hashed
+// as +0, so a bidder's -0 hashes like 0.
 func ComputeBidHash(bidID string, price float64, nonce string) string {
-	data := fmt.Sprintf("%s|%.6f|%s", bidID, price, nonce)
+	data := fmt.Sprintf("%s|%.6f|%s", bidID, positiveZero(price), nonce)
 	hash := sha256.Sum256([]byte(data))
 	return fmt.Sprintf("%x", hash)
+}
+
+// ComputeDealBidHash computes the hash of a bid that names a deal the round
+// lists, which binds the deal ID to the bid.
+//
+// Formula: SHA256(bid_id + "|" + sprintf("%.6f", price) + "|deal:" + deal_id + "|" + nonce)
+//
+// Deal IDs cannot contain "|" (see ValidateDeals), and a "%.6f" price never
+// starts with "deal:", so a deal-bid preimage never equals an open-bid one.
+// Price formatting is as in ComputeBidHash.
+func ComputeDealBidHash(bidID string, price float64, dealID string, nonce string) string {
+	data := fmt.Sprintf("%s|%.6f|deal:%s|%s", bidID, positiveZero(price), dealID, nonce)
+	hash := sha256.Sum256([]byte(data))
+	return fmt.Sprintf("%x", hash)
+}
+
+// ComputeAttestedBidHash computes the hash the enclave attests for a bid:
+// ComputeDealBidHash when dealID names one of the round's deals, and
+// ComputeBidHash otherwise. The deal lookup is the one RunAuction uses for the
+// price and floor rules, so the hash form always matches the rules applied.
+func ComputeAttestedBidHash(bidID string, price float64, dealID string, deals []Deal, nonce string) string {
+	if _, listed := findDeal(deals, dealID); listed {
+		return ComputeDealBidHash(bidID, price, dealID, nonce)
+	}
+	return ComputeBidHash(bidID, price, nonce)
 }
 
 // ComputeRequestHash computes the auction request hash using the TEE algorithm.

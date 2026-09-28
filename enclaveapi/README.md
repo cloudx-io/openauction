@@ -4,9 +4,9 @@ Defines the communication contract between the auction server host and TEE (Trus
 
 ## Types
 
-- **`EnclaveAuctionRequest`** - Request format sent from host to enclave for auction processing
+- **`EnclaveAuctionRequest`** - Request format sent from host to enclave for auction processing: bids, adjustment factors, the round floor and, optionally, the round's deals
 - **`EnclaveAuctionResponse`** - Response format returned from enclave after auction completion
-- **`AuctionAttestationDoc`** - Attestation document with cryptographic proofs from secure enclave processing
+- **`AuctionAttestationDoc`** - Attestation document with cryptographic proofs from secure enclave processing. Its user data records the round floor as `bid_floor` and the round's deals as `deals` (absent when the round lists none). An enclave that predates deals ignores `Deals` on the request and omits `deals` from the attestation, so a host can tell from the attestation whether its deals were applied
 - **`KeyResponse`** - Response containing public key and attestation from enclave
 - **`EncryptedCoreBid`** - Wrapper for bids with optional end-to-end encryption
 
@@ -45,6 +45,10 @@ request := &enclaveapi.EnclaveAuctionRequest{
     AuctionID: "auction-123",       // OpenRTB BidRequest.ID
     RoundID:   1,                   // Round number (int)
     RoundIDString: "auction-123-1", // Optional: String round ID for uniqueness
+    BidFloor:  1.50,                // Round floor
+    Deals: []core.Deal{             // Optional: the deals in imp.pmp.deals
+        {ID: "deal-1", BidFloor: 0},
+    },
 
     // ...
 }

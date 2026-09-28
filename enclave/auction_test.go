@@ -3,7 +3,9 @@ package main
 import (
 	"encoding/base64"
 	"fmt"
+	"math"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -939,6 +941,190 @@ func TestProcessAuction_NegativeFloorRejected(t *testing.T) {
 	check.Equal(t, "Invalid negative floor price -2.5000", response.Message)
 	attestationDoc := parseAttestationFromResponse(t, response)
 	check.Nil(t, attestationDoc)
+}
+
+// TestProcessAuction_ZeroBidOnListedDeal: a zero bid naming a listed deal wins,
+// and the attestation records the round's deals verbatim.
+func TestProcessAuction_ZeroBidOnListedDeal(t *testing.T) {
+	mockAttester := CreateMockEnclave(t)
+	deals := []core.Deal{{ID: "deal-1", BidFloor: 0}, {ID: "deal-2", BidFloor: 1.50}}
+
+	req := enclaveapi.EnclaveAuctionRequest{
+		Type:          "auction_request",
+		AuctionID:     "test_auction_zero_deal_bid",
+		RoundIDString: "test_auction_zero_deal_bid-1",
+		Bids: []enclaveapi.EncryptedCoreBid{
+			{CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder_a", Price: 0, Currency: "USD", DealID: "deal-1"}},
+		},
+		BidFloor:  0.50,
+		Deals:     deals,
+		Timestamp: time.Now(),
+	}
+
+	response := ProcessAuction(mockAttester, req, nil)
+
+	attestationDoc := validateSuccessfulResponse(t, response, req, 1)
+	check.Equal(t, deals, attestationDoc.UserData.Deals)
+	if check.NotNil(t, attestationDoc.UserData.Winner) {
+		check.Equal(t, "bid1", attestationDoc.UserData.Winner.ID)
+		check.Equal(t, 0.0, attestationDoc.UserData.Winner.Price)
+		check.Equal(t, "deal-1", attestationDoc.UserData.Winner.DealID)
+	}
+	check.Equal(t, "bidder_a", response.WinnerBidder)
+	check.Equal(t, 0, len(response.PriceRejected))
+}
+
+// TestProcessAuction_ZeroBidWithoutDeals: the same bid in a round that lists no
+// deals is a price reject, and the attestation carries no deals field.
+func TestProcessAuction_ZeroBidWithoutDeals(t *testing.T) {
+	mockAttester := CreateMockEnclave(t)
+
+	req := enclaveapi.EnclaveAuctionRequest{
+		Type:          "auction_request",
+		AuctionID:     "test_auction_zero_bid_no_deals",
+		RoundIDString: "test_auction_zero_bid_no_deals-1",
+		Bids: []enclaveapi.EncryptedCoreBid{
+			{CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder_a", Price: 0, Currency: "USD", DealID: "deal-1"}},
+		},
+		BidFloor:  0.50,
+		Timestamp: time.Now(),
+	}
+
+	response := ProcessAuction(mockAttester, req, nil)
+
+	attestationDoc := validateSuccessfulResponse(t, response, req, 1)
+	check.Nil(t, attestationDoc.UserData.Winner)
+	check.Equal(t, []core.BidRef{{BidID: "bid1", Bidder: "bidder_a"}}, response.PriceRejected)
+
+	coseBytes, err := response.AttestationCOSEBase64.Decode()
+	assert.NoError(t, err)
+	_, userData, err := coseBytes.ParseAttestationDoc()
+	assert.NoError(t, err)
+	check.False(t, strings.Contains(string(userData), `"deals"`))
+}
+
+// TestProcessAuction_EncryptedZeroBidOnListedDeal: the price rule applies to
+// the decrypted price, so an encrypted bid that decrypts to zero on a listed
+// deal wins.
+func TestProcessAuction_EncryptedZeroBidOnListedDeal(t *testing.T) {
+	mockAttester := CreateMockEnclave(t)
+	keyManager := newTestKeyManager(t)
+
+	bid := encryptPriceBid(t, keyManager, "bid1", "bidder_a", `{"price": 0}`)
+	bid.DealID = "deal-1"
+
+	req := enclaveapi.EnclaveAuctionRequest{
+		Type:          "auction_request",
+		AuctionID:     "test_auction_encrypted_zero_deal_bid",
+		RoundIDString: "test_auction_encrypted_zero_deal_bid-1",
+		Bids:          []enclaveapi.EncryptedCoreBid{bid},
+		Deals:         []core.Deal{{ID: "deal-1", BidFloor: 0}},
+		Timestamp:     time.Now(),
+	}
+
+	response := ProcessAuction(mockAttester, req, keyManager)
+
+	attestationDoc := validateSuccessfulResponse(t, response, req, 1)
+	if check.NotNil(t, attestationDoc.UserData.Winner) {
+		check.Equal(t, "bid1", attestationDoc.UserData.Winner.ID)
+		check.Equal(t, 0.0, attestationDoc.UserData.Winner.Price)
+	}
+	check.Equal(t, 0, len(response.ExcludedBids))
+	check.Equal(t, 0, len(response.PriceRejected))
+}
+
+// TestProcessAuction_InvalidDealsRejected: a deal list the auction cannot apply
+// unambiguously fails the request, like a negative round floor.
+func TestProcessAuction_InvalidDealsRejected(t *testing.T) {
+	tests := []struct {
+		name    string
+		deals   []core.Deal
+		message string
+	}{
+		{name: "empty ID", deals: []core.Deal{{ID: ""}}, message: "Invalid deals: deal 0 has an empty id"},
+		{name: "negative floor", deals: []core.Deal{{ID: "deal-1", BidFloor: -1}}, message: `Invalid deals: deal "deal-1" has negative floor -1.0000`},
+		{name: "repeated ID", deals: []core.Deal{{ID: "deal-1"}, {ID: "deal-1"}}, message: `Invalid deals: deal "deal-1" is listed twice`},
+		{name: "negative zero floor", deals: []core.Deal{{ID: "deal-1", BidFloor: math.Copysign(0, -1)}}, message: `Invalid deals: deal "deal-1" has negative floor -0.0000`},
+		{name: "hash separator in ID", deals: []core.Deal{{ID: "deal|1"}}, message: `Invalid deals: deal "deal|1" has a "|" in its id`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := enclaveapi.EnclaveAuctionRequest{
+				Type:          "auction_request",
+				AuctionID:     "test_auction_invalid_deals",
+				RoundIDString: "test_auction_invalid_deals-1",
+				Bids: []enclaveapi.EncryptedCoreBid{
+					{CoreBid: core.CoreBid{ID: "bid1", Bidder: "bidder_a", Price: 1.00, Currency: "USD", DealID: "deal-1"}},
+				},
+				Deals:     tt.deals,
+				Timestamp: time.Now(),
+			}
+
+			response := ProcessAuction(CreateMockEnclave(t), req, nil)
+
+			check.False(t, response.Success)
+			check.Equal(t, tt.message, response.Message)
+			check.Nil(t, parseAttestationFromResponse(t, response))
+		})
+	}
+}
+
+// TestProcessAuction_DealBidHashForm: a bid naming a listed deal is attested in
+// the deal form, which binds its deal ID; every other bid keeps the open form.
+func TestProcessAuction_DealBidHashForm(t *testing.T) {
+	mockAttester := CreateMockEnclave(t)
+
+	req := enclaveapi.EnclaveAuctionRequest{
+		Type:          "auction_request",
+		AuctionID:     "test_auction_deal_hash_form",
+		RoundIDString: "test_auction_deal_hash_form-1",
+		Bids: []enclaveapi.EncryptedCoreBid{
+			{CoreBid: core.CoreBid{ID: "listed", Bidder: "bidder_a", Price: 0, Currency: "USD", DealID: "deal-1"}},
+			{CoreBid: core.CoreBid{ID: "unlisted", Bidder: "bidder_b", Price: 2.00, Currency: "USD", DealID: "deal-9"}},
+			{CoreBid: core.CoreBid{ID: "open", Bidder: "bidder_c", Price: 1.50, Currency: "USD"}},
+		},
+		Deals:     []core.Deal{{ID: "deal-1", BidFloor: 0}},
+		Timestamp: time.Now(),
+	}
+
+	response := ProcessAuction(mockAttester, req, nil)
+
+	attestationDoc := validateSuccessfulResponse(t, response, req, 3)
+	hashes := attestationDoc.UserData.BidHashes
+	nonce := attestationDoc.UserData.BidHashNonce
+	check.True(t, slices.Contains(hashes, core.ComputeDealBidHash("listed", 0, "deal-1", nonce)))
+	check.False(t, slices.Contains(hashes, core.ComputeBidHash("listed", 0, nonce)))
+	check.True(t, slices.Contains(hashes, core.ComputeBidHash("unlisted", 2.00, nonce)))
+	check.True(t, slices.Contains(hashes, core.ComputeBidHash("open", 1.50, nonce)))
+}
+
+// TestProcessAuction_InvalidDealsLeaveCiphertextUnrecorded: a request rejected
+// for its deal list is rejected before decryption, so resubmitting the same
+// sealed bid in a valid request is not a replay.
+func TestProcessAuction_InvalidDealsLeaveCiphertextUnrecorded(t *testing.T) {
+	mockAttester := CreateMockEnclave(t)
+	keyManager := newTestKeyManager(t)
+	bid := encryptPriceBid(t, keyManager, "bid1", "bidder_a", `{"price": 2.00}`)
+
+	newReq := func(id string, deals []core.Deal) enclaveapi.EnclaveAuctionRequest {
+		return enclaveapi.EnclaveAuctionRequest{
+			Type:          "auction_request",
+			AuctionID:     id,
+			RoundIDString: id + "-1",
+			Bids:          []enclaveapi.EncryptedCoreBid{bid},
+			Deals:         deals,
+			Timestamp:     time.Now(),
+		}
+	}
+
+	rejected := ProcessAuction(mockAttester, newReq("test_invalid_deals_first", []core.Deal{{ID: ""}}), keyManager)
+	check.False(t, rejected.Success)
+
+	response := ProcessAuction(mockAttester, newReq("test_invalid_deals_retry", nil), keyManager)
+	assert.True(t, response.Success)
+	check.Equal(t, 0, len(response.ExcludedBids))
+	check.Equal(t, "bidder_a", response.WinnerBidder)
 }
 
 // TestProcessAuction_LegacyRoundID tests backward compatibility (RoundID as int only)

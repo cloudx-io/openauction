@@ -98,6 +98,26 @@ func TestEnforceBidFloors(t *testing.T) {
 	}
 }
 
+func TestEnforceBidFloor_Deals(t *testing.T) {
+	bids := []CoreBid{
+		{ID: "under-round-floor", Bidder: "bidder_1", Price: 0.50, DealID: "low"},
+		{ID: "under-deal-floor", Bidder: "bidder_2", Price: 1.50, DealID: "high"},
+		{ID: "unlisted-deal", Bidder: "bidder_3", Price: 0.50, DealID: "other"},
+		{ID: "open", Bidder: "bidder_4", Price: 1.50},
+	}
+	deals := []Deal{{ID: "low", BidFloor: 0.10}, {ID: "high", BidFloor: 2.00}}
+
+	eligible, rejected := EnforceBidFloor(bids, 1.00, deals...)
+
+	// A listed deal's floor replaces the round floor in both directions; an
+	// unlisted deal ID leaves the bid on the round floor.
+	check.Equal(t, []CoreBid{bids[0], bids[3]}, eligible)
+	check.Equal(t, []BidRef{
+		{BidID: "under-deal-floor", Bidder: "bidder_2"},
+		{BidID: "unlisted-deal", Bidder: "bidder_3"},
+	}, rejected)
+}
+
 func TestEnforceBidFloors_PreservesOtherFields(t *testing.T) {
 	bids := []CoreBid{
 		{

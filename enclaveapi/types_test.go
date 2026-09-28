@@ -1,10 +1,13 @@
 package enclaveapi
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/peterldowns/testy/check"
+
+	"github.com/cloudx-io/openauction/core"
 )
 
 // TestAttestationCOSE_Encode tests encoding raw COSE bytes to base64
@@ -285,4 +288,53 @@ func TestAttestationTypes_RoundTrip(t *testing.T) {
 		reencoded := decompressed.EncodeBase64()
 		check.Equal(t, original, reencoded)
 	})
+}
+
+// TestEnclaveAuctionRequest_DealsJSON: deals round-trip with an explicit zero
+// floor, and are absent from the wire when the round lists none.
+func TestEnclaveAuctionRequest_DealsJSON(t *testing.T) {
+	withDeals := EnclaveAuctionRequest{
+		Type:      "auction_request",
+		AuctionID: "auction-1",
+		Deals:     []core.Deal{{ID: "deal-1", BidFloor: 0}, {ID: "deal-2", BidFloor: 1.25}},
+	}
+	data, err := json.Marshal(withDeals)
+	check.Nil(t, err)
+	check.True(t, strings.Contains(string(data), `"deals":[{"id":"deal-1","bid_floor":0},{"id":"deal-2","bid_floor":1.25}]`))
+
+	var decoded EnclaveAuctionRequest
+	check.Nil(t, json.Unmarshal(data, &decoded))
+	check.Equal(t, withDeals.Deals, decoded.Deals)
+
+	data, err = json.Marshal(EnclaveAuctionRequest{Type: "auction_request", AuctionID: "auction-1"})
+	check.Nil(t, err)
+	check.False(t, strings.Contains(string(data), `"deals"`))
+}
+
+// TestAuctionAttestationUserData_DealsJSON: same wire shape in the attested
+// user data, which bidders and devices parse.
+func TestAuctionAttestationUserData_DealsJSON(t *testing.T) {
+	withDeals := AuctionAttestationUserData{AuctionID: "auction-1", Deals: []core.Deal{{ID: "deal-1", BidFloor: 0}}}
+	data, err := json.Marshal(withDeals)
+	check.Nil(t, err)
+	check.True(t, strings.Contains(string(data), `"deals":[{"id":"deal-1","bid_floor":0}]`))
+
+	var decoded AuctionAttestationUserData
+	check.Nil(t, json.Unmarshal(data, &decoded))
+	check.Equal(t, withDeals.Deals, decoded.Deals)
+
+	data, err = json.Marshal(AuctionAttestationUserData{AuctionID: "auction-1"})
+	check.Nil(t, err)
+	check.False(t, strings.Contains(string(data), `"deals"`))
+}
+
+// TestEnclaveAuctionRequest_UnknownFieldDecodes: a field this version does not
+// know is ignored, which is what lets hosts and enclaves roll out in any order.
+func TestEnclaveAuctionRequest_UnknownFieldDecodes(t *testing.T) {
+	data := []byte(`{"type":"auction_request","auction_id":"auction-1","bid_floor":0.5,"bids":[],"future_field":{"x":1}}`)
+
+	var decoded EnclaveAuctionRequest
+	check.Nil(t, json.Unmarshal(data, &decoded))
+	check.Equal(t, "auction-1", decoded.AuctionID)
+	check.Equal(t, 0.5, decoded.BidFloor)
 }

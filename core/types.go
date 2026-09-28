@@ -10,6 +10,21 @@ type CoreBid struct {
 	BidType  string  `json:"bid_type,omitempty"`
 }
 
+// Deal is one private-marketplace deal on the round's impression: the ID and
+// floor the bidder received in imp.pmp.deals (OpenRTB 2.6 Deal.id and
+// Deal.bidfloor). A bid names a deal with its DealID.
+//
+// A bid that names a deal the round lists must meet that deal's floor instead
+// of the round floor, and may be priced at zero. A bid that names any other
+// deal ID is an open-auction bid. The auction is first price and does not read
+// Deal.at: a deal bid clears at its own price, like any other. Deals carry no
+// seats; which bidders may bid on a deal is the host's check.
+type Deal struct {
+	ID string `json:"id"`
+	// BidFloor is a CPM in the currency of the round floor.
+	BidFloor float64 `json:"bid_floor"`
+}
+
 // CoreRankingResult contains the ranked bidders and their highest bids.
 type CoreRankingResult struct {
 	Ranks         map[string]int      `json:"ranks"`

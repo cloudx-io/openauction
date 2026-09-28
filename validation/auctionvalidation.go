@@ -3,6 +3,7 @@ package validation
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 
 	"github.com/cloudx-io/openauction/core"
 	enclaveapi "github.com/cloudx-io/openauction/enclaveapi"
@@ -13,8 +14,10 @@ type AuctionValidationInput struct {
 	AttestationCOSEGzip enclaveapi.AttestationCOSEGzip // Gzipped format from win/loss notifications
 	BidID               string
 	BidPrice            float64            // For unencrypted bids
+	DealID              string             // bid.dealid as sent; selects the deal form of the bid hash when attested as listed
 	EncryptedPayload    string             // For encrypted bids (base64-encoded encrypted data)
 	BidFloor            float64            // Always validated against attestation.bid_floor
+	Deals               []core.Deal        // imp.pmp.deals as received; each must be attested with the same floor
 	ClearingPrice       *float64           // nil = no winner expected, non-nil = winner with this price
 	AdjustmentFactors   map[string]float64 // Compute hash and validate (empty map = no adjustments)
 	IsWinner            bool               // Expected auction result (true = expect to win, false = expect to lose)
@@ -24,6 +27,7 @@ type AuctionValidationInput struct {
 // - Bid was included in the auction
 // - Clearing price matches
 // - Bid floor matches
+// - Every deal in the bid request is attested with the same floor
 // - Adjustment factors hash matches
 // - Winner/loser determination
 //
@@ -54,16 +58,23 @@ func ValidateAuctionAttestation(input *AuctionValidationInput) (*AuctionValidati
 	result := &AuctionValidationResult{
 		BaseValidationResult: *baseResult,
 	}
+	validateAuctionUserData(input, auctionAttestation, result)
+	return result, nil
+}
 
+// validateAuctionUserData runs the auction-specific checks against the attested
+// user data and records each outcome on result.
+func validateAuctionUserData(input *AuctionValidationInput, auctionAttestation *enclaveapi.AuctionAttestationDoc, result *AuctionValidationResult) {
 	// Validate user data is present
 	if auctionAttestation.UserData == nil {
 		result.BidHashValid = false
 		result.ClearingPriceValid = false
 		result.BidFloorValid = false
+		result.DealsValid = false
 		result.AdjustmentHashValid = false
 		result.WinnerValid = false
 		result.ValidationDetails = append(result.ValidationDetails, "Attestation user data missing")
-		return result, nil
+		return
 	}
 
 	// Validate bid hash
@@ -75,13 +86,14 @@ func ValidateAuctionAttestation(input *AuctionValidationInput) (*AuctionValidati
 	// Validate bid floor
 	result.BidFloorValid = validateBidFloor(input, auctionAttestation, result)
 
+	// Validate deals
+	result.DealsValid = validateDeals(input, auctionAttestation, result)
+
 	// Validate adjustment factors hash
 	result.AdjustmentHashValid = validateAdjustmentHash(input, auctionAttestation, result)
 
 	// Validate winner determination
 	result.WinnerValid = validateWinnerAndRunnerUp(input, auctionAttestation, result)
-
-	return result, nil
 }
 
 func validateBidHash(input *AuctionValidationInput, attestation *enclaveapi.AuctionAttestationDoc, result *AuctionValidationResult) bool {
@@ -91,15 +103,26 @@ func validateBidHash(input *AuctionValidationInput, attestation *enclaveapi.Auct
 		return false
 	}
 
-	// Compute hash using the decrypted price
-	// All bids (encrypted and unencrypted) are hashed using their decrypted price
-	computedHash := core.ComputeBidHash(input.BidID, input.BidPrice, bidHashNonce)
+	// Compute hash using the decrypted price (all bids, encrypted or not, are
+	// hashed with it), in the deal form when the bid names an attested deal
+	deals := attestation.UserData.Deals
+	computedHash := core.ComputeAttestedBidHash(input.BidID, input.BidPrice, input.DealID, deals, bidHashNonce)
 	result.ValidationDetails = append(result.ValidationDetails, "Computing bid hash using decrypted price")
 
-	for _, attestedHash := range attestation.UserData.BidHashes {
-		if computedHash == attestedHash {
-			result.ValidationDetails = append(result.ValidationDetails, fmt.Sprintf("Bid hash found in attestation: %s", computedHash))
-			return true
+	if slices.Contains(attestation.UserData.BidHashes, computedHash) {
+		result.ValidationDetails = append(result.ValidationDetails, fmt.Sprintf("Bid hash found in attestation: %s", computedHash))
+		return true
+	}
+
+	// A hash of this bid in another form means the enclave applied a different
+	// deal label than the bid carried.
+	if openHash := core.ComputeBidHash(input.BidID, input.BidPrice, bidHashNonce); openHash != computedHash && slices.Contains(attestation.UserData.BidHashes, openHash) {
+		result.ValidationDetails = append(result.ValidationDetails, fmt.Sprintf("Bid hash found in open form: enclave did not honour deal %q", input.DealID))
+	}
+	for _, deal := range deals {
+		dealHash := core.ComputeDealBidHash(input.BidID, input.BidPrice, deal.ID, bidHashNonce)
+		if dealHash != computedHash && slices.Contains(attestation.UserData.BidHashes, dealHash) {
+			result.ValidationDetails = append(result.ValidationDetails, fmt.Sprintf("Bid hash found in deal form for %q: enclave applied a deal this bid did not name", deal.ID))
 		}
 	}
 
@@ -142,6 +165,44 @@ func validateBidFloor(input *AuctionValidationInput, attestation *enclaveapi.Auc
 
 	result.ValidationDetails = append(result.ValidationDetails, fmt.Sprintf("Bid floor mismatch: expected %.6f, attestation has %.6f", input.BidFloor, attestation.UserData.BidFloor))
 	return false
+}
+
+// validateDeals checks that every deal in the bid request is attested with the
+// same floor. Attested deals missing from the request are reported but do not
+// fail the check: an exchange may send each seat only the deals open to it.
+func validateDeals(input *AuctionValidationInput, attestation *enclaveapi.AuctionAttestationDoc, result *AuctionValidationResult) bool {
+	attested := make(map[string]float64, len(attestation.UserData.Deals))
+	for _, deal := range attestation.UserData.Deals {
+		attested[deal.ID] = deal.BidFloor
+	}
+
+	valid := true
+	requested := make(map[string]bool, len(input.Deals))
+	for _, deal := range input.Deals {
+		requested[deal.ID] = true
+		floor, ok := attested[deal.ID]
+		switch {
+		case !ok:
+			valid = false
+			result.ValidationDetails = append(result.ValidationDetails, fmt.Sprintf("Deal %q NOT found in attestation", deal.ID))
+		case floor != deal.BidFloor:
+			valid = false
+			result.ValidationDetails = append(result.ValidationDetails, fmt.Sprintf("Deal %q floor mismatch: expected %.6f, attestation has %.6f", deal.ID, deal.BidFloor, floor))
+		default:
+			result.ValidationDetails = append(result.ValidationDetails, fmt.Sprintf("Deal %q validation passed: floor %.6f", deal.ID, deal.BidFloor))
+		}
+	}
+
+	if len(input.Deals) == 0 {
+		result.ValidationDetails = append(result.ValidationDetails, "Deals validation passed: no deals in the bid request")
+	}
+
+	for _, deal := range attestation.UserData.Deals {
+		if !requested[deal.ID] {
+			result.ValidationDetails = append(result.ValidationDetails, fmt.Sprintf("Attestation lists deal %q (floor %.6f), which is not in the bid request", deal.ID, deal.BidFloor))
+		}
+	}
+	return valid
 }
 
 func validateAdjustmentHash(input *AuctionValidationInput, attestation *enclaveapi.AuctionAttestationDoc, result *AuctionValidationResult) bool {

@@ -30,6 +30,7 @@ type AuctionValidationResult struct {
 	BidHashValid        bool
 	ClearingPriceValid  bool
 	BidFloorValid       bool
+	DealsValid          bool
 	AdjustmentHashValid bool
 	WinnerValid         bool
 }
@@ -40,6 +41,7 @@ func (r *AuctionValidationResult) IsValid() bool {
 		r.BidHashValid &&
 		r.ClearingPriceValid &&
 		r.BidFloorValid &&
+		r.DealsValid &&
 		r.AdjustmentHashValid &&
 		r.WinnerValid
 }

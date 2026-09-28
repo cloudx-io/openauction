@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/cloudx-io/openauction/core"
 	enclaveapi "github.com/cloudx-io/openauction/enclaveapi"
 	"github.com/cloudx-io/openauction/validation"
 )
@@ -91,7 +92,10 @@ func showUsage() {
 	fmt.Println("Bid Request (from S3: {bidder}_request_0.json):")
 	fmt.Println("  {")
 	fmt.Println("    \"id\": \"auction-123\",")
-	fmt.Println("    \"imp\": [{\"bidfloor\": 2.00}],")
+	fmt.Println("    \"imp\": [{")
+	fmt.Println("      \"bidfloor\": 2.00,")
+	fmt.Println("      \"pmp\": {\"deals\": [{\"id\": \"deal-1\", \"bidfloor\": 1.00}]}  // optional")
+	fmt.Println("    }],")
 	fmt.Println("    \"ext\": {")
 	fmt.Println("      \"prebid\": {")
 	fmt.Println("        \"bidadjustmentfactors\": {\"bidderA\": 1.0}")
@@ -104,7 +108,8 @@ func showUsage() {
 	fmt.Println("    \"seatbid\": [{")
 	fmt.Println("      \"bid\": [{")
 	fmt.Println("        \"id\": \"bid-123\",")
-	fmt.Println("        \"price\": 2.50")
+	fmt.Println("        \"price\": 2.50,")
+	fmt.Println("        \"dealid\": \"deal-1\"  // optional")
 	fmt.Println("      }]")
 	fmt.Println("    }]")
 	fmt.Println("  }")
@@ -163,13 +168,15 @@ func extractValidationInput(bidRequestJSON, bidResponseJSON, notificationJSON []
 		return nil, fmt.Errorf("parse notification: %w", err)
 	}
 
-	// Extract bid floor from first impression
+	// Extract bid floor and deals from first impression
 	bidFloor := 0.0
+	var deals []core.Deal
 	if imps, ok := bidRequest["imp"].([]any); ok && len(imps) > 0 {
 		if imp, ok := imps[0].(map[string]any); ok {
 			if floor, ok := imp["bidfloor"].(float64); ok {
 				bidFloor = floor
 			}
+			deals = extractDeals(imp)
 		}
 	}
 
@@ -190,6 +197,7 @@ func extractValidationInput(bidRequestJSON, bidResponseJSON, notificationJSON []
 	// Extract bid_id, bid_price, and optional encrypted_payload from bid response
 	var bidID string
 	var bidPrice float64
+	var dealID string
 	var encryptedPayload string
 
 	if seatbids, ok := bidResponse["seatbid"].([]any); ok && len(seatbids) > 0 {
@@ -201,6 +209,9 @@ func extractValidationInput(bidRequestJSON, bidResponseJSON, notificationJSON []
 					}
 					if price, ok := bid["price"].(float64); ok {
 						bidPrice = price
+					}
+					if id, ok := bid["dealid"].(string); ok {
+						dealID = id
 					}
 
 					// Check for encrypted bid
@@ -244,12 +255,42 @@ func extractValidationInput(bidRequestJSON, bidResponseJSON, notificationJSON []
 		AttestationCOSEGzip: enclaveapi.AttestationCOSEGzip(attestationStr),
 		BidID:               bidID,
 		BidPrice:            bidPrice,
+		DealID:              dealID,
 		EncryptedPayload:    encryptedPayload,
 		BidFloor:            bidFloor,
+		Deals:               deals,
 		ClearingPrice:       clearingPrice,
 		AdjustmentFactors:   adjustmentFactors,
 		IsWinner:            isWinner,
 	}, nil
+}
+
+// extractDeals reads imp.pmp.deals, skipping entries without a string id. A deal
+// without a bidfloor has floor 0, the OpenRTB default.
+func extractDeals(imp map[string]any) []core.Deal {
+	pmp, ok := imp["pmp"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	rawDeals, ok := pmp["deals"].([]any)
+	if !ok {
+		return nil
+	}
+
+	deals := make([]core.Deal, 0, len(rawDeals))
+	for _, rawDeal := range rawDeals {
+		deal, ok := rawDeal.(map[string]any)
+		if !ok {
+			continue
+		}
+		id, ok := deal["id"].(string)
+		if !ok || id == "" {
+			continue
+		}
+		floor, _ := deal["bidfloor"].(float64)
+		deals = append(deals, core.Deal{ID: id, BidFloor: floor})
+	}
+	return deals
 }
 
 func outputText(result *validation.AuctionValidationResult) {
@@ -268,6 +309,7 @@ func outputText(result *validation.AuctionValidationResult) {
 	fmt.Printf("  Bid Hash Valid:          %v\n", result.BidHashValid)
 	fmt.Printf("  Clearing Price Valid:    %v\n", result.ClearingPriceValid)
 	fmt.Printf("  Bid Floor Valid:         %v\n", result.BidFloorValid)
+	fmt.Printf("  Deals Valid:             %v\n", result.DealsValid)
 	fmt.Printf("  Adjustment Hash Valid:   %v\n", result.AdjustmentHashValid)
 	fmt.Printf("  Winner Valid:            %v\n", result.WinnerValid)
 
@@ -297,6 +339,7 @@ func outputJSON(result *validation.AuctionValidationResult) {
 		"bid_hash_valid":        result.BidHashValid,
 		"clearing_price_valid":  result.ClearingPriceValid,
 		"bid_floor_valid":       result.BidFloorValid,
+		"deals_valid":           result.DealsValid,
 		"adjustment_hash_valid": result.AdjustmentHashValid,
 		"winner_valid":          result.WinnerValid,
 		"details":               result.ValidationDetails,

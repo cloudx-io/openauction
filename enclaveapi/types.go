@@ -108,6 +108,7 @@ type AuctionAttestationUserData struct {
 	RequestHash            string                `json:"request_hash"`
 	AdjustmentFactorsHash  string                `json:"adjustment_factors_hash"`
 	BidFloor               float64               `json:"bid_floor"`
+	Deals                  []core.Deal           `json:"deals,omitempty"` // The request's deals, verbatim; compare as a set with imp.pmp.deals in your bid request
 	BidHashNonce           string                `json:"bid_hash_nonce"`
 	Winner                 *CoreBidWithoutBidder `json:"winner,omitempty"`
 	RunnerUp               *CoreBidWithoutBidder `json:"runner_up,omitempty"`
@@ -144,6 +145,7 @@ type EnclaveAuctionRequest struct {
 	Bids              []EncryptedCoreBid `json:"bids"`
 	AdjustmentFactors map[string]float64 `json:"adjustment_factors"`
 	BidFloor          float64            `json:"bid_floor"`
+	Deals             []core.Deal        `json:"deals,omitempty"` // Deals on the round's impression (imp.pmp.deals); see core.Deal
 	Timestamp         time.Time          `json:"timestamp"`
 }
 
@@ -160,7 +162,7 @@ type EnclaveAuctionResponse struct {
 	// can route the rejection — and its loss notice — to the wrong bidder, or drop
 	// the wrong bid from its response.
 	FloorRejected []core.BidRef `json:"floor_rejected,omitempty"` // Bids below floor
-	PriceRejected []core.BidRef `json:"price_rejected,omitempty"` // Bids with non-positive prices
+	PriceRejected []core.BidRef `json:"price_rejected,omitempty"` // Bids with invalid prices (see core.RunAuction)
 	// Deprecated: use FloorRejected. Retained so hosts predating bidder-qualified
 	// rejections keep working against a newer enclave.
 	FloorRejectedBidIDs []string `json:"floor_rejected_bid_ids,omitempty"`

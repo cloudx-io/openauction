@@ -123,6 +123,7 @@ func GenerateAttestation(
 		RequestHash:            requestHash,
 		AdjustmentFactorsHash:  adjustmentFactorsHash,
 		BidFloor:               req.BidFloor,
+		Deals:                  req.Deals,
 		BidHashNonce:           bidHashNonce,
 		Winner:                 stripBidderName(winner),
 		RunnerUp:               stripBidderName(runnerUp),

@@ -56,6 +56,16 @@ func ProcessAuction(attester EnclaveAttester, req enclaveapi.EnclaveAuctionReque
 		}
 	}
 
+	// Validate deal terms: non-empty, unique IDs and non-negative floors
+	if err := core.ValidateDeals(req.Deals); err != nil {
+		return enclaveapi.EnclaveAuctionResponse{
+			Type:           "auction_response",
+			Success:        false,
+			Message:        fmt.Sprintf("Invalid deals: %v", err),
+			ProcessingTime: time.Since(startTime).Milliseconds(),
+		}
+	}
+
 	// Decrypt encrypted prices if present (returns unencrypted bids)
 	decryptedBids, decryptionExcluded, decryptErrors := decryptAllBids(req.Bids, keyManager)
 	if len(decryptErrors) > 0 {
@@ -72,8 +82,8 @@ func ProcessAuction(attester EnclaveAttester, req enclaveapi.EnclaveAuctionReque
 	unencryptedBids, dedupExcluded := dedupAndBuildBids(decryptedBids)
 
 	excludedBids := append(decryptionExcluded, dedupExcluded...)
-	// Run unified auction logic: adjustment → floor enforcement → ranking
-	auctionResult := core.RunAuction(unencryptedBids, req.AdjustmentFactors, req.BidFloor)
+	// Run unified auction logic: price validation → adjustment → floor enforcement → ranking
+	auctionResult := core.RunAuction(unencryptedBids, req.AdjustmentFactors, req.BidFloor, req.Deals...)
 
 	// Extract winner and runner-up from auction result
 	winner := auctionResult.Winner

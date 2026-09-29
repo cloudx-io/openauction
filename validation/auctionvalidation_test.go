@@ -230,3 +230,29 @@ func TestValidateAuctionUserData(t *testing.T) {
 		check.In(t, "Attestation user data missing", result.ValidationDetails)
 	})
 }
+
+func TestValidateWinnerAndRunnerUp_WinnerDealID(t *testing.T) {
+	tests := []struct {
+		name         string
+		sentDealID   string
+		winnerDealID string
+		valid        bool
+	}{
+		{name: "open bid won open", valid: true},
+		{name: "deal bid won with its deal", sentDealID: "deal-1", winnerDealID: "deal-1", valid: true},
+		{name: "host added a deal to the winner", winnerDealID: "deal-1", valid: false},
+		{name: "host changed the winner's deal", sentDealID: "deal-1", winnerDealID: "deal-2", valid: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			input := &AuctionValidationInput{BidID: "bid-1", DealID: tt.sentDealID, IsWinner: true}
+			attestation := &enclaveapi.AuctionAttestationDoc{UserData: &enclaveapi.AuctionAttestationUserData{
+				Winner: &enclaveapi.CoreBidWithoutBidder{ID: "bid-1", DealID: tt.winnerDealID},
+			}}
+			result := &AuctionValidationResult{}
+
+			check.Equal(t, tt.valid, validateWinnerAndRunnerUp(input, attestation, result))
+		})
+	}
+}

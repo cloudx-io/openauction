@@ -228,6 +228,13 @@ func validateWinnerAndRunnerUp(input *AuctionValidationInput, attestation *encla
 	winner := attestation.UserData.Winner
 	actuallyWon := winner != nil && winner.ID == input.BidID
 
+	// A winning bid is attested with the deal it named; a different label means
+	// the host changed it.
+	if actuallyWon && winner.DealID != input.DealID {
+		result.ValidationDetails = append(result.ValidationDetails, fmt.Sprintf("Winner validation failed: attested winner names deal %q, but the bid named %q", winner.DealID, input.DealID))
+		return false
+	}
+
 	// Validate bidder's expectation matches attestation
 	if input.IsWinner == actuallyWon {
 		if actuallyWon {

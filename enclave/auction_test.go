@@ -761,7 +761,7 @@ func TestDedupAndBuildBids_DecryptedButEpochlessExcluded(t *testing.T) {
 				CoreBid:        core.CoreBid{ID: "bid1", Bidder: "bidder1", Currency: "USD"},
 				EncryptedPrice: encPrice([]byte("aeskey"), []byte("payload"), []byte("nonce123")),
 			},
-			payload: &decryptedBidPayload{Price: 5.50},
+			payload: &decryptedBidPayload{Price: new(5.50)},
 			epoch:   nil,
 		},
 	}
@@ -789,7 +789,7 @@ func TestDedupAndBuildBids_FingerprintFailureExcluded(t *testing.T) {
 					Nonce:            "dGVzdA==",
 				},
 			},
-			payload: &decryptedBidPayload{Price: 5.50},
+			payload: &decryptedBidPayload{Price: new(5.50)},
 			epoch:   &keyEpoch{},
 		},
 	}
@@ -1030,6 +1030,51 @@ func TestProcessAuction_EncryptedZeroBidOnListedDeal(t *testing.T) {
 	}
 	check.Equal(t, 0, len(response.ExcludedBids))
 	check.Equal(t, 0, len(response.PriceRejected))
+}
+
+// TestProcessAuction_EncryptedPayloadWithoutPrice: a sealed payload with a
+// missing or null price is excluded as malformed, not read as a zero bid, even
+// when the bid names a listed zero-floor deal. An explicit zero still counts.
+func TestProcessAuction_EncryptedPayloadWithoutPrice(t *testing.T) {
+	tests := []struct {
+		name     string
+		payload  string
+		excluded bool
+	}{
+		{name: "empty object", payload: `{}`, excluded: true},
+		{name: "null payload", payload: `null`, excluded: true},
+		{name: "null price", payload: `{"price":null}`, excluded: true},
+		{name: "explicit zero price", payload: `{"price":0}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			keyManager := newTestKeyManager(t)
+			bid := encryptPriceBid(t, keyManager, "bid1", "bidder_a", tt.payload)
+			bid.DealID = "deal-1"
+
+			req := enclaveapi.EnclaveAuctionRequest{
+				Type:          "auction_request",
+				AuctionID:     "test_auction_payload_without_price",
+				RoundIDString: "test_auction_payload_without_price-1",
+				Bids:          []enclaveapi.EncryptedCoreBid{bid},
+				Deals:         []core.Deal{{ID: "deal-1", BidFloor: 0}},
+				Timestamp:     time.Now(),
+			}
+
+			response := ProcessAuction(CreateMockEnclave(t), req, keyManager)
+
+			attestationDoc := validateSuccessfulResponse(t, response, req, 1)
+			check.Equal(t, 0, len(response.PriceRejected))
+			if tt.excluded {
+				check.Nil(t, attestationDoc.UserData.Winner)
+				check.Equal(t, []core.ExcludedBid{{BidID: "bid1", Bidder: "bidder_a", Reason: reasonInvalidPayloadFormat}}, response.ExcludedBids)
+			} else if check.NotNil(t, attestationDoc.UserData.Winner) {
+				check.Equal(t, "bid1", attestationDoc.UserData.Winner.ID)
+				check.Equal(t, 0, len(response.ExcludedBids))
+			}
+		})
+	}
 }
 
 // TestProcessAuction_InvalidDealsRejected: a deal list the auction cannot apply

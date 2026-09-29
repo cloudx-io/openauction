@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
 	"net"
@@ -70,4 +71,35 @@ func TestHandleConnection_ClosesWithoutReadingWhenReadDeadlineFails(t *testing.T
 	assert.False(t, conn.read)
 	_, err := server.Write([]byte("x"))
 	assert.Error(t, err)
+}
+
+// TestHandleConnection_AuctionRequestIgnoresUnknownFields: the server decodes an
+// auction request that carries a field it does not know, which is what lets a
+// host send newer fields to an older enclave. A malformed request is the control
+// that shows the decode error is observable here.
+func TestHandleConnection_AuctionRequestIgnoresUnknownFields(t *testing.T) {
+	tests := []struct {
+		name        string
+		request     string
+		decodeError bool
+	}{
+		{name: "unknown field", request: `{"type":"auction_request","auction_id":"a1","bids":[],"future_field":{"x":1}}`},
+		{name: "malformed request", request: `{"type":"auction_request","auction_id":"a1","bids":"not-a-list"}`, decodeError: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server, peer := net.Pipe()
+			t.Cleanup(func() { _ = peer.Close() })
+			conn := &requestConn{Conn: server, req: strings.NewReader(tt.request)}
+
+			go testServer(t, 1).handleConnection(conn)
+
+			var response struct {
+				Message string `json:"message"`
+			}
+			assert.NoError(t, json.NewDecoder(peer).Decode(&response))
+			assert.Equal(t, tt.decodeError, strings.HasPrefix(response.Message, "Failed to decode auction request"))
+		})
+	}
 }

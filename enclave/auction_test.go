@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/base64"
 	"fmt"
-	"math"
 	"slices"
 	"strings"
 	"testing"
@@ -1044,8 +1043,6 @@ func TestProcessAuction_InvalidDealsRejected(t *testing.T) {
 		{name: "empty ID", deals: []core.Deal{{ID: ""}}, message: "Invalid deals: deal 0 has an empty id"},
 		{name: "negative floor", deals: []core.Deal{{ID: "deal-1", BidFloor: -1}}, message: `Invalid deals: deal "deal-1" has negative floor -1.0000`},
 		{name: "repeated ID", deals: []core.Deal{{ID: "deal-1"}, {ID: "deal-1"}}, message: `Invalid deals: deal "deal-1" is listed twice`},
-		{name: "negative zero floor", deals: []core.Deal{{ID: "deal-1", BidFloor: math.Copysign(0, -1)}}, message: `Invalid deals: deal "deal-1" has negative floor -0.0000`},
-		{name: "hash separator in ID", deals: []core.Deal{{ID: "deal|1"}}, message: `Invalid deals: deal "deal|1" has a "|" in its id`},
 	}
 
 	for _, tt := range tests {

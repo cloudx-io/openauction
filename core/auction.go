@@ -37,7 +37,8 @@ func positiveZero(price float64) float64 {
 //   - adjustmentFactors: Per-bidder adjustment multipliers
 //   - bidFloor: The round floor
 //   - deals: The deals listed on the round's impression (see Deal); none for an open auction.
-//     RunAuction assumes the list passes ValidateDeals and does not check it.
+//     RunAuction assumes the list passes ValidateDeals and does not check it; a
+//     non-finite deal floor panics in floor enforcement.
 //
 // Returns:
 //   - AuctionResult containing winner, runner-up, eligible bids, rejected bids, and full ranking

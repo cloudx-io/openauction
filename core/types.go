@@ -11,7 +11,7 @@ type CoreBid struct {
 }
 
 // Deal is one private-marketplace deal on the round's impression: the ID and
-// floor the bidder received in imp.pmp.deals (OpenRTB 2.6 Deal.id and
+// floor of one entry in the impression's OpenRTB imp.pmp.deals (2.6 Deal.id and
 // Deal.bidfloor). A bid names a deal with its DealID.
 //
 // A bid that names a deal the round lists must meet that deal's floor instead

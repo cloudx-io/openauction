@@ -56,7 +56,7 @@ func ProcessAuction(attester EnclaveAttester, req enclaveapi.EnclaveAuctionReque
 		}
 	}
 
-	// Validate deal terms: non-empty, unique IDs and non-negative floors
+	// Reject a malformed deal list before any ciphertext is recorded (see core.ValidateDeals)
 	if err := core.ValidateDeals(req.Deals); err != nil {
 		return enclaveapi.EnclaveAuctionResponse{
 			Type:           "auction_response",

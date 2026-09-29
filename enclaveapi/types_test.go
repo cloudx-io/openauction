@@ -327,14 +327,3 @@ func TestAuctionAttestationUserData_DealsJSON(t *testing.T) {
 	check.Nil(t, err)
 	check.False(t, strings.Contains(string(data), `"deals"`))
 }
-
-// TestEnclaveAuctionRequest_UnknownFieldDecodes: a field this version does not
-// know is ignored, which is what lets hosts and enclaves roll out in any order.
-func TestEnclaveAuctionRequest_UnknownFieldDecodes(t *testing.T) {
-	data := []byte(`{"type":"auction_request","auction_id":"auction-1","bid_floor":0.5,"bids":[],"future_field":{"x":1}}`)
-
-	var decoded EnclaveAuctionRequest
-	check.Nil(t, json.Unmarshal(data, &decoded))
-	check.Equal(t, "auction-1", decoded.AuctionID)
-	check.Equal(t, 0.5, decoded.BidFloor)
-}

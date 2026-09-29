@@ -24,7 +24,7 @@ func TestExtractValidationInput_Deals(t *testing.T) {
 			deals:      []core.Deal{{ID: "deal-1", BidFloor: 0.25}, {ID: "deal-2", BidFloor: 0}},
 		},
 		{
-			name:       "entries without a string id are skipped",
+			name:       "entries without a non-empty string id are skipped",
 			bidRequest: `{"imp":[{"bidfloor":1.5,"pmp":{"deals":[{"bidfloor":1},{"id":123},{"id":""},{"id":"deal-1"}]}}]}`,
 			deals:      []core.Deal{{ID: "deal-1", BidFloor: 0}},
 		},

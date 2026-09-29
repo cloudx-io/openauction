@@ -6,7 +6,7 @@ Defines the communication contract between the auction server host and TEE (Trus
 
 - **`EnclaveAuctionRequest`** - Request format sent from host to enclave for auction processing: bids, adjustment factors, the round floor and, optionally, the round's deals
 - **`EnclaveAuctionResponse`** - Response format returned from enclave after auction completion
-- **`AuctionAttestationDoc`** - Attestation document with cryptographic proofs from secure enclave processing. Its user data records the round floor as `bid_floor` and the round's deals as `deals` (absent when the round lists none). An enclave that predates deals ignores `Deals` on the request and omits `deals` from the attestation, so a host can tell from the attestation whether its deals were applied
+- **`AuctionAttestationDoc`** - Attestation document with cryptographic proofs from secure enclave processing
 - **`KeyResponse`** - Response containing public key and attestation from enclave
 - **`EncryptedCoreBid`** - Wrapper for bids with optional end-to-end encryption
 
@@ -33,10 +33,15 @@ The `hash_algorithm` field specifies which hash function to use for RSA-OAEP dec
 
 **Important**: Both encryption and decryption must use the same hash algorithm. The enclave will read this field and use the appropriate algorithm for decryption.
 
+## Deals
+
+`EnclaveAuctionRequest.Deals` optionally lists the deals on the round's impression, each a `core.Deal` with the ID and floor of one `imp.pmp.deals` entry. The enclave applies them under the auction rules in the repository README, rejects a request whose list fails `core.ValidateDeals`, and records the list in the attestation user data as `deals`, next to `bid_floor`. An enclave that predates deals ignores the field and omits `deals` from the attestation, so a host can tell from the attestation whether its deals were applied.
+
 ## Usage
 
 ### Host (Exchange) Side
 ```go
+"github.com/cloudx-io/openauction/core"
 "github.com/cloudx-io/openauction/enclaveapi"
 
 // Send auction to enclave

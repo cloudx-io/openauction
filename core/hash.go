@@ -13,7 +13,8 @@ import (
 //
 // The price is formatted to exactly 6 decimal places to ensure consistent hashing
 // regardless of how the float is represented in memory. A zero price is hashed
-// as +0, so a bidder's -0 hashes like 0.
+// as +0, so a bidder's -0 hashes like 0. A bid that names a listed deal is
+// attested with ComputeDealBidHash instead; ComputeAttestedBidHash selects the form.
 func ComputeBidHash(bidID string, price float64, nonce string) string {
 	data := fmt.Sprintf("%s|%.6f|%s", bidID, positiveZero(price), nonce)
 	hash := sha256.Sum256([]byte(data))
@@ -25,9 +26,10 @@ func ComputeBidHash(bidID string, price float64, nonce string) string {
 //
 // Formula: SHA256(bid_id + "|" + sprintf("%.6f", price) + "|deal:" + deal_id + "|" + nonce)
 //
-// Deal IDs cannot contain "|" (see ValidateDeals), and a "%.6f" price never
-// starts with "deal:", so a deal-bid preimage never equals an open-bid one.
-// Price formatting is as in ComputeBidHash.
+// Both forms end in "|" + nonce. The segment before it is a "%.6f" price in the
+// open form and "deal:" + an ID without "|" (see ValidateDeals) in the deal form,
+// so the two never share a preimage, even when the bid ID contains "|". Price
+// formatting is as in ComputeBidHash.
 func ComputeDealBidHash(bidID string, price float64, dealID string, nonce string) string {
 	data := fmt.Sprintf("%s|%.6f|deal:%s|%s", bidID, positiveZero(price), dealID, nonce)
 	hash := sha256.Sum256([]byte(data))

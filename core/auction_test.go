@@ -445,6 +445,14 @@ func TestRunAuction_Deals(t *testing.T) {
 	}
 }
 
+// orEmpty maps a nil expectation to the empty, non-nil slice RunAuction returns.
+func orEmpty(refs []BidRef) []BidRef {
+	if refs == nil {
+		return []BidRef{}
+	}
+	return refs
+}
+
 // TestRunAuction_ZeroDealBidsTie: two zero bids on listed deals are both
 // eligible and tie; ranking orders them at random.
 func TestRunAuction_ZeroDealBidsTie(t *testing.T) {
@@ -462,14 +470,6 @@ func TestRunAuction_ZeroDealBidsTie(t *testing.T) {
 		check.In(t, result.Winner.ID, []string{"b1", "b2"})
 		check.NotEqual(t, result.Winner.ID, result.RunnerUp.ID)
 	}
-}
-
-// orEmpty maps a nil expectation to the empty, non-nil slice RunAuction returns.
-func orEmpty(refs []BidRef) []BidRef {
-	if refs == nil {
-		return []BidRef{}
-	}
-	return refs
 }
 
 // TestRunAuction_NegativeZeroDealBid: a bidder's -0 is priced as 0, so the

@@ -21,6 +21,7 @@ func TestValidateDeals(t *testing.T) {
 		{name: "negative zero floor", deals: []Deal{{ID: "d1", BidFloor: math.Copysign(0, -1)}}, wantErr: `deal "d1" has negative floor -0.0000`},
 		{name: "NaN floor", deals: []Deal{{ID: "d1", BidFloor: math.NaN()}}, wantErr: `deal "d1" has non-finite floor NaN`},
 		{name: "infinite floor", deals: []Deal{{ID: "d1", BidFloor: math.Inf(1)}}, wantErr: `deal "d1" has non-finite floor +Inf`},
+		{name: "negative infinite floor", deals: []Deal{{ID: "d1", BidFloor: math.Inf(-1)}}, wantErr: `deal "d1" has non-finite floor -Inf`},
 		{name: "hash separator in ID", deals: []Deal{{ID: "d1|x"}}, wantErr: `deal "d1|x" has a "|" in its id`},
 		{name: "repeated ID", deals: []Deal{{ID: "d1"}, {ID: "d1"}}, wantErr: `deal "d1" is listed twice`},
 		{name: "repeated ID with different floors", deals: []Deal{{ID: "d1"}, {ID: "d1", BidFloor: 2}}, wantErr: `deal "d1" is listed twice`},

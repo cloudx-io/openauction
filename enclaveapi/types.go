@@ -108,7 +108,7 @@ type AuctionAttestationUserData struct {
 	RequestHash            string                `json:"request_hash"`
 	AdjustmentFactorsHash  string                `json:"adjustment_factors_hash"`
 	BidFloor               float64               `json:"bid_floor"`
-	Deals                  []core.Deal           `json:"deals,omitempty"` // The request's deals, verbatim; compare as a set with imp.pmp.deals in your bid request
+	Deals                  []core.Deal           `json:"deals,omitempty"` // The request's deals, verbatim; every deal in your bid request must appear here with the same floor, in any order
 	BidHashNonce           string                `json:"bid_hash_nonce"`
 	Winner                 *CoreBidWithoutBidder `json:"winner,omitempty"`
 	RunnerUp               *CoreBidWithoutBidder `json:"runner_up,omitempty"`

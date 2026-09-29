@@ -265,8 +265,8 @@ func extractValidationInput(bidRequestJSON, bidResponseJSON, notificationJSON []
 	}, nil
 }
 
-// extractDeals reads imp.pmp.deals, skipping entries without a string id. A deal
-// without a bidfloor has floor 0, the OpenRTB default.
+// extractDeals reads imp.pmp.deals, skipping entries without a non-empty string
+// id. A deal without a bidfloor has floor 0, the OpenRTB default.
 func extractDeals(imp map[string]any) []core.Deal {
 	pmp, ok := imp["pmp"].(map[string]any)
 	if !ok {

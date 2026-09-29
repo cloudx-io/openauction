@@ -13,6 +13,7 @@ func TestValidateDeals(t *testing.T) {
 	tests := []struct {
 		name      string
 		requested []core.Deal
+		dealID    string // the deal the bid names
 		attested  []core.Deal
 		valid     bool
 		detail    string // one detail the check must report
@@ -50,6 +51,19 @@ func TestValidateDeals(t *testing.T) {
 			detail:    `Attestation lists deal "deal-2" (floor 2.000000), which is not in the bid request`,
 		},
 		{
+			name:     "bid names an attested deal its request did not list",
+			dealID:   "deal-1",
+			attested: []core.Deal{{ID: "deal-1", BidFloor: 5.00}},
+			valid:    false,
+			detail:   `Bid names deal "deal-1", which the bid request did not list, but the attestation holds it to floor 5.000000`,
+		},
+		{
+			name:   "bid names a deal neither sent nor attested",
+			dealID: "deal-9",
+			valid:  true,
+			detail: "Deals validation passed: no deals in the bid request",
+		},
+		{
 			name:     "attested deals with none in the bid request",
 			attested: []core.Deal{{ID: "deal-1", BidFloor: 0}},
 			valid:    true,
@@ -59,7 +73,7 @@ func TestValidateDeals(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			input := &AuctionValidationInput{Deals: tt.requested}
+			input := &AuctionValidationInput{Deals: tt.requested, DealID: tt.dealID}
 			attestation := &enclaveapi.AuctionAttestationDoc{
 				UserData: &enclaveapi.AuctionAttestationUserData{Deals: tt.attested},
 			}
@@ -255,4 +269,29 @@ func TestValidateWinnerAndRunnerUp_WinnerDealID(t *testing.T) {
 			check.Equal(t, tt.valid, validateWinnerAndRunnerUp(input, attestation, result))
 		})
 	}
+}
+
+// TestValidateDeals_BidDealNotInRequest: a host that lists, at a high floor, a
+// deal ID the bid names but was never sent can floor-reject the bid while its
+// hash and floor still validate; the deals check is what catches it.
+func TestValidateDeals_BidDealNotInRequest(t *testing.T) {
+	const nonce = "abcd"
+	hostDeals := []core.Deal{{ID: "X", BidFloor: 5.00}}
+	bids := []core.CoreBid{{ID: "bid-1", Bidder: "b", Price: 1.00, DealID: "X"}}
+	res := core.RunAuction(bids, nil, 0.50, hostDeals...)
+	check.Nil(t, res.Winner)
+	check.Equal(t, 1, len(res.FloorRejected))
+
+	att := &enclaveapi.AuctionAttestationDoc{UserData: &enclaveapi.AuctionAttestationUserData{
+		BidFloor:     0.50,
+		Deals:        hostDeals,
+		BidHashNonce: nonce,
+		BidHashes:    []string{core.ComputeAttestedBidHash("bid-1", 1.00, "X", hostDeals, nonce)},
+	}}
+	input := &AuctionValidationInput{BidID: "bid-1", BidPrice: 1.00, DealID: "X", BidFloor: 0.50}
+	result := &AuctionValidationResult{}
+
+	check.True(t, validateBidHash(input, att, result))
+	check.True(t, validateBidFloor(input, att, result))
+	check.False(t, validateDeals(input, att, result))
 }

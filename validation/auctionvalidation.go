@@ -27,7 +27,7 @@ type AuctionValidationInput struct {
 // - Bid was included in the auction
 // - Clearing price matches
 // - Bid floor matches
-// - Every deal in the bid request is attested with the same floor
+// - Attested deals match the bid request (see validateDeals)
 // - Adjustment factors hash matches
 // - Winner/loser determination
 //
@@ -168,8 +168,9 @@ func validateBidFloor(input *AuctionValidationInput, attestation *enclaveapi.Auc
 }
 
 // validateDeals checks that every deal in the bid request is attested with the
-// same floor. Attested deals missing from the request are reported but do not
-// fail the check: an exchange may send each seat only the deals open to it.
+// same floor, and that an attested deal the bid names was in the request. Other
+// attested deals missing from the request are reported but do not fail the
+// check: an exchange may send each seat only the deals open to it.
 func validateDeals(input *AuctionValidationInput, attestation *enclaveapi.AuctionAttestationDoc, result *AuctionValidationResult) bool {
 	attested := make(map[string]float64, len(attestation.UserData.Deals))
 	for _, deal := range attestation.UserData.Deals {
@@ -193,14 +194,21 @@ func validateDeals(input *AuctionValidationInput, attestation *enclaveapi.Auctio
 		}
 	}
 
-	if len(input.Deals) == 0 {
-		result.ValidationDetails = append(result.ValidationDetails, "Deals validation passed: no deals in the bid request")
-	}
-
 	for _, deal := range attestation.UserData.Deals {
 		if !requested[deal.ID] {
 			result.ValidationDetails = append(result.ValidationDetails, fmt.Sprintf("Attestation lists deal %q (floor %.6f), which is not in the bid request", deal.ID, deal.BidFloor))
 		}
+	}
+
+	// The auction holds a bid that names a listed deal to that deal's floor, so
+	// the bidder must have been sent the deal, or it never saw the floor applied.
+	if floor, ok := attested[input.DealID]; ok && input.DealID != "" && !requested[input.DealID] {
+		valid = false
+		result.ValidationDetails = append(result.ValidationDetails, fmt.Sprintf("Bid names deal %q, which the bid request did not list, but the attestation holds it to floor %.6f", input.DealID, floor))
+	}
+
+	if len(input.Deals) == 0 && valid {
+		result.ValidationDetails = append(result.ValidationDetails, "Deals validation passed: no deals in the bid request")
 	}
 	return valid
 }

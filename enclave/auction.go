@@ -18,7 +18,7 @@ const (
 	// decrypted (no key manager, or no live epoch's key resolved it).
 	reasonDecryptionFailed = "decryption_failed"
 	// reasonInvalidPayloadFormat is used when a decrypted payload did not parse
-	// as the expected JSON structure.
+	// as the expected JSON structure, or carries no price.
 	reasonInvalidPayloadFormat = "invalid_payload_format"
 	// reasonDuplicateCiphertext is used when a bid's ciphertext fingerprint was
 	// already seen for the epoch that decrypted it (a byte-identical replay).
@@ -35,7 +35,9 @@ const (
 
 // decryptedBidPayload represents the decrypted bid payload structure.
 type decryptedBidPayload struct {
-	Price float64 `json:"price"` // Bid price in USD
+	// Price is the bid price in USD. A pointer so that a payload with a missing
+	// or null price is rejected rather than read as a zero-priced bid.
+	Price *float64 `json:"price"`
 	// Deprecated: AuctionToken is parsed for backward compatibility with clients
 	// that still embed a per-request token, but it is ignored. Replay protection
 	// is enforced by ciphertext fingerprint deduplication, not by tokens.
@@ -56,6 +58,16 @@ func ProcessAuction(attester EnclaveAttester, req enclaveapi.EnclaveAuctionReque
 		}
 	}
 
+	// Reject a malformed deal list before any ciphertext is recorded (see core.ValidateDeals)
+	if err := core.ValidateDeals(req.Deals); err != nil {
+		return enclaveapi.EnclaveAuctionResponse{
+			Type:           "auction_response",
+			Success:        false,
+			Message:        fmt.Sprintf("Invalid deals: %v", err),
+			ProcessingTime: time.Since(startTime).Milliseconds(),
+		}
+	}
+
 	// Decrypt encrypted prices if present (returns unencrypted bids)
 	decryptedBids, decryptionExcluded, decryptErrors := decryptAllBids(req.Bids, keyManager)
 	if len(decryptErrors) > 0 {
@@ -72,8 +84,8 @@ func ProcessAuction(attester EnclaveAttester, req enclaveapi.EnclaveAuctionReque
 	unencryptedBids, dedupExcluded := dedupAndBuildBids(decryptedBids)
 
 	excludedBids := append(decryptionExcluded, dedupExcluded...)
-	// Run unified auction logic: adjustment → floor enforcement → ranking
-	auctionResult := core.RunAuction(unencryptedBids, req.AdjustmentFactors, req.BidFloor)
+	// Run unified auction logic: price validation → adjustment → floor enforcement → ranking
+	auctionResult := core.RunAuction(unencryptedBids, req.AdjustmentFactors, req.BidFloor, req.Deals...)
 
 	// Extract winner and runner-up from auction result
 	winner := auctionResult.Winner
@@ -203,8 +215,18 @@ func decryptAllBids(encryptedBids []enclaveapi.EncryptedCoreBid, keyManager *Key
 			errors = append(errors, fmt.Errorf("invalid payload format for bid %s: %w", encBid.ID, err))
 			continue
 		}
+		if payload.Price == nil {
+			log.Printf("INFO: Decrypted payload for bid %s has no price", encBid.ID)
+			excludedBids = append(excludedBids, core.ExcludedBid{
+				BidID:  encBid.ID,
+				Bidder: encBid.Bidder,
+				Reason: reasonInvalidPayloadFormat,
+			})
+			errors = append(errors, fmt.Errorf("invalid payload format for bid %s: no price", encBid.ID))
+			continue
+		}
 
-		log.Printf("INFO: Successfully decrypted bid %s: price=%.2f", encBid.ID, payload.Price)
+		log.Printf("INFO: Successfully decrypted bid %s: price=%.2f", encBid.ID, *payload.Price)
 		decryptedBids = append(decryptedBids, decryptedBidData{
 			encBid:  encBid,
 			payload: &payload,
@@ -281,7 +303,7 @@ func dedupAndBuildBids(decryptedBids []decryptedBidData) ([]core.CoreBid, []core
 
 		// Create CoreBid with decrypted price.
 		unencryptedBid := decBid.encBid.CoreBid
-		unencryptedBid.Price = decBid.payload.Price
+		unencryptedBid.Price = *decBid.payload.Price
 
 		unencryptedBids = append(unencryptedBids, unencryptedBid)
 	}

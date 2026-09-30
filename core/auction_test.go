@@ -1,6 +1,7 @@
 package core
 
 import (
+	"math"
 	"testing"
 
 	"github.com/peterldowns/testy/check"
@@ -289,4 +290,197 @@ func TestRunAuction_MixedPriceValidation(t *testing.T) {
 	check.True(t, rejectedIDs["bid2"])
 	check.True(t, rejectedIDs["bid3"])
 	check.True(t, rejectedIDs["bid4"])
+}
+
+func TestRunAuction_Deals(t *testing.T) {
+	tests := []struct {
+		name          string
+		bids          []CoreBid
+		factors       map[string]float64
+		bidFloor      float64
+		deals         []Deal
+		winner        string // bid ID; empty when no bid wins
+		winnerPrice   float64
+		winnerDealID  string
+		runnerUp      string // bid ID; empty when there is no runner-up
+		priceRejected []BidRef
+		floorRejected []BidRef
+	}{
+		{
+			name:          "zero without a deal ID is a price reject",
+			bids:          []CoreBid{{ID: "b1", Bidder: "a", Price: 0}},
+			deals:         []Deal{{ID: "d1"}},
+			priceRejected: []BidRef{{BidID: "b1", Bidder: "a"}},
+		},
+		{
+			name:          "zero naming a deal is a price reject when the round lists none",
+			bids:          []CoreBid{{ID: "b1", Bidder: "a", Price: 0, DealID: "d1"}},
+			priceRejected: []BidRef{{BidID: "b1", Bidder: "a"}},
+		},
+		{
+			name:          "zero naming an unlisted deal is a price reject",
+			bids:          []CoreBid{{ID: "b1", Bidder: "a", Price: 0, DealID: "d2"}},
+			deals:         []Deal{{ID: "d1"}},
+			priceRejected: []BidRef{{BidID: "b1", Bidder: "a"}},
+		},
+		{
+			name:          "negative naming a listed deal is a price reject",
+			bids:          []CoreBid{{ID: "b1", Bidder: "a", Price: -1, DealID: "d1"}},
+			deals:         []Deal{{ID: "d1"}},
+			priceRejected: []BidRef{{BidID: "b1", Bidder: "a"}},
+		},
+		{
+			name:         "zero naming a listed deal at floor 0 wins alone",
+			bids:         []CoreBid{{ID: "b1", Bidder: "a", Price: 0, DealID: "d1"}},
+			bidFloor:     0.50,
+			deals:        []Deal{{ID: "d1", BidFloor: 0}},
+			winner:       "b1",
+			winnerPrice:  0,
+			winnerDealID: "d1",
+		},
+		{
+			name:          "zero naming a listed deal at floor 1 is a floor reject",
+			bids:          []CoreBid{{ID: "b1", Bidder: "a", Price: 0, DealID: "d1"}},
+			deals:         []Deal{{ID: "d1", BidFloor: 1.00}},
+			floorRejected: []BidRef{{BidID: "b1", Bidder: "a"}},
+		},
+		{
+			name:         "a deal floor below the round floor admits a bid under the round floor",
+			bids:         []CoreBid{{ID: "b1", Bidder: "a", Price: 0.50, DealID: "d1"}},
+			bidFloor:     1.00,
+			deals:        []Deal{{ID: "d1", BidFloor: 0.10}},
+			winner:       "b1",
+			winnerPrice:  0.50,
+			winnerDealID: "d1",
+		},
+		{
+			name:          "a deal floor above the round floor rejects a bid over the round floor",
+			bids:          []CoreBid{{ID: "b1", Bidder: "a", Price: 1.50, DealID: "d1"}},
+			bidFloor:      1.00,
+			deals:         []Deal{{ID: "d1", BidFloor: 2.00}},
+			floorRejected: []BidRef{{BidID: "b1", Bidder: "a"}},
+		},
+		{
+			name:          "a bid naming an unlisted deal is held to the round floor",
+			bids:          []CoreBid{{ID: "b1", Bidder: "a", Price: 0.50, DealID: "d2"}},
+			bidFloor:      1.00,
+			deals:         []Deal{{ID: "d1", BidFloor: 0}},
+			floorRejected: []BidRef{{BidID: "b1", Bidder: "a"}},
+		},
+		{
+			name: "a positive open bid outranks a zero deal bid",
+			bids: []CoreBid{
+				{ID: "b1", Bidder: "a", Price: 0, DealID: "d1"},
+				{ID: "b2", Bidder: "b", Price: 1.20},
+			},
+			bidFloor:    1.00,
+			deals:       []Deal{{ID: "d1", BidFloor: 0}},
+			winner:      "b2",
+			winnerPrice: 1.20,
+			runnerUp:    "b1",
+		},
+		{
+			name:         "an adjustment factor keeps a zero deal bid at zero",
+			bids:         []CoreBid{{ID: "b1", Bidder: "a", Price: 0, DealID: "d1"}},
+			factors:      map[string]float64{"a": 1.3},
+			deals:        []Deal{{ID: "d1", BidFloor: 0}},
+			winner:       "b1",
+			winnerPrice:  0,
+			winnerDealID: "d1",
+		},
+		{
+			name:          "the deal floor applies to the adjusted price",
+			bids:          []CoreBid{{ID: "b1", Bidder: "a", Price: 1.00, DealID: "d1"}},
+			factors:       map[string]float64{"a": 0.5},
+			deals:         []Deal{{ID: "d1", BidFloor: 0.75}},
+			floorRejected: []BidRef{{BidID: "b1", Bidder: "a"}},
+		},
+		{
+			name: "a bidder's zero deal bid ranks when its open bid misses the round floor",
+			bids: []CoreBid{
+				{ID: "b1", Bidder: "a", Price: 0, DealID: "d1"},
+				{ID: "b2", Bidder: "a", Price: 0.40},
+			},
+			bidFloor:      0.50,
+			deals:         []Deal{{ID: "d1", BidFloor: 0}},
+			winner:        "b1",
+			winnerPrice:   0,
+			winnerDealID:  "d1",
+			floorRejected: []BidRef{{BidID: "b2", Bidder: "a"}},
+		},
+		{
+			name:          "deal IDs match exactly",
+			bids:          []CoreBid{{ID: "b1", Bidder: "a", Price: 0, DealID: "D1"}},
+			deals:         []Deal{{ID: "d1", BidFloor: 0}},
+			priceRejected: []BidRef{{BidID: "b1", Bidder: "a"}},
+		},
+		{
+			name:          "an empty deal ID names no deal, even one listed with an empty ID",
+			bids:          []CoreBid{{ID: "b1", Bidder: "a", Price: 0}},
+			deals:         []Deal{{ID: "", BidFloor: 0}},
+			priceRejected: []BidRef{{BidID: "b1", Bidder: "a"}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := RunAuction(tt.bids, tt.factors, tt.bidFloor, tt.deals...)
+
+			if tt.winner == "" {
+				check.Nil(t, result.Winner)
+			} else if check.NotNil(t, result.Winner) {
+				check.Equal(t, tt.winner, result.Winner.ID)
+				check.Equal(t, tt.winnerPrice, result.Winner.Price)
+				check.Equal(t, tt.winnerDealID, result.Winner.DealID)
+			}
+			if tt.runnerUp == "" {
+				check.Nil(t, result.RunnerUp)
+			} else if check.NotNil(t, result.RunnerUp) {
+				check.Equal(t, tt.runnerUp, result.RunnerUp.ID)
+			}
+
+			check.Equal(t, orEmpty(tt.priceRejected), result.PriceRejected)
+			check.Equal(t, orEmpty(tt.floorRejected), result.FloorRejected)
+		})
+	}
+}
+
+// orEmpty maps a nil expectation to the empty, non-nil slice RunAuction returns.
+func orEmpty(refs []BidRef) []BidRef {
+	if refs == nil {
+		return []BidRef{}
+	}
+	return refs
+}
+
+// TestRunAuction_ZeroDealBidsTie: two zero bids on listed deals are both
+// eligible and tie; ranking orders them at random.
+func TestRunAuction_ZeroDealBidsTie(t *testing.T) {
+	bids := []CoreBid{
+		{ID: "b1", Bidder: "a", Price: 0, DealID: "d1"},
+		{ID: "b2", Bidder: "b", Price: 0, DealID: "d2"},
+	}
+	deals := []Deal{{ID: "d1"}, {ID: "d2"}}
+
+	result := RunAuction(bids, nil, 0, deals...)
+
+	check.Equal(t, 2, len(result.EligibleBids))
+	check.Equal(t, []BidRef{}, result.PriceRejected)
+	if check.NotNil(t, result.Winner) && check.NotNil(t, result.RunnerUp) {
+		check.In(t, result.Winner.ID, []string{"b1", "b2"})
+		check.NotEqual(t, result.Winner.ID, result.RunnerUp.ID)
+	}
+}
+
+// TestRunAuction_NegativeZeroDealBid: a bidder's -0 is priced as 0, so the
+// winner never carries a negative zero into the attestation.
+func TestRunAuction_NegativeZeroDealBid(t *testing.T) {
+	bids := []CoreBid{{ID: "b1", Bidder: "a", Price: math.Copysign(0, -1), DealID: "d1"}}
+
+	result := RunAuction(bids, nil, 0, Deal{ID: "d1"})
+
+	if check.NotNil(t, result.Winner) {
+		check.Equal(t, "b1", result.Winner.ID)
+		check.False(t, math.Signbit(result.Winner.Price))
+	}
 }

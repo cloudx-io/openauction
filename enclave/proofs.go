@@ -39,10 +39,11 @@ func GenerateTEEProofs(attester EnclaveAttester, req enclaveapi.EnclaveAuctionRe
 	}
 
 	// Build list of bid hashes from decrypted bids
-	// All bids (encrypted and unencrypted) are hashed using their decrypted price
+	// All bids (encrypted and unencrypted) are hashed using their decrypted price;
+	// a bid naming one of the round's deals is hashed with its deal ID
 	bidHashes := make([]string, 0, len(unencryptedBids))
 	for _, bid := range unencryptedBids {
-		hash := core.ComputeBidHash(bid.ID, bid.Price, bidHashNonce)
+		hash := core.ComputeAttestedBidHash(bid.ID, bid.Price, bid.DealID, req.Deals, bidHashNonce)
 		bidHashes = append(bidHashes, hash)
 	}
 
@@ -123,6 +124,7 @@ func GenerateAttestation(
 		RequestHash:            requestHash,
 		AdjustmentFactorsHash:  adjustmentFactorsHash,
 		BidFloor:               req.BidFloor,
+		Deals:                  req.Deals,
 		BidHashNonce:           bidHashNonce,
 		Winner:                 stripBidderName(winner),
 		RunnerUp:               stripBidderName(runnerUp),

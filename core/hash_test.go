@@ -3,6 +3,7 @@ package core
 import (
 	"crypto/sha256"
 	"fmt"
+	"math"
 	"testing"
 )
 
@@ -265,5 +266,52 @@ func TestComputeAdjustmentFactorsHash_EmptyMap(t *testing.T) {
 	expectedHash := fmt.Sprintf("%x", sha256.Sum256([]byte(nonce)))
 	if hash != expectedHash {
 		t.Errorf("Empty map should hash just the nonce")
+	}
+}
+
+func TestComputeDealBidHash(t *testing.T) {
+	hash := ComputeDealBidHash("bid-1", 0, "deal-1", "nonce-1")
+
+	expected := fmt.Sprintf("%x", sha256.Sum256([]byte("bid-1|0.000000|deal:deal-1|nonce-1")))
+	if hash != expected {
+		t.Errorf("ComputeDealBidHash() = %v, want %v", hash, expected)
+	}
+	if hash == ComputeBidHash("bid-1", 0, "nonce-1") {
+		t.Errorf("deal-bid hash must differ from the open-bid hash of the same bid")
+	}
+}
+
+// TestBidHashes_NegativeZeroHashesAsZero: "%.6f" formats -0 as "-0.000000", so
+// both helpers normalise it; a bidder's -0 must hash like the 0 the auction ranks.
+func TestBidHashes_NegativeZeroHashesAsZero(t *testing.T) {
+	negativeZero := math.Copysign(0, -1)
+
+	if ComputeBidHash("bid-1", negativeZero, "n") != ComputeBidHash("bid-1", 0, "n") {
+		t.Errorf("ComputeBidHash: -0 must hash like 0")
+	}
+	if ComputeDealBidHash("bid-1", negativeZero, "deal-1", "n") != ComputeDealBidHash("bid-1", 0, "deal-1", "n") {
+		t.Errorf("ComputeDealBidHash: -0 must hash like 0")
+	}
+}
+
+func TestComputeAttestedBidHash(t *testing.T) {
+	deals := []Deal{{ID: "deal-1"}, {ID: ""}}
+
+	tests := []struct {
+		name   string
+		dealID string
+		want   string
+	}{
+		{name: "listed deal uses the deal form", dealID: "deal-1", want: ComputeDealBidHash("bid-1", 1.5, "deal-1", "n")},
+		{name: "unlisted deal uses the open form", dealID: "deal-2", want: ComputeBidHash("bid-1", 1.5, "n")},
+		{name: "no deal uses the open form, even with an empty-ID entry", dealID: "", want: ComputeBidHash("bid-1", 1.5, "n")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ComputeAttestedBidHash("bid-1", 1.5, tt.dealID, deals, "n"); got != tt.want {
+				t.Errorf("ComputeAttestedBidHash() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

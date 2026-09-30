@@ -31,24 +31,3 @@ func ApplyBidAdjustmentFactors(bids []CoreBid, adjustmentFactors map[string]floa
 
 	return result
 }
-
-func ApplySingleBidAdjustmentFactor(bidPrice float64, bidderName string, fallbackBidderName string, adjustmentFactors map[string]float64) float64 {
-	adjustmentFactor := 1.0
-	if len(adjustmentFactors) > 0 {
-		if givenAdjustment, ok := adjustmentFactors[strings.ToLower(bidderName)]; ok {
-			adjustmentFactor = givenAdjustment
-		} else if givenAdjustment, ok := adjustmentFactors[strings.ToLower(fallbackBidderName)]; ok {
-			adjustmentFactor = givenAdjustment
-		}
-	}
-
-	// Use decimal arithmetic for precise calculation
-	bidPriceDecimal := decimal.NewFromFloat(bidPrice)
-	adjustmentFactorDecimal := decimal.NewFromFloat(adjustmentFactor)
-
-	finalPriceDecimal := bidPriceDecimal.Mul(adjustmentFactorDecimal)
-
-	// Convert back to float64
-	result, _ := finalPriceDecimal.Float64()
-	return result
-}

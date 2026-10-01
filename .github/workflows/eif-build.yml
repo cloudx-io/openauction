@@ -504,6 +504,10 @@ jobs:
       github.ref == 'refs/heads/main' &&
       needs.build-eif.outputs.architecture == 'arm64' &&
       github.event.inputs.image_tag == ''
+    # The checkout and push authenticate with the GitHub App token, so
+    # GITHUB_TOKEN needs no write scope.
+    permissions:
+      contents: read
     env:
       GH_APP_CLIENT_ID: 'Iv23li0CF0SJXIuRq9kS'
 

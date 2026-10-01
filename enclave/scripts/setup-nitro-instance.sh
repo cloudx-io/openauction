@@ -91,14 +91,20 @@ install_docker() {
             sudo systemctl enable docker
 
             # Wait for Docker daemon
+            local daemon_ready=false
             for i in {1..10}; do
                 if sudo docker info &> /dev/null; then
                     log "✓ Docker daemon started"
+                    daemon_ready=true
                     break
                 fi
                 log "Waiting for Docker daemon... (attempt $i/10)"
                 sleep 2
             done
+            if [ "$daemon_ready" != true ]; then
+                log_error "Docker daemon did not respond to 'docker info' after 10 attempts"
+                return 1
+            fi
         else
             log "✓ Docker service already running"
         fi
@@ -122,14 +128,20 @@ install_docker() {
     sudo systemctl enable docker
 
     # Wait for Docker socket to be available
+    local daemon_ready=false
     for i in {1..10}; do
         if sudo docker info &> /dev/null; then
             log "Docker daemon is running"
+            daemon_ready=true
             break
         fi
         log "Waiting for Docker daemon... (attempt $i/10)"
         sleep 2
     done
+    if [ "$daemon_ready" != true ]; then
+        log_error "Docker daemon did not respond to 'docker info' after 10 attempts"
+        return 1
+    fi
 
     # Add current user to docker group (if not root)
     if [ "$EUID" -ne 0 ]; then

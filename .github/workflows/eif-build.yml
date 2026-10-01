@@ -296,6 +296,7 @@ jobs:
       - name: Wait for SSH
         run: |
           echo "Waiting for SSH..."
+          ssh_ready=false
           for i in {1..30}; do
             if ssh -i /tmp/eif-builder-key.pem \
                    -o StrictHostKeyChecking=no \
@@ -303,11 +304,16 @@ jobs:
                    ec2-user@${{ steps.launch-instance.outputs.public_ip }} \
                    'echo Ready' 2>/dev/null; then
               echo "SSH is ready!"
+              ssh_ready=true
               break
             fi
             echo "Attempt $i/30, waiting 10s..."
             sleep 10
           done
+          if [ "$ssh_ready" != true ]; then
+            echo "::error::SSH to the EIF builder instance did not succeed after 30 attempts"
+            exit 1
+          fi
 
       - name: Copy scripts to instance
         run: |

@@ -1,2 +1,5 @@
 # compiled commands
 key-validator
+
+# enclave binary built by the README and docker.yml
+/bin/

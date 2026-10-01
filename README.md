@@ -20,7 +20,6 @@ This repository contains the core auction functionality that has been extracted 
 import (
     "github.com/cloudx-io/openauction/core"
     "github.com/cloudx-io/openauction/enclaveapi"
-    "github.com/cloudx-io/openauction/enclave"
 )
 ```
 
@@ -66,8 +65,11 @@ go test ./...
 
 ### Building the Enclave
 
-The enclave binary can be built using the Dockerfile:
+The Dockerfile copies a prebuilt binary from `./bin/`, so build the binary first. These commands match the arm64 build in `.github/workflows/docker.yml`:
 
 ```bash
-docker build -f enclave/Dockerfile -t auction-enclave .
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -a -ldflags '-extldflags "-static"' -tags netgo -o ./bin/tee-auction-enclave ./enclave
+docker build --platform linux/arm64 -f enclave/Dockerfile -t auction-enclave .
 ```
+
+For an amd64 image, use `GOARCH=amd64` and `--platform linux/amd64`.

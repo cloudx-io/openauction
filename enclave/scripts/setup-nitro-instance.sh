@@ -143,10 +143,14 @@ install_docker() {
 install_dependencies() {
     log "Installing additional dependencies..."
     
-    local packages=("jq" "curl" "awscli")
-    
-    for pkg in "${packages[@]}"; do
-        if ! command -v "$pkg" &> /dev/null; then
+    # command:package pairs; the awscli package provides the aws command.
+    local deps=("jq:jq" "curl:curl" "aws:awscli")
+    local dep cmd pkg
+
+    for dep in "${deps[@]}"; do
+        cmd="${dep%%:*}"
+        pkg="${dep#*:}"
+        if ! command -v "$cmd" &> /dev/null; then
             log "Installing $pkg..."
             if command -v dnf &> /dev/null; then
                 sudo dnf install -y "$pkg"
@@ -154,7 +158,7 @@ install_dependencies() {
                 sudo yum install -y "$pkg"
             fi
         else
-            log "✓ $pkg already installed"
+            log "✓ $cmd already installed"
         fi
     done
 }

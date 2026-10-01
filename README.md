@@ -73,3 +73,9 @@ docker build --platform linux/arm64 -f enclave/Dockerfile -t auction-enclave .
 ```
 
 For an amd64 image, use `GOARCH=amd64` and `--platform linux/amd64`.
+
+On an amd64 Linux host, the arm64 image's `RUN` steps need arm64 emulation. Register it before `docker build`, as the workflow does with `docker/setup-qemu-action`:
+
+```bash
+docker run --rm --privileged tonistiigi/binfmt --install arm64
+```

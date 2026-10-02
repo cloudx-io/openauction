@@ -11,7 +11,8 @@ import (
 // ValidateKeyAttestation validates a TEE key attestation from COSE bytes
 //
 // Parameters:
-//   - attestationCOSEBase64: Base64-encoded COSE_Sign1 bytes from KeyResponse.AttestationCOSEBase64
+//   - attestationCOSEBase64: Base64-encoded COSE_Sign1 bytes. KeyWithAttestation.Attestation carries them gzipped;
+//     decompress it and call EncodeBase64() on the result (see cmd/key-validator)
 //   - expectedPublicKey: PEM-encoded public key to validate (from KeyResponse.PublicKey)
 //
 // Returns:

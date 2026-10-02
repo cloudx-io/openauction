@@ -77,6 +77,15 @@ validate_prerequisites() {
     log "✓ AWS credentials configured"
 }
 
+# A PCR is a SHA-384 digest: 96 lowercase hex characters.
+validate_pcr() {
+    local name="$1" value="$2"
+    if [[ ! "$value" =~ ^[0-9a-f]{96}$ ]]; then
+        log_error "$name is missing or malformed in the nitro-cli build output: '$value'"
+        return 1
+    fi
+}
+
 # Set up error handling
 trap cleanup_on_failure ERR
 
@@ -148,11 +157,19 @@ main() {
     
     local measurements_file="${EIF_FILE}.measurements.json"
     
-    # nitro-cli outputs text format, extract PCR values and strip formatting
+    # nitro-cli outputs text format, extract PCR values and strip formatting.
+    # A missing line leaves the value empty, and validate_pcr fails the build.
     local pcr0 pcr1 pcr2
-    pcr0=$(grep -i "PCR0" "$build_output" | awk '{print $NF}' | tr -d ',"' || echo "unknown")
-    pcr1=$(grep -i "PCR1" "$build_output" | awk '{print $NF}' | tr -d ',"' || echo "unknown")
-    pcr2=$(grep -i "PCR2" "$build_output" | awk '{print $NF}' | tr -d ',"' || echo "unknown")
+    pcr0=$(grep -i "PCR0" "$build_output" | awk '{print $NF}' | tr -d ',"' || true)
+    pcr1=$(grep -i "PCR1" "$build_output" | awk '{print $NF}' | tr -d ',"' || true)
+    pcr2=$(grep -i "PCR2" "$build_output" | awk '{print $NF}' | tr -d ',"' || true)
+
+    # Fail before writing measurements: update-pcrs publishes them to validation/pcrs.json.
+    if ! validate_pcr PCR0 "$pcr0" || ! validate_pcr PCR1 "$pcr1" || ! validate_pcr PCR2 "$pcr2"; then
+        log_error "Build output:"
+        cat "$build_output" >&2
+        return 1
+    fi
 
     # Create JSON file for GitHub Actions and downstream tools
     cat > "$measurements_file" <<EOF

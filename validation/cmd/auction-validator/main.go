@@ -34,7 +34,7 @@ func main() {
 	if *bidRequestInput == "" || *bidResponseInput == "" || *notificationInput == "" {
 		showUsage()
 		fmt.Fprintf(os.Stderr, "\nError: All three inputs are required (--bid-request, --bid-response, --notification)\n")
-		os.Exit(1)
+		os.Exit(2)
 	}
 
 	// Parse inputs

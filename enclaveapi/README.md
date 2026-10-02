@@ -41,8 +41,10 @@ The `hash_algorithm` field specifies which hash function to use for RSA-OAEP dec
 
 ### Host (Exchange) Side
 ```go
-"github.com/cloudx-io/openauction/core"
-"github.com/cloudx-io/openauction/enclaveapi"
+import (
+    "github.com/cloudx-io/openauction/core"
+    "github.com/cloudx-io/openauction/enclaveapi"
+)
 
 // Send auction to enclave
 request := &enclaveapi.EnclaveAuctionRequest{

@@ -4,10 +4,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"io"
-	"net/url"
 	"strings"
 	"time"
 
@@ -115,18 +113,6 @@ type AuctionAttestationUserData struct {
 	RequestNonce           string                `json:"request_nonce"`
 	AdjustmentFactorsNonce string                `json:"adjustment_factors_nonce"`
 	Timestamp              time.Time             `json:"timestamp"`
-}
-
-// URLEncode encodes attestation for URLs
-func (a *AttestationDoc) URLEncode() string {
-	data, _ := json.Marshal(a)
-	return url.QueryEscape(base64.StdEncoding.EncodeToString(data))
-}
-
-// URLEncode encodes auction attestation for URLs
-func (a *AuctionAttestationDoc) URLEncode() string {
-	data, _ := json.Marshal(a)
-	return url.QueryEscape(base64.StdEncoding.EncodeToString(data))
 }
 
 // EncryptedCoreBid wraps a CoreBid with optional encrypted price data

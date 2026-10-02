@@ -40,8 +40,11 @@ func (d *ciphertextDedup) recordAndCheckDuplicate(fingerprint [32]byte) bool {
 // bytes: the RSA-encrypted AES key, the AES-GCM ciphertext, and the GCM nonce.
 //
 // The fingerprint is taken over the base64-DECODED bytes so that a bid which is
-// merely re-encoded (e.g. different base64 padding or alphabet) but carries the
-// same ciphertext bytes still collides and is caught as a replay. Each field is
+// merely re-encoded (e.g. with inserted CR or LF characters, which the decoder
+// skips, or with non-zero trailing pad bits, as in "QR==" for "QQ==") but
+// carries the same ciphertext bytes still collides and is caught as a replay.
+// URL-safe characters ("-", "_") and missing padding fail to decode, so such
+// a bid never reaches the fingerprint: decryption rejects it. Each field is
 // length-prefixed with a fixed-width big-endian length before hashing so that
 // the boundaries between fields are unambiguous and no concatenation of one
 // field's bytes into the next can forge a different-but-equal fingerprint

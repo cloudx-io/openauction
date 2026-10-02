@@ -195,11 +195,10 @@ func extractValidationInput(bidRequestJSON, bidResponseJSON, notificationJSON []
 		}
 	}
 
-	// Extract bid_id, bid_price, and optional encrypted_payload from bid response
+	// Extract bid_id, bid_price, and optional dealid from bid response
 	var bidID string
 	var bidPrice float64
 	var dealID string
-	var encryptedPayload string
 
 	if seatbids, ok := bidResponse["seatbid"].([]any); ok && len(seatbids) > 0 {
 		if seatbid, ok := seatbids[0].(map[string]any); ok {
@@ -213,15 +212,6 @@ func extractValidationInput(bidRequestJSON, bidResponseJSON, notificationJSON []
 					}
 					if id, ok := bid["dealid"].(string); ok {
 						dealID = id
-					}
-
-					// Check for encrypted bid
-					if ext, ok := bid["ext"].(map[string]any); ok {
-						if encBid, ok := ext["encrypted_bid"].(map[string]any); ok {
-							if payload, ok := encBid["encrypted_payload"].(string); ok {
-								encryptedPayload = payload
-							}
-						}
 					}
 				}
 			}
@@ -257,7 +247,6 @@ func extractValidationInput(bidRequestJSON, bidResponseJSON, notificationJSON []
 		BidID:               bidID,
 		BidPrice:            bidPrice,
 		DealID:              dealID,
-		EncryptedPayload:    encryptedPayload,
 		BidFloor:            bidFloor,
 		Deals:               deals,
 		ClearingPrice:       clearingPrice,

@@ -13,9 +13,8 @@ import (
 type AuctionValidationInput struct {
 	AttestationCOSEGzip enclaveapi.AttestationCOSEGzip // Gzipped format from win/loss notifications
 	BidID               string
-	BidPrice            float64            // For unencrypted bids
+	BidPrice            float64            // Price as bid; for a sealed bid, the decrypted price
 	DealID              string             // bid.dealid as sent; selects the deal form of the bid hash when attested as listed
-	EncryptedPayload    string             // For encrypted bids (base64-encoded encrypted data)
 	BidFloor            float64            // Always validated against attestation.bid_floor
 	Deals               []core.Deal        // imp.pmp.deals as received; each must be attested with the same floor
 	ClearingPrice       *float64           // nil = no winner expected, non-nil = winner with this price

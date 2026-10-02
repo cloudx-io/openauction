@@ -85,7 +85,7 @@ func parseAuctionAttestationFromCOSE(t *testing.T, coseBytes enclaveapi.Attestat
 		t.Fatalf("Failed to parse attestation: %v", err)
 	}
 
-	// Parse the UserData JSON into AttestationUserData
+	// Parse the UserData JSON into AuctionAttestationUserData
 	var userData enclaveapi.AuctionAttestationUserData
 	if err := json.Unmarshal(userDataBytes, &userData); err != nil {
 		t.Fatalf("Failed to unmarshal user data: %v", err)

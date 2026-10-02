@@ -234,7 +234,7 @@ type nitroAttestationDocument struct {
 
 // ParseAttestationDoc extracts the AttestationDoc and user data from AWS Nitro COSE bytes.
 // Returns the attestation document and raw user_data bytes that can be unmarshaled into
-// the appropriate type (AttestationUserData for auctions, KeyAttestationUserData for keys, etc.).
+// the appropriate type (AuctionAttestationUserData for auctions, KeyAttestationUserData for keys, etc.).
 func (a AttestationCOSE) ParseAttestationDoc() (AttestationDoc, []byte, error) {
 	// Extract nested attestation document from AWS Nitro 4-element CBOR array
 	var outerArray []any

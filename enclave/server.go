@@ -18,10 +18,6 @@ import (
 	"github.com/cloudx-io/openauction/enclaveapi"
 )
 
-func (*EnclaveServer) initNSM() error {
-	return nil
-}
-
 // getEnclaveAttester attempts to get the NSM attester, returns error if not available
 func getEnclaveAttester() (EnclaveAttester, error) {
 	handle, err := enclave.GetOrInitializeHandle()
@@ -32,10 +28,6 @@ func getEnclaveAttester() (EnclaveAttester, error) {
 }
 
 func (s *EnclaveServer) Start() error {
-	if err := s.initNSM(); err != nil {
-		log.Printf("ERROR: NSM initialization failed: %v (continuing with mocks)", err)
-	}
-
 	// The attester is needed at startup so the first key epoch's attestation can
 	// be generated and cached up front, and so rotation can mint new epochs.
 	attester, err := getEnclaveAttester()

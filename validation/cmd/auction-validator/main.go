@@ -21,6 +21,7 @@ func main() {
 		help              = flag.Bool("help", false, "Show usage information")
 	)
 
+	flag.Usage = showUsage
 	flag.Parse()
 
 	// Show help

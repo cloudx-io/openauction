@@ -189,3 +189,10 @@ func TestKeyManager_EvictExpiredDuringOutage(t *testing.T) {
 	assert.Equal(t, 1, km.epochCount())
 	assert.True(t, km.currentEpoch() != priorEpoch)
 }
+
+func TestHandleKeyRequest_NilKeyManager(t *testing.T) {
+	resp, err := HandleKeyRequest(nil)
+	assert.Nil(t, resp)
+	assert.Error(t, err)
+	assert.Equal(t, "nil key manager", err.Error())
+}

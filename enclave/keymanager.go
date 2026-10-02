@@ -274,6 +274,9 @@ func (km *KeyManager) DecryptBid(enc *enclaveapi.EncryptedBidPrice, hashAlg Hash
 // cache, so key requests no longer contend on the serialized attestation
 // operation.
 func HandleKeyRequest(keyManager *KeyManager) (*enclaveapi.KeyResponse, error) {
+	if keyManager == nil {
+		return nil, fmt.Errorf("nil key manager")
+	}
 	epoch := keyManager.currentEpoch()
 	if epoch == nil {
 		return nil, fmt.Errorf("no key epoch available")

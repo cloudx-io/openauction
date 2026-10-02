@@ -57,7 +57,7 @@ func (s *EnclaveServer) Start() error {
 
 	log.Printf("INFO: TEE server listening on vsock port %d", s.port)
 
-	maxWorkers, err := getRequiredEnvInt("ENCLAVE_MAX_WORKERS")
+	maxWorkers, err := getMaxWorkers()
 	if err != nil {
 		return fmt.Errorf("failed to get max workers config: %w", err)
 	}
@@ -210,6 +210,19 @@ func (s *EnclaveServer) pingResponse() map[string]any {
 		"system":    getSystemInfoOrNil(),
 		"app":       s.appInfo(),
 	}
+}
+
+// getMaxWorkers reads ENCLAVE_MAX_WORKERS and rejects values below 1: a
+// negative size panics in make, and zero rejects every connection.
+func getMaxWorkers() (int, error) {
+	n, err := getRequiredEnvInt("ENCLAVE_MAX_WORKERS")
+	if err != nil {
+		return 0, err
+	}
+	if n < 1 {
+		return 0, fmt.Errorf("ENCLAVE_MAX_WORKERS must be at least 1, got %d", n)
+	}
+	return n, nil
 }
 
 // Helper function for required environment variable parsing

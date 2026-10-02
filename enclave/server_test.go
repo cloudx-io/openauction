@@ -103,3 +103,26 @@ func TestHandleConnection_AuctionRequestIgnoresUnknownFields(t *testing.T) {
 		})
 	}
 }
+
+func TestGetMaxWorkers(t *testing.T) {
+	for _, tc := range []struct {
+		value   string
+		want    int
+		wantErr bool
+	}{
+		{value: "-1", wantErr: true},
+		{value: "0", wantErr: true},
+		{value: "1", want: 1},
+	} {
+		t.Run(tc.value, func(t *testing.T) {
+			t.Setenv("ENCLAVE_MAX_WORKERS", tc.value)
+			got, err := getMaxWorkers()
+			if tc.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}

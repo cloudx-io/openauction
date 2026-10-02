@@ -1,6 +1,10 @@
 package main
 
 import (
+	"errors"
+	"os"
+	"os/exec"
+	"slices"
 	"testing"
 
 	"github.com/peterldowns/testy/assert"
@@ -60,4 +64,27 @@ func TestExtractValidationInput_BidDealID(t *testing.T) {
 	input, err = extractValidationInput(bidRequest, []byte(`{"seatbid":[{"bid":[{"id":"bid-1","price":1.5}]}]}`), notification)
 	assert.NoError(t, err)
 	check.Equal(t, "", input.DealID)
+}
+
+// TestMissingInputExitCode runs main in a child process, because main calls os.Exit.
+func TestMissingInputExitCode(t *testing.T) {
+	if os.Getenv("AUCTION_VALIDATOR_RUN_MAIN") == "1" {
+		i := slices.Index(os.Args, "--")
+		os.Args = append([]string{"auction-validator"}, os.Args[i+1:]...)
+		main()
+		return
+	}
+
+	for name, args := range map[string][]string{
+		"no inputs":           nil,
+		"one of three inputs": {"--bid-request", "{}"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cmd := exec.Command(os.Args[0], append([]string{"-test.run=^TestMissingInputExitCode$", "--"}, args...)...)
+			cmd.Env = append(os.Environ(), "AUCTION_VALIDATOR_RUN_MAIN=1")
+			var exitErr *exec.ExitError
+			assert.True(t, errors.As(cmd.Run(), &exitErr))
+			check.Equal(t, 2, exitErr.ExitCode())
+		})
+	}
 }

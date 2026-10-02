@@ -30,7 +30,7 @@ func main() {
 	if flag.NArg() == 0 {
 		showUsage()
 		fmt.Fprintf(os.Stderr, "\nError: JSON input is required\n")
-		os.Exit(1)
+		os.Exit(2)
 	}
 
 	// Parse JSON input

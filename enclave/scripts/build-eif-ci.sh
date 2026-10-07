@@ -109,8 +109,12 @@ main() {
 
     # Authenticate to ECR
     log "Authenticating to ECR..."
-    if ! aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$ecr_endpoint" 2>&1 | grep -i "login succeeded"; then
-        log_error "Failed to authenticate to ECR"
+    # Capture aws's stderr and docker's stdout+stderr so a failure logs the
+    # cause. The password goes only through the pipe, never into login_output.
+    local login_output
+    if ! login_output=$({ aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$ecr_endpoint"; } 2>&1) ||
+        ! grep -qi "login succeeded" <<<"$login_output"; then
+        log_error "Failed to authenticate to ECR: ${login_output:-<no output>}"
         return 1
     fi
     log "✓ ECR authentication successful"

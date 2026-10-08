@@ -41,7 +41,7 @@ func positiveZero(price float64) float64 {
 //     non-finite deal floor panics in floor enforcement.
 //
 // Returns:
-//   - AuctionResult containing winner, runner-up, eligible bids, rejected bids, and full ranking
+//   - AuctionResult containing winner, runner-up, eligible bids, and rejected bids
 //
 // Processing flow:
 //  1. Validate bid prices (reject negative prices, and zero prices unless the bid names a listed deal)

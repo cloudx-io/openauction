@@ -142,6 +142,12 @@ func outputText(result *validation.KeyValidationResult) {
 	fmt.Printf("  Public Key Match:  %v\n", result.PublicKeyMatch)
 
 	fmt.Println()
+	fmt.Println("Details:")
+	for _, detail := range result.ValidationDetails {
+		fmt.Printf("  - %s\n", detail)
+	}
+
+	fmt.Println()
 	fmt.Println("=============================")
 	if result.IsValid() {
 		fmt.Println("VALIDATION: ✓ PASSED")

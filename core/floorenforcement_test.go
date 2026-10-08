@@ -22,7 +22,7 @@ func TestBidMeetsFloor(t *testing.T) {
 		{"negative bid below floor", -1.0, 2.5, false},
 		{"negative bid with zero floor", -1.0, 0.0, false},
 		{"decimal precision edge case - passes", 2.499999999, 2.5, true},
-		{"decimal precision edge case - fails", 2.4999, 2.5, false},
+		{"decimal precision edge case - fails", 2.49994, 2.5, false},
 		{"very small difference - passes", 2.5001, 2.5, true},
 		{"very small difference - fails", 2.4999, 2.5, false},
 	}

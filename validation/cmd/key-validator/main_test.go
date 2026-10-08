@@ -47,7 +47,9 @@ func TestOutputTextPrintsDetails(t *testing.T) {
 
 	r, w, err := os.Pipe()
 	assert.NoError(t, err)
+	t.Cleanup(func() { _ = r.Close() })
 	stdout := os.Stdout
+	t.Cleanup(func() { os.Stdout = stdout })
 	os.Stdout = w
 	outputText(result)
 	os.Stdout = stdout

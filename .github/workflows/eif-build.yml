@@ -446,7 +446,7 @@ jobs:
 
       - name: Summary
         run: |
-          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+          cat >> "$GITHUB_STEP_SUMMARY" << 'EOF'
           # EIF Build Complete ✅
 
           ## Build Information

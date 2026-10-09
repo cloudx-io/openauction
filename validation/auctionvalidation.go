@@ -274,17 +274,20 @@ func parseAuctionAttestationFromCOSE(attestationCOSEB64 enclaveapi.AttestationCO
 	// ParseAttestationDoc internally extracts the COSE_Sign1 payload and parses it
 	attestationDoc, userDataBytes, err := coseBytes.ParseAttestationDoc()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse attestation document: %w", err)
 	}
 
-	// Parse user data as AuctionAttestationUserData
-	var userData enclaveapi.AuctionAttestationUserData
-	if err := json.Unmarshal(userDataBytes, &userData); err != nil {
-		return nil, fmt.Errorf("parse user data: %w", err)
+	attestation := &enclaveapi.AuctionAttestationDoc{AttestationDoc: attestationDoc}
+
+	// Parse user data as AuctionAttestationUserData; without it UserData stays
+	// nil and validation reports it missing
+	if len(userDataBytes) > 0 {
+		var userData enclaveapi.AuctionAttestationUserData
+		if err := json.Unmarshal(userDataBytes, &userData); err != nil {
+			return nil, fmt.Errorf("parse user data: %w", err)
+		}
+		attestation.UserData = &userData
 	}
 
-	return &enclaveapi.AuctionAttestationDoc{
-		AttestationDoc: attestationDoc,
-		UserData:       &userData,
-	}, nil
+	return attestation, nil
 }

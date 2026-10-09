@@ -1,8 +1,10 @@
 package validation
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/fxamacker/cbor/v2"
 	"github.com/peterldowns/testy/check"
 
 	"github.com/cloudx-io/openauction/core"
@@ -294,4 +296,56 @@ func TestValidateDeals_BidDealNotInRequest(t *testing.T) {
 	check.True(t, validateBidHash(input, att, result))
 	check.True(t, validateBidFloor(input, att, result))
 	check.False(t, validateDeals(input, att, result))
+}
+
+// fakeAttestationCOSE wraps userData in the Nitro COSE_Sign1 layout that
+// ParseAttestationDoc reads; userData nil omits the field.
+func fakeAttestationCOSE(t *testing.T, userData []byte) enclaveapi.AttestationCOSEBase64 {
+	t.Helper()
+	doc := map[string]any{"module_id": "test-enclave"}
+	if userData != nil {
+		doc["user_data"] = userData
+	}
+	nested, err := cbor.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	coseBytes, err := cbor.Marshal([]any{[]byte{}, map[string]any{}, nested, []byte{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return enclaveapi.AttestationCOSE(coseBytes).EncodeBase64()
+}
+
+// TestParseAuctionAttestationFromCOSE_UserData: an attestation without user
+// data parses with nil UserData, so validation reports it as missing.
+func TestParseAuctionAttestationFromCOSE_UserData(t *testing.T) {
+	for name, userData := range map[string][]byte{"absent": nil, "empty": {}} {
+		t.Run(name, func(t *testing.T) {
+			att, err := parseAuctionAttestationFromCOSE(fakeAttestationCOSE(t, userData))
+			if !check.NoError(t, err) {
+				return
+			}
+			check.Nil(t, att.UserData)
+
+			result := &AuctionValidationResult{}
+			validateAuctionUserData(&AuctionValidationInput{}, att, result)
+			check.In(t, "Attestation user data missing", result.ValidationDetails)
+		})
+	}
+
+	t.Run("present", func(t *testing.T) {
+		att, err := parseAuctionAttestationFromCOSE(fakeAttestationCOSE(t, []byte(`{"bid_hash_nonce":"n"}`)))
+		if !check.NoError(t, err) || !check.NotNil(t, att.UserData) {
+			return
+		}
+		check.Equal(t, "n", att.UserData.BidHashNonce)
+	})
+
+	t.Run("malformed document", func(t *testing.T) {
+		_, err := parseAuctionAttestationFromCOSE(enclaveapi.AttestationCOSE{0xff}.EncodeBase64())
+		if check.Error(t, err) {
+			check.True(t, strings.HasPrefix(err.Error(), "parse attestation document: "))
+		}
+	})
 }

@@ -67,7 +67,8 @@ jobs:
     # image only for a push to this repository's default branch. The repository
     # check below also rejects upstream runs from forks as defence in depth.
     # Manual publication and measurement remain the workflow_dispatch paths
-    # of the two workflows.
+    # of the two workflows. A dispatch with image_tag set measures that image
+    # but is not published to ECR, and update-pcrs is skipped.
     # The [skip-build] marker is matched with startsWith, not contains: a squash
     # merge puts the entire PR description in the commit body, so contains also
     # matches any PR whose description merely mentions the marker in prose. The
@@ -370,7 +371,25 @@ jobs:
           echo "pcr2=${PCR2}" >> "$GITHUB_OUTPUT"
           echo "eif_sha256=${EIF_SHA256}" >> "$GITHUB_OUTPUT"
 
+      - name: Decide ECR publication
+        id: ecr-publish
+        env:
+          INPUT_IMAGE_TAG: ${{ github.event.inputs.image_tag }}
+        run: |
+          # The ECR tags name the checked-out commit, so an EIF built from a
+          # dispatched image_tag would be published under a commit it was not
+          # built from. Such builds, of either architecture, skip the ORAS and
+          # ECR steps below and keep only the workflow artifact.
+          if [ -n "${INPUT_IMAGE_TAG}" ]; then
+            echo "::notice::image_tag was set, so the EIF was not pushed to ECR; download it from the workflow artifact"
+            echo "EIF not pushed to ECR because image_tag was set; it is available as the workflow artifact only." >> "$GITHUB_STEP_SUMMARY"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Install ORAS
+        if: steps.ecr-publish.outputs.publish == 'true'
         run: |
           # This ORAS runs on the GitHub runner (ubuntu-latest = amd64) to push the
           # already-built EIF artifact to ECR. It is the runner's architecture, not
@@ -397,12 +416,14 @@ jobs:
           oras version
 
       - name: Login to ECR
+        if: steps.ecr-publish.outputs.publish == 'true'
         run: |
           aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
             oras login --username AWS --password-stdin \
               ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
 
       - name: Push EIF to ECR
+        if: steps.ecr-publish.outputs.publish == 'true'
         env:
           ARCHITECTURE: ${{ steps.build-inputs.outputs.architecture }}
         run: |

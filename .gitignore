@@ -3,6 +3,7 @@
 /validation/cmd/key-validator/key-validator
 /auction-validator
 /validation/cmd/auction-validator/auction-validator
+/enclave/enclave
 
 # enclave binary built by the README and docker.yml
 /bin/

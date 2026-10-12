@@ -19,7 +19,7 @@ jobs:
       - name: Install mise
         uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # ratchet:jdx/mise-action@v4
         with:
-          version: "2026.9.12"
+          version: "2026.10.2"
       - name: Test
         run: mise run //:test
 
@@ -32,7 +32,7 @@ jobs:
       - name: Install mise
         uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # ratchet:jdx/mise-action@v4
         with:
-          version: "2026.9.12"
+          version: "2026.10.2"
       - name: golangci-lint
         run: mise run //:lint
       - name: go mod tidy

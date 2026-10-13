@@ -19,7 +19,7 @@ jobs:
       - name: Install mise
         uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # ratchet:jdx/mise-action@v5
         with:
-          version: "2026.9.12"
+          version: "2026.10.2"
       - name: Lint GitHub Actions refs
         run: mise run //:ratchet:lint
       - name: Verify pinning leaves no diff

@@ -871,6 +871,7 @@ func TestProcessAuction_BidFloorZero(t *testing.T) {
 	check.Equal(t, 0.00, attestationDoc.UserData.BidFloor)
 
 	// Verify all bids pass (no floor enforcement)
+	check.Equal(t, 0, len(response.FloorRejected))
 	check.Equal(t, 2, len(attestationDoc.UserData.BidHashes))
 }
 

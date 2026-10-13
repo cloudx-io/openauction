@@ -18,11 +18,6 @@ COPY ./bin/tee-auction-enclave /usr/local/bin/tee-auction-enclave
 
 RUN chmod +x /usr/local/bin/tee-auction-enclave
 
-EXPOSE 5000
-
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD echo '{"type":"ping","message":"health_check"}' | nc 127.0.0.1 5000 || exit 1
-
 ENTRYPOINT ["/usr/local/bin/tee-auction-enclave"]
 
 CMD []

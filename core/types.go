@@ -58,7 +58,8 @@ type AuctionResult struct {
 	// Winner is the highest-ranked bid (nil if no valid bids)
 	Winner *CoreBid
 
-	// RunnerUp is the second-highest-ranked bid (nil if less than 2 valid bids)
+	// RunnerUp is the second-highest-ranked bid (nil if fewer than 2 bidders have an
+	// eligible bid; only each bidder's highest bid is ranked)
 	RunnerUp *CoreBid
 
 	// EligibleBids contains all bids that passed floor enforcement and were included in ranking
@@ -79,7 +80,7 @@ type AuctionResult struct {
 	FloorRejectedBidIDs []string
 }
 
-// ExcludedBid represents a bid that was excluded from the auction (floor rejection, decryption failure, etc.)
+// ExcludedBid represents a bid that was excluded from the auction (decryption failure, invalid payload, duplicate ciphertext, etc.)
 type ExcludedBid struct {
 	BidID string `json:"bid_id"`
 	// Bidder that submitted the bid. Empty from enclaves predating

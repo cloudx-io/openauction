@@ -178,7 +178,7 @@ func (s *EnclaveServer) handleConnection(conn net.Conn) {
 				if resp.Success {
 					log.Printf("INFO: Auction processed successfully with TEE attestation data")
 				} else {
-					log.Printf("ERROR: Auction rejected: %s", resp.Message)
+					log.Printf("ERROR: Auction failed: %s", resp.Message)
 				}
 				response = resp
 			}

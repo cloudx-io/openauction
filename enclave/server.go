@@ -174,8 +174,13 @@ func (s *EnclaveServer) handleConnection(conn net.Conn) {
 				}
 				log.Printf("ERROR: Auction processing failed: %v", err)
 			} else {
-				response = ProcessAuction(attester, auctionReq, s.keyManager)
-				log.Printf("INFO: Auction processed successfully with TEE attestation data")
+				resp := ProcessAuction(attester, auctionReq, s.keyManager)
+				if resp.Success {
+					log.Printf("INFO: Auction processed successfully with TEE attestation data")
+				} else {
+					log.Printf("ERROR: Auction rejected: %s", resp.Message)
+				}
+				response = resp
 			}
 		}
 

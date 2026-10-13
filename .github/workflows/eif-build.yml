@@ -457,7 +457,7 @@ jobs:
           oras tag "${REGISTRY}/${REPO}:${COMMIT_SHA}${TAG_SUFFIX}" "${COMMIT_SHORT}${TAG_SUFFIX}"
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # ratchet:actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # ratchet:actions/upload-artifact@v7
         with:
           # Include the architecture so an amd64 and arm64 build of the same
           # commit don't collide on the artifact name.

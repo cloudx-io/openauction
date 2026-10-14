@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	"crypto/rsa"
-	"crypto/x509"
-	"encoding/pem"
 	"fmt"
 	"log"
 	"sync"
@@ -225,17 +223,7 @@ func (km *KeyManager) epochCount() int {
 
 // publicKeyPEM returns an epoch's public key in PEM format.
 func (e *keyEpoch) publicKeyPEM() (string, error) {
-	derBytes, err := x509.MarshalPKIXPublicKey(e.PublicKey)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal public key: %w", err)
-	}
-
-	pemBlock := &pem.Block{
-		Type:  "PUBLIC KEY",
-		Bytes: derBytes,
-	}
-
-	return string(pem.EncodeToMemory(pemBlock)), nil
+	return publicKeyToPEM(e.PublicKey)
 }
 
 // DecryptBid attempts to decrypt an encrypted bid against every live epoch and

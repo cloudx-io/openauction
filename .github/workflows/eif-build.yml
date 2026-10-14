@@ -236,7 +236,7 @@ jobs:
       - name: Create security group
         id: security-group
         run: |
-          SG_NAME="eif-builder-${{ github.run_id }}"
+          SG_NAME="eif-builder-${{ github.run_id }}-${{ github.run_attempt }}"
           # Tagged on create for the same reason as the key pair above: the IAM
           # policy gates DeleteSecurityGroup and the ingress rule on
           # Purpose=EIF-Build.

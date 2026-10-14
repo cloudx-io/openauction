@@ -73,18 +73,16 @@ func parseKeyAttestationFromCOSE(attestationCOSEB64 enclaveapi.AttestationCOSEBa
 		return nil, fmt.Errorf("parse attestation document: %w", err)
 	}
 
-	// Parse user data JSON to get KeyAttestationUserData
-	var keyUserData enclaveapi.KeyAttestationUserData
+	attestation := &enclaveapi.KeyAttestationDoc{AttestationDoc: attestationDoc}
+
+	// Parse user data as KeyAttestationUserData; without it UserData stays nil
+	// and validation reports the public key missing
 	if len(userDataBytes) > 0 {
+		var keyUserData enclaveapi.KeyAttestationUserData
 		if err := json.Unmarshal(userDataBytes, &keyUserData); err != nil {
 			return nil, fmt.Errorf("parse user data: %w", err)
 		}
-	}
-
-	// Build KeyAttestationDoc using the parsed attestation
-	attestation := &enclaveapi.KeyAttestationDoc{
-		AttestationDoc: attestationDoc,
-		UserData:       &keyUserData,
+		attestation.UserData = &keyUserData
 	}
 
 	return attestation, nil

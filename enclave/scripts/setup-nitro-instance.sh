@@ -14,7 +14,6 @@ set -euo pipefail
 # This script installs:
 #   - AWS Nitro Enclaves CLI
 #   - Docker (if not already installed)
-#   - jq for JSON processing
 #
 # The Nitro Enclaves allocator (CPU and hugepage reservation for run-enclave)
 # is not configured: nitro-cli build-enclave needs only Docker and the CLI.
@@ -156,7 +155,7 @@ install_dependencies() {
     log "Installing additional dependencies..."
     
     # command:package pairs; the awscli package provides the aws command.
-    local deps=("jq:jq" "curl:curl" "aws:awscli")
+    local deps=("curl:curl" "aws:awscli")
     local dep cmd pkg
 
     for dep in "${deps[@]}"; do
@@ -194,13 +193,6 @@ verify_setup() {
     else
         log_error "✗ docker not found"
         all_good=false
-    fi
-    
-    # Check jq
-    if command -v jq &> /dev/null; then
-        log "✓ jq: $(jq --version)"
-    else
-        log "Warning: jq not found (recommended for PCR parsing)"
     fi
     
     # Check AWS CLI

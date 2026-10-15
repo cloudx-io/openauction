@@ -221,6 +221,23 @@ func TestAttestationCOSEGzip_Decompress_Invalid(t *testing.T) {
 	}
 }
 
+// TestAttestationCOSEGzip_Decompress_SizeCap: output at the cap decompresses;
+// one byte over is rejected.
+func TestAttestationCOSEGzip_Decompress_SizeCap(t *testing.T) {
+	atCap, err := AttestationCOSE(make([]byte, maxAttestationCOSESize)).CompressGzip()
+	check.Nil(t, err)
+	result, err := atCap.Decompress()
+	check.Nil(t, err)
+	check.Equal(t, maxAttestationCOSESize, len(result))
+
+	overCap, err := AttestationCOSE(make([]byte, maxAttestationCOSESize+1)).CompressGzip()
+	check.Nil(t, err)
+	result, err = overCap.Decompress()
+	check.NotNil(t, err)
+	check.Nil(t, result)
+	check.True(t, strings.Contains(err.Error(), "exceeds"))
+}
+
 // TestAttestationTypes_JSONMarshaling tests that types marshal/unmarshal correctly as JSON
 func TestAttestationTypes_JSONMarshaling(t *testing.T) {
 	type TestStruct struct {

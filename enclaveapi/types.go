@@ -369,6 +369,10 @@ func (a AttestationCOSEURLBase64) String() string {
 	return string(a)
 }
 
+// maxAttestationCOSESize caps Decompress output so a gzip bomb cannot exhaust
+// memory. Real attestations are smaller than the NSM response buffer (12 KiB).
+const maxAttestationCOSESize = 64 << 10
+
 // AttestationCOSEGzip represents GZIP-compressed, base64url-encoded (no padding) COSE bytes
 // optimized for URL inclusion. Common format for win/loss notifications and bid responses.
 // Encoding pipeline: COSE bytes → GZIP compress → base64url encode → trim padding
@@ -397,9 +401,12 @@ func (a AttestationCOSEGzip) Decompress() (AttestationCOSE, error) {
 	}
 	defer func() { _ = reader.Close() }()
 
-	coseBytes, err := io.ReadAll(reader)
+	coseBytes, err := io.ReadAll(io.LimitReader(reader, maxAttestationCOSESize+1))
 	if err != nil {
 		return nil, fmt.Errorf("decompress: %w", err)
+	}
+	if len(coseBytes) > maxAttestationCOSESize {
+		return nil, fmt.Errorf("decompress: attestation exceeds %d bytes", maxAttestationCOSESize)
 	}
 
 	return AttestationCOSE(coseBytes), nil

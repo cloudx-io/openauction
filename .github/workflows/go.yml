@@ -37,3 +37,34 @@ jobs:
         run: mise run //:lint
       - name: go mod tidy
         run: mise run //:tidy
+
+  # Build-only check of the enclave image on pull requests, so a broken image
+  # build shows on the PR. docker.yml builds and publishes after Go passes on main.
+  docker-build:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install mise
+        uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # ratchet:jdx/mise-action@v5
+        with:
+          version: "2026.10.2"
+      - name: go build enclave binary
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -a -ldflags '-extldflags "-static"' -tags netgo -o ./bin/tee-auction-enclave ./enclave
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # ratchet:docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # ratchet:docker/setup-buildx-action@v4
+        with:
+          platforms: linux/arm64
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # ratchet:docker/build-push-action@v7
+        with:
+          context: .
+          file: enclave/Dockerfile
+          platforms: linux/arm64
+          push: false
+          sbom: true
+          provenance: mode=max
+          build-args: |
+            ENCLAVE_MAX_WORKERS=50

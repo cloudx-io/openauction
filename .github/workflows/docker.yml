@@ -3,6 +3,10 @@ on:
   workflow_run:
     workflows: ["Go"]
     types: [completed]
+    # Pull requests get a build-only check from the docker-build job in go.yml.
+    # A run from any other branch would also start Build EIF, which sees this
+    # run as main's tip and measures that commit again.
+    branches: [main]
   workflow_dispatch:
     inputs:
       architecture:

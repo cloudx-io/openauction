@@ -164,7 +164,6 @@ func TestGenerateAttestationWithMock(t *testing.T) {
 	check.Equal(t, winner.Price, attestationDoc.UserData.Winner.Price)
 
 	// Verify all PCRs are extracted with realistic production values
-	check.NotNil(t, attestationDoc.PCRs)
 	check.NotEqual(t, "", attestationDoc.PCRs.ImageFileHash)
 	check.NotEqual(t, "", attestationDoc.PCRs.KernelHash)
 	check.NotEqual(t, "", attestationDoc.PCRs.ApplicationHash)
@@ -257,7 +256,6 @@ func TestGenerateAttestationWithEncryptedBids(t *testing.T) {
 	check.True(t, slices.Contains(attestationDoc.UserData.BidHashes, hash3))
 
 	// Verify all PCRs are extracted
-	check.NotNil(t, attestationDoc.PCRs)
 	check.NotEqual(t, "", attestationDoc.PCRs.ImageFileHash)
 	check.NotEqual(t, "", attestationDoc.PCRs.KernelHash)
 	check.NotEqual(t, "", attestationDoc.PCRs.ApplicationHash)
@@ -528,7 +526,7 @@ func TestGenerateAttestationWithMixedBidTypes(t *testing.T) {
 	check.NotEqual(t, "", userData.AdjustmentFactorsNonce)
 
 	// Verify attestation structural integrity
-	check.NotNil(t, attestationDoc.PCRs)
+	check.NotEqual(t, enclaveapi.PCRs{}, attestationDoc.PCRs)
 	check.NotEqual(t, "", attestationDoc.Certificate)
 	check.NotEqual(t, "", attestationDoc.PublicKey)
 	check.NotEqual(t, "", attestationDoc.Nonce)

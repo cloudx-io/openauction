@@ -155,7 +155,7 @@ install_dependencies() {
     log "Installing additional dependencies..."
     
     # command:package pairs; the awscli package provides the aws command.
-    local deps=("curl:curl" "aws:awscli")
+    local deps=("aws:awscli")
     local dep cmd pkg
 
     for dep in "${deps[@]}"; do

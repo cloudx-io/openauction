@@ -98,7 +98,7 @@ func TestCalculateAdjustmentFactorsHash(t *testing.T) {
 	check.NotEqual(t, hash, emptyHash)
 }
 
-func TestGenerateAttestation(t *testing.T) {
+func TestGenerateAttestation_NilAttester(t *testing.T) {
 	req := enclaveapi.EnclaveAuctionRequest{
 		AuctionID:     "test_auction",
 		RoundIDString: "test_auction-1",
@@ -263,7 +263,7 @@ func TestGenerateAttestationWithEncryptedBids(t *testing.T) {
 	check.NotEqual(t, "", attestationDoc.PCRs.InstanceIDHash)
 }
 
-func TestGenerateKeyAttestation(t *testing.T) {
+func TestGenerateKeyAttestation_NilAttester(t *testing.T) {
 	// Test with nil enclave handle (error case)
 	privateKey, err := GenerateRSAKeyPair()
 	check.NoError(t, err)

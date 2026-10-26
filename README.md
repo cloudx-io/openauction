@@ -11,6 +11,9 @@ This repository contains the core auction functionality that has been extracted 
 - **`core/`**: Core auction logic including bid ranking, adjustments, and floor enforcement
 - **`enclaveapi/`**: API types for TEE enclave communication
 - **`enclave/`**: AWS Nitro Enclave implementation for secure auction processing
+- **`validation/`**: Verification of enclave attestations: PCRs against the known measurements in `validation/pcrs.json`, the certificate chain against the AWS Nitro root CA, and the COSE_Sign1 signature, plus the key and auction checks built on them (`ValidateKeyAttestation`, `ValidateAuctionAttestation`). [cloudx-io/openarbiter](https://github.com/cloudx-io/openarbiter) imports it. Two CLIs wrap it:
+  - **`validation/cmd/auction-validator`**: validates an auction attestation against the bid request, bid response and win/loss notification a bidder holds
+  - **`validation/cmd/key-validator`**: validates the attestation of an enclave public key used for end-to-end encryption
 
 ## Usage
 
@@ -20,6 +23,7 @@ This repository contains the core auction functionality that has been extracted 
 import (
     "github.com/cloudx-io/openauction/core"
     "github.com/cloudx-io/openauction/enclaveapi"
+    "github.com/cloudx-io/openauction/validation"
 )
 ```
 

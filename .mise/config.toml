@@ -11,6 +11,6 @@ locked = true
 minimum_release_age = "7d"
 
 [tools]
-go = "1.27.1"
+go = "1.27.3"
 golangci-lint = "2.14.0"
 "go:github.com/sethvargo/ratchet" = "0.12.0"

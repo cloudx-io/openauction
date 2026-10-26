@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+#MISE description="Check that go.mod's toolchain and mise.lock match the mise go pin"
+# https://mise.jdx.dev/tasks/file-tasks.html
+#
+# The `go` pin in .mise/config.toml is the repo's Go version. Tests and lint use
+# it through mise; the Docker Build workflow and the docker-build PR check read
+# go.mod's toolchain directive through setup-go. The `go` directive stays at the
+# language version, so modules that import this one are not held to the patch
+# release.
+set -euo pipefail
+
+pin="$(sed -n 's/^go = "\(.*\)"$/\1/p' .mise/config.toml)"
+if [ -z "$pin" ]; then
+    echo "no go pin found in .mise/config.toml" >&2
+    exit 1
+fi
+
+status=0
+
+locked="$(awk '/^\[\[tools\.go\]\]$/ { f = 1; next } f && /^version = / { gsub(/version = |"/, ""); print; exit }' .mise/mise.lock)"
+if [ "$locked" != "$pin" ]; then
+    echo ".mise/mise.lock has go ${locked:-<none>}, .mise/config.toml pins $pin; run: MISE_LOCKED=0 mise lock go" >&2
+    status=1
+fi
+
+toolchain="$(awk '$1 == "toolchain" { sub(/^go/, "", $2); print $2; exit }' go.mod)"
+if [ "$toolchain" != "$pin" ]; then
+    echo "go.mod has toolchain go${toolchain:-<none>}, .mise/config.toml pins $pin; run: go mod edit -toolchain=go$pin" >&2
+    status=1
+fi
+
+exit "$status"

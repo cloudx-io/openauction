@@ -2,6 +2,8 @@ module github.com/cloudx-io/openauction
 
 go 1.27
 
+toolchain go1.27.3
+
 require (
 	github.com/edgebitio/nitro-enclaves-sdk-go v1.0.1-0.20221110205443-8a5476ff3cc2
 	github.com/fxamacker/cbor/v2 v2.9.4

@@ -37,6 +37,8 @@ jobs:
         run: mise run //:lint
       - name: go mod tidy
         run: mise run //:tidy
+      - name: Go version matches the mise pin
+        run: mise run //:check-go-version
 
   # Build-only check of the enclave image on pull requests, so a broken image
   # build shows on the PR. docker.yml builds and publishes after Go passes on main.
@@ -47,10 +49,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7
         with:
           persist-credentials: false
-      - name: Install mise
-        uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # ratchet:jdx/mise-action@v5
+      # The same Go install step as docker.yml, which cannot run on a PR.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v7
         with:
-          version: "2026.10.2"
+          go-version-file: go.mod
       - name: go build enclave binary
         run: |
           CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -a -ldflags '-extldflags "-static"' -tags netgo -o ./bin/tee-auction-enclave ./enclave

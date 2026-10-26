@@ -1,6 +1,7 @@
 package core
 
 import (
+	"math"
 	"testing"
 
 	"github.com/peterldowns/testy/check"
@@ -25,6 +26,7 @@ func TestBidMeetsFloor(t *testing.T) {
 		{"decimal precision edge case - fails", 2.49994, 2.5, false},
 		{"very small difference - passes", 2.5001, 2.5, true},
 		{"very small difference - fails", 2.4999, 2.5, false},
+		{"overflowed bid price", math.Inf(1), 0.0, false},
 	}
 
 	for _, tt := range tests {

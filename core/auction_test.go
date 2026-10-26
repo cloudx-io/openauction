@@ -120,6 +120,21 @@ func TestRunAuction_AllBidsRejectedByFloor(t *testing.T) {
 	check.Equal(t, 2, len(result.FloorRejectedBidIDs))
 }
 
+// A finite price whose adjustment overflows float64 is floor-rejected rather
+// than panicking in decimal conversion.
+func TestRunAuction_AdjustmentOverflowRejectedByFloor(t *testing.T) {
+	bids := []CoreBid{
+		{ID: "bid1", Bidder: "bidder_a", Price: 2.0},
+		{ID: "bid2", Bidder: "bidder_b", Price: math.MaxFloat64},
+	}
+
+	result := RunAuction(bids, map[string]float64{"bidder_b": 1.5}, 0.0)
+
+	check.Equal(t, "bidder_a", result.Winner.Bidder)
+	check.Nil(t, result.RunnerUp)
+	check.Equal(t, []string{"bid2"}, result.FloorRejectedBidIDs)
+}
+
 func TestRunAuction_NoAdjustmentFactors(t *testing.T) {
 	// Test that auction works without adjustment factors
 	bids := []CoreBid{

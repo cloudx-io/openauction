@@ -6,7 +6,7 @@ ARG ENCLAVE_MAX_WORKERS=50
 ENV ENCLAVE_MAX_WORKERS=${ENCLAVE_MAX_WORKERS}
 
 RUN dnf update -y && \
-    dnf install -y ca-certificates nmap-ncat && \
+    dnf install -y ca-certificates && \
     dnf clean all && \
     rm -rf /var/cache/dnf
 

@@ -1,4 +1,6 @@
 monorepo_root = true
+# minimum_release_age below needs mise 2026.4.22+; older mise ignores it
+min_version = { soft = "2026.4.22" }
 
 [monorepo]
 config_roots = ["."]
@@ -6,7 +8,7 @@ config_roots = ["."]
 [settings]
 experimental = true
 locked = true
-install_before = "7d"
+minimum_release_age = "7d"
 
 [tools]
 go = "1.27.1"

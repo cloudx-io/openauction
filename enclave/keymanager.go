@@ -20,20 +20,25 @@ const (
 	keyRotationInterval = 1 * time.Minute
 
 	// keyRetention is how long an epoch's private key (and its ciphertext dedup
-	// set) is kept alive after the epoch stops being the current one. A bid
-	// sealed to a slightly-older public key still decrypts within this window;
-	// once an epoch ages out, its key material and dedup set are dropped.
+	// set) is kept alive, measured from the epoch's creation. The epoch is
+	// current for the first keyRotationInterval of that, so once superseded it
+	// stays usable for about keyRetention - keyRotationInterval (eviction runs
+	// on the rotation tick, so up to one interval longer). A bid sealed to a
+	// slightly-older public key still decrypts within this window; once an
+	// epoch ages out, its key material and dedup set are dropped.
 	//
 	// Joint constraint with the host-side key cache: a host bridge co-located
 	// with the enclave fetches the current public key and caches it, serving it
 	// to bidders without re-fetching on every request. On a refresh failure it
 	// may keep serving the last-known-good key past its normal freshness
-	// horizon. keyRetention must stay comfortably GREATER THAN the host's
-	// maximum key-cache staleness: if a key can still be handed out after the
-	// enclave has already evicted its matching private key, bids sealed to that
-	// key fail to decrypt — a silent, full-inventory drop for that host until
-	// the cache heals. This is the enclave-side half of the invariant; the host
-	// bridge carries the matching bound on its cache staleness.
+	// horizon. A host can fetch a key up to keyRotationInterval after its epoch
+	// was created, so keyRetention - keyRotationInterval must stay comfortably
+	// GREATER THAN the host's maximum key-cache staleness: if a key can still
+	// be handed out after the enclave has already evicted its matching private
+	// key, bids sealed to that key fail to decrypt — a silent, full-inventory
+	// drop for that host until the cache heals. This is the enclave-side half
+	// of the invariant; the host bridge carries the matching bound on its cache
+	// staleness.
 	keyRetention = 5 * time.Minute
 )
 

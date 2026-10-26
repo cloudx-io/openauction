@@ -29,9 +29,10 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v7
+      - name: Install mise
+        uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # ratchet:jdx/mise-action@v5
         with:
-          go-version: "1.27.1"
+          version: "2026.10.2"
       - name: docker set architecture env vars
         env:
           ARCHITECTURE: ${{ github.event.inputs.architecture || 'arm64' }}

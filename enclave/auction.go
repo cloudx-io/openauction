@@ -226,7 +226,7 @@ func decryptAllBids(encryptedBids []enclaveapi.EncryptedCoreBid, keyManager *Key
 			continue
 		}
 
-		log.Printf("INFO: Successfully decrypted bid %s: price=%.2f", encBid.ID, *payload.Price)
+		log.Printf("INFO: Successfully decrypted bid %s", encBid.ID)
 		decryptedBids = append(decryptedBids, decryptedBidData{
 			encBid:  encBid,
 			payload: &payload,

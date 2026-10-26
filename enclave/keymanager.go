@@ -31,14 +31,14 @@ const (
 	// with the enclave fetches the current public key and caches it, serving it
 	// to bidders without re-fetching on every request. On a refresh failure it
 	// may keep serving the last-known-good key past its normal freshness
-	// horizon. A host can fetch a key up to keyRotationInterval after its epoch
-	// was created, so keyRetention - keyRotationInterval must stay comfortably
-	// GREATER THAN the host's maximum key-cache staleness: if a key can still
-	// be handed out after the enclave has already evicted its matching private
-	// key, bids sealed to that key fail to decrypt — a silent, full-inventory
-	// drop for that host until the cache heals. This is the enclave-side half
-	// of the invariant; the host bridge carries the matching bound on its cache
-	// staleness.
+	// horizon. While minting succeeds, a host can fetch a key up to
+	// keyRotationInterval after its epoch was created, so keyRetention -
+	// keyRotationInterval must stay comfortably GREATER THAN the host's
+	// maximum key-cache staleness: if a key can still be handed out after the
+	// enclave has already evicted its matching private key, bids sealed to that
+	// key fail to decrypt — a silent, full-inventory drop for that host until
+	// the cache heals. This is the enclave-side half of the invariant; the host
+	// bridge carries the matching bound on its cache staleness.
 	keyRetention = 5 * time.Minute
 )
 

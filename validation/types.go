@@ -51,7 +51,7 @@ type PCRSet struct {
 	PCR0      string `json:"pcr0"`
 	PCR1      string `json:"pcr1"`
 	PCR2      string `json:"pcr2"`
-	CommitSHA string `json:"commit_sha"` // openauction repo commit SHA used to build the enclave image
+	CommitSHA string `json:"commit_sha"` // commit SHA of the repository whose enclave image was measured
 	Timestamp string `json:"timestamp"`  // ISO 8601 timestamp when the EIF was built
 }
 

@@ -242,7 +242,7 @@ jobs:
           # Purpose=EIF-Build.
           SG_ID=$(aws ec2 create-security-group \
             --group-name "${SG_NAME}" \
-            --description "Temporary SG for EIF building - Run ${{ github.run_id }}" \
+            --description "Temporary SG for EIF building - Run ${{ github.run_id }} attempt ${{ github.run_attempt }}" \
             --vpc-id "${{ steps.vpc-info.outputs.vpc_id }}" \
             --tag-specifications 'ResourceType=security-group,Tags=[{Key=Name,Value=eif-builder},{Key=Purpose,Value=EIF-Build}]' \
             --query 'GroupId' \

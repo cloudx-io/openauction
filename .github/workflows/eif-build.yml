@@ -237,6 +237,10 @@ jobs:
         id: security-group
         run: |
           SG_NAME="eif-builder-${{ github.run_id }}-${{ github.run_attempt }}"
+          # SSH is open to this runner's egress address only, not 0.0.0.0/0.
+          # Looked up before the group exists, so a failed lookup leaves no
+          # group behind for cleanup to miss.
+          RUNNER_IP=$(curl -fsS --retry 3 https://checkip.amazonaws.com)
           # Tagged on create for the same reason as the key pair above: the IAM
           # policy gates DeleteSecurityGroup and the ingress rule on
           # Purpose=EIF-Build.
@@ -252,7 +256,7 @@ jobs:
             --group-id "${SG_ID}" \
             --protocol tcp \
             --port 22 \
-            --cidr 0.0.0.0/0
+            --cidr "${RUNNER_IP}/32"
 
           echo "security_group_id=${SG_ID}" >> "$GITHUB_OUTPUT"
           echo "Created security group: ${SG_ID}"

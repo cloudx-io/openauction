@@ -17,7 +17,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Install mise
-        uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # ratchet:jdx/mise-action@v5
+        uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # ratchet:jdx/mise-action@v5
         with:
           version: "2026.10.2"
       - name: Test
@@ -30,7 +30,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Install mise
-        uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # ratchet:jdx/mise-action@v5
+        uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # ratchet:jdx/mise-action@v5
         with:
           version: "2026.10.2"
       - name: golangci-lint
